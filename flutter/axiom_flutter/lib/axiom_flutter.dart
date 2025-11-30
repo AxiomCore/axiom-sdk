@@ -1,6 +1,7 @@
 library axiom_flutter;
 
 import 'dart:ffi';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:ffi/ffi.dart';
 
@@ -59,18 +60,42 @@ class AxiomRuntime {
   late final AxiomInitialize _init;
   late final AxiomFreeBuffer _free;
 
-  AxiomRuntime({String dynamicLibraryPath = 'axiom.dylib'}) {
-    _lib = DynamicLibrary.open(dynamicLibraryPath);
+  AxiomRuntime() {
+    _lib = _openPlatformLibrary();
 
     _call = _lib.lookupFunction<NativeAxiomCall, AxiomCall>('axiom_call');
-
     _init = _lib.lookupFunction<NativeAxiomInitialize, AxiomInitialize>(
       'axiom_initialize',
     );
-
     _free = _lib.lookupFunction<NativeAxiomFreeBuffer, AxiomFreeBuffer>(
       'axiom_free_buffer',
     );
+  }
+
+  static DynamicLibrary _openPlatformLibrary() {
+    if (Platform.isAndroid) {
+      // Flutter bundles this automatically in android/src/main/jniLibs/
+      return DynamicLibrary.open('libaxiom_generated_runtime.so');
+    }
+
+    if (Platform.isIOS) {
+      // iOS bundles dylibs automatically in the Framework
+      return DynamicLibrary.process(); // <- iOS loads from main bundle
+    }
+
+    if (Platform.isMacOS) {
+      return DynamicLibrary.open('libaxiom_generated_runtime.dylib');
+    }
+
+    if (Platform.isLinux) {
+      return DynamicLibrary.open('libaxiom_generated_runtime.so');
+    }
+
+    if (Platform.isWindows) {
+      return DynamicLibrary.open('axiom_generated_runtime.dll');
+    }
+
+    throw UnsupportedError("Unsupported platform for AxiomRuntime");
   }
 
   /// Call Rust: axiom_initialize(AxiomString { ptr, len })

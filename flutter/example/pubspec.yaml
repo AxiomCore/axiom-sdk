@@ -28,6 +28,7 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  flat_buffers: ^25.9.23
   flutter:
     sdk: flutter
 
@@ -38,6 +39,8 @@ dependencies:
     path: ../axiom_flutter
 
 dev_dependencies:
+  axiom_flutter_generator:
+    path: ../axiom_flutter_generator
   flutter_test:
     sdk: flutter
 
