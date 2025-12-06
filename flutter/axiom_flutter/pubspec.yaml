@@ -1,17 +1,24 @@
 name: axiom_flutter
-description: A starting point for Dart libraries or applications.
-version: 1.0.0
-# repository: https://github.com/my_org/my_repo
+description: Flutter bridge for AxiomRuntime
+version: 0.1.0
 
 environment:
   sdk: ^3.8.0
+  flutter: ">=3.0.0"
 
-# Add regular dependencies here.
+flutter:
+  plugin:
+    platforms:
+      ios:
+        pluginClass: AxiomRuntimePlugin
+
 dependencies:
+  flutter:
+    sdk: flutter
   ffi: ^2.1.4
   path: ^1.9.1
-  # path: ^1.8.0
 
 dev_dependencies:
+  flutter_test:
+    sdk: flutter
   lints: ^5.0.0
-  test: ^1.24.0

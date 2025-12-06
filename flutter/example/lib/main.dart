@@ -11,7 +11,9 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sdk = AxiomSdk(baseUrl: "http://localhost:8000");
+    final sdk = AxiomSdk(
+      baseUrl: "https://photoemissive-orpha-twineable.ngrok-free.dev",
+    );
 
     return MaterialApp(
       home: Scaffold(

@@ -2,7 +2,7 @@ library axiom_flutter;
 
 import 'dart:ffi';
 import 'dart:io';
-import 'dart:typed_data';
+import 'package:flutter/services.dart';
 import 'package:ffi/ffi.dart';
 
 /// Must match Rust:
@@ -55,110 +55,108 @@ typedef NativeAxiomFreeBuffer = Void Function(AxiomBuffer);
 typedef AxiomFreeBuffer = void Function(AxiomBuffer);
 
 class AxiomRuntime {
-  late final DynamicLibrary _lib;
-  late final AxiomCall _call;
-  late final AxiomInitialize _init;
-  late final AxiomFreeBuffer _free;
+  static const _channel = MethodChannel("axiom_runtime_channel");
+
+  late final DynamicLibrary _ffiLib;
+  late final bool _useMethodChannel;
 
   AxiomRuntime() {
-    _lib = _openPlatformLibrary();
+    _useMethodChannel = Platform.isIOS;
 
-    _call = _lib.lookupFunction<NativeAxiomCall, AxiomCall>('axiom_call');
-    _init = _lib.lookupFunction<NativeAxiomInitialize, AxiomInitialize>(
-      'axiom_initialize',
-    );
-    _free = _lib.lookupFunction<NativeAxiomFreeBuffer, AxiomFreeBuffer>(
-      'axiom_free_buffer',
-    );
+    if (!_useMethodChannel) {
+      _ffiLib = _loadFfiLibrary();
+    }
   }
 
-  static DynamicLibrary _openPlatformLibrary() {
+  DynamicLibrary _loadFfiLibrary() {
     if (Platform.isAndroid) {
-      // Flutter bundles this automatically in android/src/main/jniLibs/
       return DynamicLibrary.open('libaxiom_generated_runtime.so');
     }
-
-    if (Platform.isIOS) {
-      // iOS bundles dylibs automatically in the Framework
-      return DynamicLibrary.process(); // <- iOS loads from main bundle
-    }
-
     if (Platform.isMacOS) {
       return DynamicLibrary.open('libaxiom_generated_runtime.dylib');
     }
-
     if (Platform.isLinux) {
       return DynamicLibrary.open('libaxiom_generated_runtime.so');
     }
-
     if (Platform.isWindows) {
       return DynamicLibrary.open('axiom_generated_runtime.dll');
     }
-
-    throw UnsupportedError("Unsupported platform for AxiomRuntime");
+    throw UnsupportedError("Unsupported platform");
   }
 
-  /// Call Rust: axiom_initialize(AxiomString { ptr, len })
-  void initialize(String baseUrl) {
+  Future<void> initialize(String baseUrl) async {
+    if (_useMethodChannel) {
+      return _channel.invokeMethod("initialize", {"baseUrl": baseUrl});
+    }
+
+    // FFI path (unchanged)
     final units = Uint8List.fromList(baseUrl.codeUnits);
     final ptr = malloc<Uint8>(units.length);
     ptr.asTypedList(units.length).setAll(0, units);
 
-    final axStrPtr = malloc<AxiomString>();
-    axStrPtr.ref
-      ..ptr = ptr
-      ..len = units.length;
+    final axStrPtr = malloc<AxiomString>()
+      ..ref.ptr = ptr
+      ..ref.len = units.length;
 
-    _init(axStrPtr.ref);
+    final initFn = _ffiLib
+        .lookupFunction<NativeAxiomInitialize, AxiomInitialize>(
+          'axiom_initialize',
+        );
+    initFn(axStrPtr.ref);
 
-    // We own this memory on the Dart side, so we free it.
     malloc.free(ptr);
     malloc.free(axStrPtr);
   }
 
-  /// Generic call() method (FlatBuffers request → bytes → FBS decode by caller)
   Future<Uint8List> call({
     required int endpointId,
     required Uint8List requestBytes,
   }) async {
-    // Allocate and fill input bytes
+    if (_useMethodChannel) {
+      final out = await _channel.invokeMethod("call", {
+        "endpointId": endpointId,
+        "input": requestBytes,
+      });
+
+      return out.bytes;
+    }
+
+    // FFI path (unchanged)
     final inPtr = malloc<Uint8>(requestBytes.length);
     inPtr.asTypedList(requestBytes.length).setAll(0, requestBytes);
 
-    // Wrap into AxiomBuffer struct
-    final inBufPtr = malloc<AxiomBuffer>();
-    inBufPtr.ref
-      ..ptr = inPtr
-      ..len = requestBytes.length;
+    final inBufPtr = malloc<AxiomBuffer>()
+      ..ref.ptr = inPtr
+      ..ref.len = requestBytes.length;
 
-    // Output buffer will be filled by Rust
     final outBufPtr = malloc<AxiomBuffer>();
 
-    final res = _call(endpointId, inBufPtr.ref, outBufPtr);
+    final callFn = _ffiLib.lookupFunction<NativeAxiomCall, AxiomCall>(
+      'axiom_call',
+    );
 
-    // We no longer need the input AxiomBuffer wrapper (but still own inPtr)
+    final code = callFn(endpointId, inBufPtr.ref, outBufPtr);
     malloc.free(inBufPtr);
 
-    if (res != 0) {
-      // Clean up our allocations
+    if (code != 0) {
       malloc.free(outBufPtr);
       malloc.free(inPtr);
-      throw Exception('FFI call failed with code $res');
+      throw Exception("FFI call failed: $code");
     }
 
-    // Copy data out of Rust-owned buffer
-    final outBuf = outBufPtr.ref;
-    final outLen = outBuf.len;
-    final outData = outBuf.ptr.asTypedList(outLen);
-    final copied = Uint8List.fromList(outData);
+    final outBytes = Uint8List.fromList(
+      outBufPtr.ref.ptr!.asTypedList(outBufPtr.ref.len),
+    );
 
-    // Ask Rust to free the buffer it allocated
-    _free(outBuf);
+    final freeFn = _ffiLib
+        .lookupFunction<NativeAxiomFreeBuffer, AxiomFreeBuffer>(
+          'axiom_free_buffer',
+        );
+    freeFn(outBufPtr.ref);
 
-    // Free our wrapper + input pointer
     malloc.free(outBufPtr);
     malloc.free(inPtr);
 
-    return copied;
+    return outBytes;
   }
 }

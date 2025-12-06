@@ -1,12 +1,13 @@
 // GENERATED CODE – DO NOT EDIT.
-// Axiom SDK for
+// Axiom SDK for 
 
-import 'package:axiom_flutter/axiom_flutter.dart';
+import 'axiom_runtime.dart';
 import 'package:example/generated/schema_axiom_generated.dart' as schema;
 
 class AxiomSdk {
   final AxiomRuntime _runtime;
-  AxiomSdk({required String baseUrl}) : _runtime = AxiomRuntime() {
+  AxiomSdk({required String baseUrl})
+    : _runtime = AxiomRuntime() {
     _runtime.initialize(baseUrl);
   }
 
@@ -23,9 +24,7 @@ class AxiomSdk {
     );
     final resp = schema.GetUserResponse(responseBytes);
     final value = resp.data;
-    if (value == null) {
-      throw StateError("GetUserResponse.data was null");
-    }
+    if (value == null) { throw StateError("GetUserResponse.data was null"); }
     return value;
   }
 
@@ -63,9 +62,8 @@ class AxiomSdk {
     );
     final resp = schema.CreateUserResponse(responseBytes);
     final value = resp.data;
-    if (value == null) {
-      throw StateError("CreateUserResponse.data was null");
-    }
+    if (value == null) { throw StateError("CreateUserResponse.data was null"); }
     return value;
   }
+
 }

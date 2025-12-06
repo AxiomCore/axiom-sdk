@@ -101,42 +101,46 @@ Future<void> _generateSdk({
   // 3) Determine Dart package name from pubspec.yaml
   final packageName = _readPubspecName(projectRoot);
 
-  // 4) Compute target file path
+  // 4) Prepare output directory under lib/
   final libOutDir = Directory('$projectRoot/lib/$outDir');
   if (!libOutDir.existsSync()) {
     libOutDir.createSync(recursive: true);
   }
+
+  // 4a) Write local runtime bridge: axiom_runtime.dart (NEW)
+  await _writeRuntimeBridge(libOutDir);
+
+  // 5) Compute target file path for SDK
   final sdkFile = File('${libOutDir.path}/axiom_sdk.dart');
 
-  // 5) Build Dart source
+  // 6) Build Dart source for SDK
   final buffer = StringBuffer();
 
   buffer.writeln('// GENERATED CODE – DO NOT EDIT.');
   buffer.writeln('// Axiom SDK for $serviceName');
   buffer.writeln();
-  buffer.writeln("import 'package:axiom_flutter/axiom_flutter.dart';");
+
+  // Local runtime bridge instead of package:axiom_flutter
+  buffer.writeln("import 'axiom_runtime.dart';");
 
   final schemaImportPath = outDir.isEmpty
       ? 'schema_axiom_generated.dart'
       : '$outDir/schema_axiom_generated.dart';
 
+  // schema import via package:<appName>/...
   buffer.writeln("import 'package:$packageName/$schemaImportPath' as schema;");
   buffer.writeln();
 
   // Class header
   buffer.writeln('class AxiomSdk {');
   buffer.writeln('  final AxiomRuntime _runtime;');
-  buffer.writeln(
-    '  AxiomSdk({required String dynamicLibraryPath, required String baseUrl})',
-  );
-  buffer.writeln(
-    '    : _runtime = AxiomRuntime(dynamicLibraryPath: dynamicLibraryPath) {',
-  );
+  buffer.writeln('  AxiomSdk({required String baseUrl})');
+  buffer.writeln('    : _runtime = AxiomRuntime() {');
   buffer.writeln('    _runtime.initialize(baseUrl);');
   buffer.writeln('  }');
   buffer.writeln();
 
-  // 6) Endpoints
+  // 7) Endpoints
   final endpoints = (ir['endpoints'] as List?) ?? const [];
   for (final ep in endpoints) {
     if (ep is Map<String, dynamic>) {
@@ -147,9 +151,171 @@ Future<void> _generateSdk({
 
   buffer.writeln('}');
 
-  // 7) Write file
+  // 8) Write axiom_sdk.dart
   sdkFile.writeAsStringSync(buffer.toString());
   stdout.writeln('✅ Successfully wrote ${sdkFile.path}');
+}
+
+/// -------------------------------
+/// Write local runtime bridge
+/// -------------------------------
+
+Future<void> _writeRuntimeBridge(Directory libOutDir) async {
+  final runtimeFile = File('${libOutDir.path}/axiom_runtime.dart');
+
+  // This is essentially the old axiom_flutter runtime, but local and iOS-only
+  const runtimeSource = r'''
+// GENERATED – DO NOT EDIT.
+// Low-level FFI bridge to AxiomRuntime (Rust) for this project only.
+
+import 'dart:ffi';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:ffi/ffi.dart';
+
+/// Must match Rust:
+/// #[repr(C)]
+/// pub struct AxiomString { pub ptr: *const u8, pub len: usize }
+base class AxiomString extends Struct {
+  external Pointer<Uint8> ptr;
+
+  @Uint64()
+  external int len;
+}
+
+/// Must match Rust:
+/// #[repr(C)]
+/// pub struct AxiomBuffer { pub ptr: *mut u8, pub len: usize }
+base class AxiomBuffer extends Struct {
+  external Pointer<Uint8> ptr;
+
+  @Uint64()
+  external int len;
+}
+
+/// Rust:
+/// pub extern "C" fn axiom_initialize(base_url: AxiomString)
+typedef NativeAxiomInitialize = Void Function(AxiomString);
+typedef AxiomInitialize = void Function(AxiomString);
+
+/// Rust:
+/// pub extern "C" fn axiom_call(
+///   endpoint_id: u32,
+///   input_buf: AxiomBuffer,
+///   output_buf: *mut AxiomBuffer,
+/// ) -> FfiResult   // repr(C) enum => i32
+typedef NativeAxiomCall = Int32 Function(
+  Uint32 endpointId,
+  AxiomBuffer input,
+  Pointer<AxiomBuffer> output,
+);
+typedef AxiomCall = int Function(
+  int endpointId,
+  AxiomBuffer input,
+  Pointer<AxiomBuffer> output,
+);
+
+/// Rust:
+/// pub extern "C" fn axiom_free_buffer(buf: AxiomBuffer)
+typedef NativeAxiomFreeBuffer = Void Function(AxiomBuffer);
+typedef AxiomFreeBuffer = void Function(AxiomBuffer);
+
+class AxiomRuntime {
+  late final DynamicLibrary _lib;
+  late final AxiomCall _call;
+  late final AxiomInitialize _init;
+  late final AxiomFreeBuffer _free;
+
+  AxiomRuntime() {
+    _lib = _openPlatformLibrary();
+
+    _call = _lib.lookupFunction<NativeAxiomCall, AxiomCall>('axiom_call');
+    _init = _lib.lookupFunction<NativeAxiomInitialize, AxiomInitialize>(
+      'axiom_initialize',
+    );
+    _free = _lib.lookupFunction<NativeAxiomFreeBuffer, AxiomFreeBuffer>(
+      'axiom_free_buffer',
+    );
+  }
+
+  static DynamicLibrary _openPlatformLibrary() {
+    if (Platform.isIOS) {
+      // AxiomRuntime is linked into the main app binary via Pod 'AxiomRuntime'
+      return DynamicLibrary.process();
+    }
+
+    // For now, only iOS is wired up. Others can be added later.
+    throw UnsupportedError('AxiomRuntime is only available on iOS in this build');
+  }
+
+  /// Call Rust: axiom_initialize(AxiomString { ptr, len })
+  void initialize(String baseUrl) {
+    final units = Uint8List.fromList(baseUrl.codeUnits);
+    final ptr = malloc<Uint8>(units.length);
+    ptr.asTypedList(units.length).setAll(0, units);
+
+    final axStrPtr = malloc<AxiomString>();
+    axStrPtr.ref
+      ..ptr = ptr
+      ..len = units.length;
+
+    _init(axStrPtr.ref);
+
+    // We own this memory on the Dart side, so we free it.
+    malloc.free(ptr);
+    malloc.free(axStrPtr);
+  }
+
+  /// Generic call() method (FlatBuffers request → bytes → FBS decode by caller)
+  Future<Uint8List> call({
+    required int endpointId,
+    required Uint8List requestBytes,
+  }) async {
+    // Allocate and fill input bytes
+    final inPtr = malloc<Uint8>(requestBytes.length);
+    inPtr.asTypedList(requestBytes.length).setAll(0, requestBytes);
+
+    // Wrap into AxiomBuffer struct
+    final inBufPtr = malloc<AxiomBuffer>();
+    inBufPtr.ref
+      ..ptr = inPtr
+      ..len = requestBytes.length;
+
+    // Output buffer will be filled by Rust
+    final outBufPtr = malloc<AxiomBuffer>();
+
+    final res = _call(endpointId, inBufPtr.ref, outBufPtr);
+
+    // We no longer need the input AxiomBuffer wrapper (but still own inPtr)
+    malloc.free(inBufPtr);
+
+    if (res != 0) {
+      // Clean up our allocations
+      malloc.free(outBufPtr);
+      malloc.free(inPtr);
+      throw Exception('FFI call failed with code $res');
+    }
+
+    // Copy data out of Rust-owned buffer
+    final outBuf = outBufPtr.ref;
+    final outLen = outBuf.len;
+    final outData = outBuf.ptr.asTypedList(outLen);
+    final copied = Uint8List.fromList(outData);
+
+    // Ask Rust to free the buffer it allocated
+    _free(outBuf);
+
+    // Free our wrapper + input pointer
+    malloc.free(outBufPtr);
+    malloc.free(inPtr);
+
+    return copied;
+  }
+}
+''';
+
+  runtimeFile.writeAsStringSync(runtimeSource);
+  stdout.writeln('✅ Wrote ${runtimeFile.path}');
 }
 
 /// -------------------------------
