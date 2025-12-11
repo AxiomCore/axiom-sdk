@@ -7,6 +7,110 @@ import 'dart:typed_data' show Uint8List;
 import 'package:flat_buffers/flat_buffers.dart' as fb;
 
 
+class User {
+  User._(this._bc, this._bcOffset);
+  factory User(List<int> bytes) {
+    final rootRef = fb.BufferContext.fromBytes(bytes);
+    return reader.read(rootRef, 0);
+  }
+
+  static const fb.Reader<User> reader = _UserReader();
+
+  final fb.BufferContext _bc;
+  final int _bcOffset;
+
+  int get id => const fb.Int64Reader().vTableGet(_bc, _bcOffset, 4, 0);
+  String? get name => const fb.StringReader().vTableGetNullable(_bc, _bcOffset, 6);
+  String? get role => const fb.StringReader().vTableGetNullable(_bc, _bcOffset, 8);
+  String? get email => const fb.StringReader().vTableGetNullable(_bc, _bcOffset, 10);
+
+  @override
+  String toString() {
+    return 'User{id: ${id}, name: ${name}, role: ${role}, email: ${email}}';
+  }
+}
+
+class _UserReader extends fb.TableReader<User> {
+  const _UserReader();
+
+  @override
+  User createObject(fb.BufferContext bc, int offset) => 
+    User._(bc, offset);
+}
+
+class UserBuilder {
+  UserBuilder(this.fbBuilder);
+
+  final fb.Builder fbBuilder;
+
+  void begin() {
+    fbBuilder.startTable(4);
+  }
+
+  int addId(int? id) {
+    fbBuilder.addInt64(0, id);
+    return fbBuilder.offset;
+  }
+  int addNameOffset(int? offset) {
+    fbBuilder.addOffset(1, offset);
+    return fbBuilder.offset;
+  }
+  int addRoleOffset(int? offset) {
+    fbBuilder.addOffset(2, offset);
+    return fbBuilder.offset;
+  }
+  int addEmailOffset(int? offset) {
+    fbBuilder.addOffset(3, offset);
+    return fbBuilder.offset;
+  }
+
+  int finish() {
+    return fbBuilder.endTable();
+  }
+}
+
+class UserObjectBuilder extends fb.ObjectBuilder {
+  final int? _id;
+  final String? _name;
+  final String? _role;
+  final String? _email;
+
+  UserObjectBuilder({
+    int? id,
+    String? name,
+    String? role,
+    String? email,
+  })
+      : _id = id,
+        _name = name,
+        _role = role,
+        _email = email;
+
+  /// Finish building, and store into the [fbBuilder].
+  @override
+  int finish(fb.Builder fbBuilder) {
+    final int? nameOffset = _name == null ? null
+        : fbBuilder.writeString(_name!);
+    final int? roleOffset = _role == null ? null
+        : fbBuilder.writeString(_role!);
+    final int? emailOffset = _email == null ? null
+        : fbBuilder.writeString(_email!);
+    fbBuilder.startTable(4);
+    fbBuilder.addInt64(0, _id);
+    fbBuilder.addOffset(1, nameOffset);
+    fbBuilder.addOffset(2, roleOffset);
+    fbBuilder.addOffset(3, emailOffset);
+    return fbBuilder.endTable();
+  }
+
+  /// Convenience method to serialize to byte list.
+  @override
+  Uint8List toBytes([String? fileIdentifier]) {
+    final fbBuilder = fb.Builder(deduplicateTables: false);
+    fbBuilder.finish(finish(fbBuilder), fileIdentifier);
+    return fbBuilder.buffer;
+  }
+}
 class Message {
   Message._(this._bc, this._bcOffset);
   factory Message(List<int> bytes) {
@@ -69,99 +173,6 @@ class MessageObjectBuilder extends fb.ObjectBuilder {
         : fbBuilder.writeString(_message!);
     fbBuilder.startTable(1);
     fbBuilder.addOffset(0, messageOffset);
-    return fbBuilder.endTable();
-  }
-
-  /// Convenience method to serialize to byte list.
-  @override
-  Uint8List toBytes([String? fileIdentifier]) {
-    final fbBuilder = fb.Builder(deduplicateTables: false);
-    fbBuilder.finish(finish(fbBuilder), fileIdentifier);
-    return fbBuilder.buffer;
-  }
-}
-class User {
-  User._(this._bc, this._bcOffset);
-  factory User(List<int> bytes) {
-    final rootRef = fb.BufferContext.fromBytes(bytes);
-    return reader.read(rootRef, 0);
-  }
-
-  static const fb.Reader<User> reader = _UserReader();
-
-  final fb.BufferContext _bc;
-  final int _bcOffset;
-
-  int get id => const fb.Int64Reader().vTableGet(_bc, _bcOffset, 4, 0);
-  String? get name => const fb.StringReader().vTableGetNullable(_bc, _bcOffset, 6);
-  String? get email => const fb.StringReader().vTableGetNullable(_bc, _bcOffset, 8);
-
-  @override
-  String toString() {
-    return 'User{id: ${id}, name: ${name}, email: ${email}}';
-  }
-}
-
-class _UserReader extends fb.TableReader<User> {
-  const _UserReader();
-
-  @override
-  User createObject(fb.BufferContext bc, int offset) => 
-    User._(bc, offset);
-}
-
-class UserBuilder {
-  UserBuilder(this.fbBuilder);
-
-  final fb.Builder fbBuilder;
-
-  void begin() {
-    fbBuilder.startTable(3);
-  }
-
-  int addId(int? id) {
-    fbBuilder.addInt64(0, id);
-    return fbBuilder.offset;
-  }
-  int addNameOffset(int? offset) {
-    fbBuilder.addOffset(1, offset);
-    return fbBuilder.offset;
-  }
-  int addEmailOffset(int? offset) {
-    fbBuilder.addOffset(2, offset);
-    return fbBuilder.offset;
-  }
-
-  int finish() {
-    return fbBuilder.endTable();
-  }
-}
-
-class UserObjectBuilder extends fb.ObjectBuilder {
-  final int? _id;
-  final String? _name;
-  final String? _email;
-
-  UserObjectBuilder({
-    int? id,
-    String? name,
-    String? email,
-  })
-      : _id = id,
-        _name = name,
-        _email = email;
-
-  /// Finish building, and store into the [fbBuilder].
-  @override
-  int finish(fb.Builder fbBuilder) {
-    final int? nameOffset = _name == null ? null
-        : fbBuilder.writeString(_name!);
-    final int? emailOffset = _email == null ? null
-        : fbBuilder.writeString(_email!);
-    fbBuilder.startTable(3);
-    fbBuilder.addInt64(0, _id);
-    fbBuilder.addOffset(1, nameOffset);
-    fbBuilder.addOffset(2, emailOffset);
     return fbBuilder.endTable();
   }
 

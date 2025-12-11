@@ -48,11 +48,5 @@
 	<!-- Add this block to your Info.plist -->	
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Allow the debugger to connect over your local network.</string>
-	<key>NSBonjourServices</key>
-	<array>
-			<string>_dartVmService._tcp</string>
-			<string>_dartobservatory._tcp</string>
-	</array>
-
 </dict>
 </plist>

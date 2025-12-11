@@ -3,18 +3,30 @@
 
 import 'axiom_runtime.dart';
 import 'package:example/generated/schema_axiom_generated.dart' as schema;
+import 'package:example/generated/models.dart' as models;
 
 class AxiomSdk {
   final AxiomRuntime _runtime;
-  AxiomSdk({required String baseUrl})
-    : _runtime = AxiomRuntime() {
-    _runtime.initialize(baseUrl);
+
+  // Private constructor to ensure proper initialization.
+  AxiomSdk._(this._runtime);
+
+  /// Asynchronously creates and initializes the Axiom SDK.
+  static Future<AxiomSdk> create({required String baseUrl}) async {
+    // Get the singleton instance of the runtime.
+    final runtime = AxiomRuntime();
+    // Ensure the background isolate is running and ready.
+    await runtime.init();
+    // Set the base URL for the runtime.
+    runtime.initialize(baseUrl);
+    // Return the fully initialized SDK.
+    return AxiomSdk._(runtime);
   }
 
   /// Endpoint "get_user"
   /// Path: /users/{user_id}
   /// IR endpoint id: 0
-  Future<schema.User> getUser({required int userId}) async {
+  Future<models.User> getUser({required int userId}) async {
     final requestBytes = schema.GetUserRequestObjectBuilder(
       userId: userId,
     ).toBytes();
@@ -23,15 +35,15 @@ class AxiomSdk {
       requestBytes: requestBytes,
     );
     final resp = schema.GetUserResponse(responseBytes);
-    final value = resp.data;
-    if (value == null) { throw StateError("GetUserResponse.data was null"); }
-    return value;
+    final schemaValue = resp.data;
+    if (schemaValue == null) { throw StateError("GetUserResponse.data was null"); }
+    return models.User.fromSchema(schemaValue);
   }
 
   /// Endpoint "list_users"
   /// Path: /users
   /// IR endpoint id: 1
-  Future<List<schema.User>> listUsers({required int limit}) async {
+  Future<List<models.User>> listUsers({required int limit}) async {
     final requestBytes = schema.ListUsersRequestObjectBuilder(
       limit: limit,
     ).toBytes();
@@ -40,19 +52,20 @@ class AxiomSdk {
       requestBytes: requestBytes,
     );
     final resp = schema.ListUsersResponse(responseBytes);
-    final items = resp.data;
-    if (items == null) return <schema.User>[];
-    return List<schema.User>.unmodifiable(items);
+    final schemaItems = resp.data;
+    if (schemaItems == null) return <models.User>[];
+    return schemaItems.map((e) => models.User.fromSchema(e)).toList();
   }
 
   /// Endpoint "create_user"
   /// Path: /users
   /// IR endpoint id: 2
-  Future<schema.Message> createUser({required schema.User user}) async {
+  Future<models.Message> createUser({required models.User user}) async {
     final requestBytes = schema.CreateUserRequestObjectBuilder(
       user: schema.UserObjectBuilder(
         id: user.id,
         name: user.name,
+        role: user.role,
         email: user.email,
       ),
     ).toBytes();
@@ -61,9 +74,9 @@ class AxiomSdk {
       requestBytes: requestBytes,
     );
     final resp = schema.CreateUserResponse(responseBytes);
-    final value = resp.data;
-    if (value == null) { throw StateError("CreateUserResponse.data was null"); }
-    return value;
+    final schemaValue = resp.data;
+    if (schemaValue == null) { throw StateError("CreateUserResponse.data was null"); }
+    return models.Message.fromSchema(schemaValue);
   }
 
 }

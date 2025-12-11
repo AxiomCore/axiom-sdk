@@ -110,6 +110,12 @@ Future<void> _generateSdk({
   // 4a) Write local runtime bridge: axiom_runtime.dart (NEW)
   await _writeRuntimeBridge(libOutDir);
 
+  final modelsFile = File('${libOutDir.path}/models.dart');
+  final modelsBuffer = StringBuffer();
+  _writeModelsFile(modelsBuffer, ir, packageName, outDir);
+  modelsFile.writeAsStringSync(modelsBuffer.toString());
+  stdout.writeln('✅ Successfully wrote ${modelsFile.path}');
+
   // 5) Compute target file path for SDK
   final sdkFile = File('${libOutDir.path}/axiom_sdk.dart');
 
@@ -126,17 +132,34 @@ Future<void> _generateSdk({
   final schemaImportPath = outDir.isEmpty
       ? 'schema_axiom_generated.dart'
       : '$outDir/schema_axiom_generated.dart';
+  final modelsImportPath = outDir.isEmpty
+      ? 'models.dart'
+      : '$outDir/models.dart';
 
   // schema import via package:<appName>/...
   buffer.writeln("import 'package:$packageName/$schemaImportPath' as schema;");
+  buffer.writeln("import 'package:$packageName/$modelsImportPath' as models;");
   buffer.writeln();
 
   // Class header
   buffer.writeln('class AxiomSdk {');
   buffer.writeln('  final AxiomRuntime _runtime;');
-  buffer.writeln('  AxiomSdk({required String baseUrl})');
-  buffer.writeln('    : _runtime = AxiomRuntime() {');
-  buffer.writeln('    _runtime.initialize(baseUrl);');
+  buffer.writeln();
+  buffer.writeln('  // Private constructor to ensure proper initialization.');
+  buffer.writeln('  AxiomSdk._(this._runtime);');
+  buffer.writeln();
+  buffer.writeln('  /// Asynchronously creates and initializes the Axiom SDK.');
+  buffer.writeln(
+    '  static Future<AxiomSdk> create({required String baseUrl}) async {',
+  );
+  buffer.writeln('    // Get the singleton instance of the runtime.');
+  buffer.writeln('    final runtime = AxiomRuntime();');
+  buffer.writeln('    // Ensure the background isolate is running and ready.');
+  buffer.writeln('    await runtime.init();');
+  buffer.writeln('    // Set the base URL for the runtime.');
+  buffer.writeln('    runtime.initialize(baseUrl);');
+  buffer.writeln('    // Return the fully initialized SDK.');
+  buffer.writeln('    return AxiomSdk._(runtime);');
   buffer.writeln('  }');
   buffer.writeln();
 
@@ -144,7 +167,12 @@ Future<void> _generateSdk({
   final endpoints = (ir['endpoints'] as List?) ?? const [];
   for (final ep in endpoints) {
     if (ep is Map<String, dynamic>) {
-      _writeEndpointMethod(buffer, ep, ir);
+      _writeEndpointMethod(
+        buffer,
+        ep,
+        ir,
+        (ir['models'] as Map).cast<String, dynamic>(),
+      );
       buffer.writeln();
     }
   }
@@ -162,154 +190,229 @@ Future<void> _generateSdk({
 
 Future<void> _writeRuntimeBridge(Directory libOutDir) async {
   final runtimeFile = File('${libOutDir.path}/axiom_runtime.dart');
-
-  // This is essentially the old axiom_flutter runtime, but local and iOS-only
   const runtimeSource = r'''
 // GENERATED – DO NOT EDIT.
 // Low-level FFI bridge to AxiomRuntime (Rust) for this project only.
 
+import 'dart:async';
+import 'dart:collection';
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 import 'package:ffi/ffi.dart';
 
-/// Must match Rust:
-/// #[repr(C)]
-/// pub struct AxiomString { pub ptr: *const u8, pub len: usize }
+// --- FFI Structs and Enums (must match Rust) ---
+
 base class AxiomString extends Struct {
   external Pointer<Uint8> ptr;
-
   @Uint64()
   external int len;
 }
 
-/// Must match Rust:
-/// #[repr(C)]
-/// pub struct AxiomBuffer { pub ptr: *mut u8, pub len: usize }
 base class AxiomBuffer extends Struct {
   external Pointer<Uint8> ptr;
-
   @Uint64()
   external int len;
 }
 
-/// Rust:
-/// pub extern "C" fn axiom_initialize(base_url: AxiomString)
-typedef NativeAxiomInitialize = Void Function(AxiomString);
-typedef AxiomInitialize = void Function(AxiomString);
+enum FfiError {
+  success,
+  unknownError,
+  requestParsingFailed,
+  networkError,
+  responseDeserializationFailed,
+  unknownEndpoint,
+}
 
-/// Rust:
-/// pub extern "C" fn axiom_call(
-///   endpoint_id: u32,
-///   input_buf: AxiomBuffer,
-///   output_buf: *mut AxiomBuffer,
-/// ) -> FfiResult   // repr(C) enum => i32
-typedef NativeAxiomCall = Int32 Function(
-  Uint32 endpointId,
-  AxiomBuffer input,
-  Pointer<AxiomBuffer> output,
-);
-typedef AxiomCall = int Function(
-  int endpointId,
-  AxiomBuffer input,
-  Pointer<AxiomBuffer> output,
-);
+base class AxiomResponseBuffer extends Struct {
+  @Uint64() external int requestId;
+  @Int32() external int errorCode; // Use Int32 for enums
+  external AxiomBuffer data;
+}
 
-/// Rust:
-/// pub extern "C" fn axiom_free_buffer(buf: AxiomBuffer)
-typedef NativeAxiomFreeBuffer = Void Function(AxiomBuffer);
-typedef AxiomFreeBuffer = void Function(AxiomBuffer);
+// --- FFI Function Signatures ---
+typedef AxiomCallback = Void Function(AxiomResponseBuffer response);
+typedef _AxiomInitializeNative = Void Function(AxiomString);
+typedef _AxiomInitialize = void Function(AxiomString);
+typedef _AxiomRegisterCallbackNative = Void Function(Pointer<NativeFunction<AxiomCallback>>);
+typedef _AxiomRegisterCallback = void Function(Pointer<NativeFunction<AxiomCallback>>);
+typedef _AxiomCallNative = Void Function(Uint64, Uint32, AxiomBuffer);
+typedef _AxiomCall = void Function(int, int, AxiomBuffer);
+typedef _AxiomFreeBufferNative = Void Function(AxiomBuffer);
+typedef _AxiomFreeBuffer = void Function(AxiomBuffer);
+typedef _AxiomProcessResponsesNative = Void Function();
+typedef _AxiomProcessResponses = void Function();
+
+
+// --- Global state for managing async callbacks ---
+final _completers = HashMap<int, Completer<Uint8List>>();
+int _nextRequestId = 1;
+SendPort? _commandPort;
+Completer<void>? _initCompleter;
+SendPort? _dataPort;
+
+@pragma('vm:entry-point')
+void _axiomCallbackHandler(AxiomResponseBuffer response) {
+  _dataPort?.send([
+    response.requestId,
+    response.errorCode, // Now sending the integer error code
+    response.data.ptr.address,
+    response.data.len
+  ]);
+}
+
+@pragma('vm:entry-point')
+void _runRustEventLoop(List<Object> args) {
+  final mainIsolateDataPort = args[0] as SendPort;
+  final shutdownPort = ReceivePort();
+  mainIsolateDataPort.send(shutdownPort.sendPort);
+  _dataPort = mainIsolateDataPort;
+  
+  final lib = AxiomRuntime._openPlatformLibrary();
+  final registerCallback = lib.lookupFunction<_AxiomRegisterCallbackNative, _AxiomRegisterCallback>('axiom_register_callback');
+  registerCallback(Pointer.fromFunction(_axiomCallbackHandler));
+  final processResponses = lib.lookupFunction<_AxiomProcessResponsesNative, _AxiomProcessResponses>('axiom_process_responses');
+
+  shutdownPort.listen((msg) {
+    if (msg == 'shutdown') {
+      shutdownPort.close();
+      Isolate.current.kill();
+    }
+  });
+
+  while (true) {
+    processResponses();
+  }
+}
 
 class AxiomRuntime {
-  late final DynamicLibrary _lib;
-  late final AxiomCall _call;
-  late final AxiomInitialize _init;
-  late final AxiomFreeBuffer _free;
-
-  AxiomRuntime() {
-    _lib = _openPlatformLibrary();
-
-    _call = _lib.lookupFunction<NativeAxiomCall, AxiomCall>('axiom_call');
-    _init = _lib.lookupFunction<NativeAxiomInitialize, AxiomInitialize>(
-      'axiom_initialize',
-    );
-    _free = _lib.lookupFunction<NativeAxiomFreeBuffer, AxiomFreeBuffer>(
-      'axiom_free_buffer',
-    );
+  static AxiomRuntime? _instance;
+  factory AxiomRuntime() {
+    _instance ??= AxiomRuntime._internal();
+    return _instance!;
   }
 
-  static DynamicLibrary _openPlatformLibrary() {
-    if (Platform.isIOS) {
-      // AxiomRuntime is linked into the main app binary via Pod 'AxiomRuntime'
-      return DynamicLibrary.process();
-    }
+  ReceivePort? _mainIsolatePort;
 
-    // For now, only iOS is wired up. Others can be added later.
+  static Future<void> dispose() async {
+    if (_instance != null) {
+      final completer = Completer<void>();
+      _instance!._mainIsolatePort?.listen(null, onDone: () {
+        if (!completer.isCompleted) completer.complete();
+      });
+      _commandPort?.send('shutdown');
+      _instance!._mainIsolatePort?.close();
+      _completers.clear();
+      _instance = null;
+      _commandPort = null;
+      _initCompleter = null;
+      await completer.future.timeout(const Duration(milliseconds: 200), onTimeout: () {});
+    }
+  }
+
+  static late final DynamicLibrary _lib;
+  late final _AxiomInitialize _initFfi;
+  late final _AxiomCall _callFfi;
+  static late final _AxiomFreeBuffer _freeFfi;
+
+  AxiomRuntime._internal() {
+    _lib = _openPlatformLibrary();
+    _initFfi = _lib.lookupFunction<_AxiomInitializeNative, _AxiomInitialize>('axiom_initialize');
+    _callFfi = _lib.lookupFunction<_AxiomCallNative, _AxiomCall>('axiom_call');
+    _freeFfi = _lib.lookupFunction<_AxiomFreeBufferNative, _AxiomFreeBuffer>('axiom_free_buffer');
+  }
+
+  Future<void> init() async {
+    if (_initCompleter != null) return _initCompleter!.future;
+    _initCompleter = Completer<void>();
+    _mainIsolatePort = ReceivePort();
+
+    _mainIsolatePort!.listen((message) {
+      if (message is SendPort) {
+        _commandPort = message;
+        if (!_initCompleter!.isCompleted) _initCompleter!.complete();
+        return;
+      }
+      
+      final int requestId = message[0];
+      final int errorCodeValue = message[1];
+      final int ptrAddress = message[2];
+      final int len = message[3];
+
+      final completer = _completers.remove(requestId);
+      if (completer == null) {
+        if (ptrAddress != 0) {
+            final buffer = calloc<AxiomBuffer>();
+            buffer.ref.ptr = Pointer.fromAddress(ptrAddress);
+            buffer.ref.len = len;
+            _freeFfi(buffer.ref);
+            calloc.free(buffer);
+        }
+        return;
+      }
+
+      if (errorCodeValue == FfiError.success.index && ptrAddress != 0) {
+        final ptr = Pointer<Uint8>.fromAddress(ptrAddress);
+        final data = Uint8List.fromList(ptr.asTypedList(len));
+        completer.complete(data);
+        
+        final buffer = calloc<AxiomBuffer>();
+        buffer.ref.ptr = ptr;
+        buffer.ref.len = len;
+        _freeFfi(buffer.ref);
+        calloc.free(buffer);
+      } else {
+        // Map the integer error code back to the enum for a clear error message.
+        final error = FfiError.values[errorCodeValue];
+        completer.completeError(Exception('Axiom FFI call failed for request #$requestId with error: ${error.name}'));
+      }
+    });
+
+    await Isolate.spawn(_runRustEventLoop, [_mainIsolatePort!.sendPort]);
+    return _initCompleter!.future;
+  }
+  
+  static DynamicLibrary _openPlatformLibrary() {
+    if (Platform.isIOS) { return DynamicLibrary.process(); }
     throw UnsupportedError('AxiomRuntime is only available on iOS in this build');
   }
 
-  /// Call Rust: axiom_initialize(AxiomString { ptr, len })
   void initialize(String baseUrl) {
     final units = Uint8List.fromList(baseUrl.codeUnits);
     final ptr = malloc<Uint8>(units.length);
     ptr.asTypedList(units.length).setAll(0, units);
-
     final axStrPtr = malloc<AxiomString>();
-    axStrPtr.ref
-      ..ptr = ptr
-      ..len = units.length;
-
-    _init(axStrPtr.ref);
-
-    // We own this memory on the Dart side, so we free it.
+    axStrPtr.ref..ptr = ptr..len = units.length;
+    _initFfi(axStrPtr.ref);
     malloc.free(ptr);
     malloc.free(axStrPtr);
   }
 
-  /// Generic call() method (FlatBuffers request → bytes → FBS decode by caller)
   Future<Uint8List> call({
     required int endpointId,
     required Uint8List requestBytes,
-  }) async {
-    // Allocate and fill input bytes
+  }) {
+    final requestId = _nextRequestId++;
+    final completer = Completer<Uint8List>();
+    _completers[requestId] = completer;
+
     final inPtr = malloc<Uint8>(requestBytes.length);
     inPtr.asTypedList(requestBytes.length).setAll(0, requestBytes);
-
-    // Wrap into AxiomBuffer struct
     final inBufPtr = malloc<AxiomBuffer>();
-    inBufPtr.ref
-      ..ptr = inPtr
-      ..len = requestBytes.length;
+    inBufPtr.ref..ptr = inPtr..len = requestBytes.length;
 
-    // Output buffer will be filled by Rust
-    final outBufPtr = malloc<AxiomBuffer>();
-
-    final res = _call(endpointId, inBufPtr.ref, outBufPtr);
-
-    // We no longer need the input AxiomBuffer wrapper (but still own inPtr)
-    malloc.free(inBufPtr);
-
-    if (res != 0) {
-      // Clean up our allocations
-      malloc.free(outBufPtr);
+    try {
+      _callFfi(requestId, endpointId, inBufPtr.ref);
+    } catch (e) {
+      _completers.remove(requestId);
+      completer.completeError(e);
+    } finally {
       malloc.free(inPtr);
-      throw Exception('FFI call failed with code $res');
+      malloc.free(inBufPtr);
     }
 
-    // Copy data out of Rust-owned buffer
-    final outBuf = outBufPtr.ref;
-    final outLen = outBuf.len;
-    final outData = outBuf.ptr.asTypedList(outLen);
-    final copied = Uint8List.fromList(outData);
-
-    // Ask Rust to free the buffer it allocated
-    _free(outBuf);
-
-    // Free our wrapper + input pointer
-    malloc.free(outBufPtr);
-    malloc.free(inPtr);
-
-    return copied;
+    return completer.future;
   }
 }
 ''';
@@ -487,42 +590,6 @@ String _camelCase(String name) {
 /// Type & endpoint helpers
 /// -------------------------------
 
-String _dartParamTypeForTypeRef(Map<String, dynamic> t) {
-  final kind = t['kind'] as String;
-
-  switch (kind) {
-    case 'int32':
-    case 'int64':
-      return 'int';
-    case 'float32':
-    case 'float64':
-      return 'double';
-    case 'bool':
-      return 'bool';
-    case 'string':
-    case 'dateTime':
-      return 'String';
-    case 'bytes':
-      return 'Uint8List';
-
-    // NEW: named model → schema.Model
-    case 'named':
-      final model = t['value'] as String;
-      return 'schema.${_pascalCase(model)}';
-
-    case 'json':
-      return 'Map<String, dynamic>';
-    case 'map':
-      return 'Map<String, dynamic>';
-    case 'list':
-      return 'List<dynamic>';
-    case 'void':
-      return 'void';
-    default:
-      return 'dynamic';
-  }
-}
-
 _ResponseShape _classifyReturnType(Map<String, dynamic> t) {
   final kind = t['kind'] as String;
   final value = t['value'];
@@ -548,6 +615,7 @@ void _writeEndpointMethod(
   StringBuffer buffer,
   Map<String, dynamic> ep,
   Map<String, dynamic> ir,
+  Map<String, dynamic> allModels,
 ) {
   final rawName = ep['name'] as String? ?? 'endpoint';
   final fnName = _camelCase(rawName);
@@ -556,7 +624,6 @@ void _writeEndpointMethod(
   final returnTypeRef = (ep['returnType'] as Map).cast<String, dynamic>();
   final responseShape = _classifyReturnType(returnTypeRef);
 
-  // Parameters
   final params = (ep['parameters'] as List?) ?? const [];
   final paramDecls = <String>[];
   final paramInfos = <Map<String, dynamic>>[];
@@ -567,7 +634,9 @@ void _writeEndpointMethod(
     final name = param['name'] as String? ?? 'arg';
     final camelName = _camelCase(name);
     final typeRef = (param['typeRef'] as Map).cast<String, dynamic>();
-    final dartType = _dartParamTypeForTypeRef(typeRef);
+    // --- FIX #3 HERE ---
+    // Use the model-aware type mapper for user-facing types
+    final dartType = _dartModelTypeForTypeRef(typeRef, allModels);
     final isOptional = param['isOptional'] as bool? ?? false;
 
     paramDecls.add(
@@ -582,15 +651,14 @@ void _writeEndpointMethod(
     });
   }
 
-  // Return type
   String dartReturnType;
   switch (responseShape.kind) {
     case _ResponseKind.model:
-      dartReturnType = 'schema.${_pascalCase(responseShape.modelName ?? '')}';
+      dartReturnType = 'models.${_pascalCase(responseShape.modelName ?? '')}';
       break;
     case _ResponseKind.modelVec:
       dartReturnType =
-          'List<schema.${_pascalCase(responseShape.modelName ?? '')}>';
+          'List<models.${_pascalCase(responseShape.modelName ?? '')}>';
       break;
     default:
       dartReturnType = 'dynamic';
@@ -603,39 +671,37 @@ void _writeEndpointMethod(
     '  Future<$dartReturnType> $fnName({${paramDecls.join(', ')}}) async {',
   );
 
-  // === Correct request building using ObjectBuilder ===
   final reqType = '${_pascalCase(rawName)}RequestObjectBuilder';
-
   buffer.writeln('    final requestBytes = schema.$reqType(');
 
-  // Write each param into the constructor
   for (final p in paramInfos) {
     final camel = p['camelName'];
     final t = p['typeRef'] as Map<String, dynamic>;
     final kind = t['kind'] as String;
 
+    // --- FIX #2 HERE ---
+    // Use the camelCase name for the ObjectBuilder property
+    final builderParamName = _camelCase(p['origName']);
+
     if (kind == 'named') {
       final modelName = _pascalCase(t['value']);
       final obName = 'schema.${modelName}ObjectBuilder';
+      buffer.writeln('      $builderParamName: $obName(');
 
-      buffer.writeln('      $camel: $obName(');
-
-      // Auto-expand all fields of the model
-      final models = ir['models'] as Map<String, dynamic>;
-      final fields = (models[t['value']]['fields'] as List);
-
+      final modelDef = allModels[t['value']] as Map<String, dynamic>;
+      final fields = (modelDef['fields'] as List);
       for (final f in fields) {
         final fieldName = f['name'];
-        final camelField = _camelCase(fieldName);
-        buffer.writeln('        $fieldName: $camel.$camelField,');
+        // The properties of the ObjectBuilder also need to be camelCase
+        final builderFieldName = _camelCase(fieldName);
+        final modelFieldName = _camelCase(fieldName);
+        buffer.writeln('        $builderFieldName: $camel.$modelFieldName,');
       }
-
       buffer.writeln('      ),');
     } else {
-      buffer.writeln('      $camel: $camel,');
+      buffer.writeln('      $builderParamName: $camel,');
     }
   }
-
   buffer.writeln('    ).toBytes();');
 
   buffer.writeln('    final responseBytes = await _runtime.call(');
@@ -643,25 +709,28 @@ void _writeEndpointMethod(
   buffer.writeln('      requestBytes: requestBytes,');
   buffer.writeln('    );');
 
-  // === Decode response ===
   final respType = '${_pascalCase(rawName)}Response';
-
   switch (responseShape.kind) {
     case _ResponseKind.model:
+      final modelName = _pascalCase(responseShape.modelName!);
       buffer.writeln('    final resp = schema.$respType(responseBytes);');
-      buffer.writeln('    final value = resp.data;');
+      buffer.writeln('    final schemaValue = resp.data;');
       buffer.writeln(
-        '    if (value == null) { throw StateError("$respType.data was null"); }',
+        '    if (schemaValue == null) { throw StateError("$respType.data was null"); }',
       );
-      buffer.writeln('    return value;');
+      buffer.writeln('    return models.$modelName.fromSchema(schemaValue);');
       break;
 
     case _ResponseKind.modelVec:
       final modelName = _pascalCase(responseShape.modelName!);
       buffer.writeln('    final resp = schema.$respType(responseBytes);');
-      buffer.writeln('    final items = resp.data;');
-      buffer.writeln('    if (items == null) return <schema.$modelName>[];');
-      buffer.writeln('    return List<schema.$modelName>.unmodifiable(items);');
+      buffer.writeln('    final schemaItems = resp.data;');
+      buffer.writeln(
+        '    if (schemaItems == null) return <models.$modelName>[];',
+      );
+      buffer.writeln(
+        '    return schemaItems.map((e) => models.$modelName.fromSchema(e)).toList();',
+      );
       break;
 
     case _ResponseKind.json:
@@ -673,4 +742,150 @@ void _writeEndpointMethod(
   }
 
   buffer.writeln('  }');
+}
+
+void _writeModelsFile(
+  StringBuffer buffer,
+  Map<String, dynamic> ir,
+  String packageName,
+  String outDir,
+) {
+  buffer.writeln('// GENERATED CODE – DO NOT EDIT.');
+  buffer.writeln('// User-facing data models.');
+  buffer.writeln();
+
+  final schemaImportPath = outDir.isEmpty
+      ? 'schema_axiom_generated.dart'
+      : '$outDir/schema_axiom_generated.dart';
+  buffer.writeln("import 'package:$packageName/$schemaImportPath' as schema;");
+  buffer.writeln();
+
+  final models = (ir['models'] as Map?)?.cast<String, dynamic>() ?? {};
+
+  for (final modelDef in models.values) {
+    if (modelDef is! Map<String, dynamic>) continue;
+
+    final modelName = _pascalCase(modelDef['name']);
+    buffer.writeln('class $modelName {');
+
+    final fields = (modelDef['fields'] as List?) ?? [];
+
+    // Generate final properties
+    for (final field in fields) {
+      if (field is! Map<String, dynamic>) continue;
+      final fieldName = _camelCase(field['name']);
+      final typeRef = (field['typeRef'] as Map).cast<String, dynamic>();
+      final isOptional = field['isOptional'] as bool? ?? true;
+      String dartType = _dartModelTypeForTypeRef(
+        typeRef,
+        models,
+      ); // Use a new type mapper
+      if (isOptional) dartType += '?';
+
+      buffer.writeln('  final $dartType $fieldName;');
+    }
+    buffer.writeln();
+
+    // Generate the constructor
+    buffer.writeln('  const $modelName({');
+    for (final field in fields) {
+      if (field is! Map<String, dynamic>) continue;
+      final fieldName = _camelCase(field['name']);
+      final isOptional = field['isOptional'] as bool? ?? true;
+      if (!isOptional) {
+        buffer.writeln('    required this.$fieldName,');
+      } else {
+        buffer.writeln('    this.$fieldName,');
+      }
+    }
+    buffer.writeln('  });');
+    buffer.writeln();
+
+    // Generate a `fromSchema` factory constructor
+    buffer.writeln(
+      '  factory $modelName.fromSchema(schema.$modelName schemaModel) {',
+    );
+    buffer.writeln('    return $modelName(');
+    for (final field in fields) {
+      if (field is! Map<String, dynamic>) continue;
+      final origName = field['name'];
+      final camelName = _camelCase(origName);
+      final typeRef = (field['typeRef'] as Map).cast<String, dynamic>();
+      final kind = typeRef['kind'] as String;
+      final isOptional = field['isOptional'] as bool? ?? false;
+      final bang = isOptional ? '' : '!'; // <-- FIX #1 HERE
+
+      // Handle nested models and lists of models
+      if (kind == 'named') {
+        final nestedModelName = _pascalCase(typeRef['value']);
+        if (isOptional) {
+          buffer.writeln(
+            '      $camelName: schemaModel.$camelName != null ? models.$nestedModelName.fromSchema(schemaModel.$camelName!) : null,',
+          );
+        } else {
+          buffer.writeln(
+            '      $camelName: models.$nestedModelName.fromSchema(schemaModel.$camelName!),',
+          );
+        }
+      } else if (kind == 'list' &&
+          (typeRef['value'] as Map)['kind'] == 'named') {
+        final innerModelName = _pascalCase((typeRef['value'] as Map)['value']);
+        if (isOptional) {
+          buffer.writeln(
+            '      $camelName: schemaModel.$camelName?.map((e) => models.$innerModelName.fromSchema(e)).toList(),',
+          );
+        } else {
+          buffer.writeln(
+            '      $camelName: schemaModel.$camelName!.map((e) => models.$innerModelName.fromSchema(e)).toList(),',
+          );
+        }
+      } else {
+        buffer.writeln('      $camelName: schemaModel.$camelName$bang,');
+      }
+    }
+    buffer.writeln('    );');
+    buffer.writeln('  }');
+
+    buffer.writeln('}');
+    buffer.writeln();
+  }
+}
+
+// Add this new type mapper for the model layer
+String _dartModelTypeForTypeRef(
+  Map<String, dynamic> t,
+  Map<String, dynamic> allModels,
+) {
+  final kind = t['kind'] as String;
+  switch (kind) {
+    case 'int32':
+    case 'int64':
+      return 'int';
+    case 'float32':
+    case 'float64':
+      return 'double';
+    case 'bool':
+      return 'bool';
+    case 'string':
+    case 'dateTime':
+      return 'String';
+    case 'bytes':
+      return 'Uint8List';
+    case 'named':
+      // This is the key change: prefix with 'models.'
+      return 'models.${_pascalCase(t['value'] as String)}';
+    case 'list':
+      final innerType = (t['value'] as Map).cast<String, dynamic>();
+      // Recursively call to handle nested types like List<models.User>
+      return 'List<${_dartModelTypeForTypeRef(innerType, allModels)}>';
+    case 'json':
+      return 'Map<String, dynamic>';
+    case 'map':
+      // Simplified for now, as complex map keys/values are often handled as JSON.
+      return 'Map<String, dynamic>';
+    case 'void':
+      return 'void';
+    default:
+      return 'dynamic';
+  }
 }
