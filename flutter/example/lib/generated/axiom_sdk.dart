@@ -1,7 +1,7 @@
 // GENERATED CODE – DO NOT EDIT.
 // Axiom SDK for 
 
-import 'axiom_runtime.dart';
+import 'package:axiom_flutter/axiom_flutter.dart';
 import 'package:example/generated/schema_axiom_generated.dart' as schema;
 import 'package:example/generated/models.dart' as models;
 

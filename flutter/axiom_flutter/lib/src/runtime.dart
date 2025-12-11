@@ -1,4 +1,3 @@
-// GENERATED – DO NOT EDIT.
 // Low-level FFI bridge to AxiomRuntime (Rust) for this project only.
 
 import 'dart:async';
@@ -33,8 +32,10 @@ enum FfiError {
 }
 
 base class AxiomResponseBuffer extends Struct {
-  @Uint64() external int requestId;
-  @Int32() external int errorCode; // Use Int32 for enums
+  @Uint64()
+  external int requestId;
+  @Int32()
+  external int errorCode; // Use Int32 for enums
   external AxiomBuffer data;
 }
 
@@ -42,15 +43,16 @@ base class AxiomResponseBuffer extends Struct {
 typedef AxiomCallback = Void Function(AxiomResponseBuffer response);
 typedef _AxiomInitializeNative = Void Function(AxiomString);
 typedef _AxiomInitialize = void Function(AxiomString);
-typedef _AxiomRegisterCallbackNative = Void Function(Pointer<NativeFunction<AxiomCallback>>);
-typedef _AxiomRegisterCallback = void Function(Pointer<NativeFunction<AxiomCallback>>);
+typedef _AxiomRegisterCallbackNative =
+    Void Function(Pointer<NativeFunction<AxiomCallback>>);
+typedef _AxiomRegisterCallback =
+    void Function(Pointer<NativeFunction<AxiomCallback>>);
 typedef _AxiomCallNative = Void Function(Uint64, Uint32, AxiomBuffer);
 typedef _AxiomCall = void Function(int, int, AxiomBuffer);
 typedef _AxiomFreeBufferNative = Void Function(AxiomBuffer);
 typedef _AxiomFreeBuffer = void Function(AxiomBuffer);
 typedef _AxiomProcessResponsesNative = Void Function();
 typedef _AxiomProcessResponses = void Function();
-
 
 // --- Global state for managing async callbacks ---
 final _completers = HashMap<int, Completer<Uint8List>>();
@@ -65,7 +67,7 @@ void _axiomCallbackHandler(AxiomResponseBuffer response) {
     response.requestId,
     response.errorCode, // Now sending the integer error code
     response.data.ptr.address,
-    response.data.len
+    response.data.len,
   ]);
 }
 
@@ -75,11 +77,17 @@ void _runRustEventLoop(List<Object> args) {
   final shutdownPort = ReceivePort();
   mainIsolateDataPort.send(shutdownPort.sendPort);
   _dataPort = mainIsolateDataPort;
-  
+
   final lib = AxiomRuntime._openPlatformLibrary();
-  final registerCallback = lib.lookupFunction<_AxiomRegisterCallbackNative, _AxiomRegisterCallback>('axiom_register_callback');
+  final registerCallback = lib
+      .lookupFunction<_AxiomRegisterCallbackNative, _AxiomRegisterCallback>(
+        'axiom_register_callback',
+      );
   registerCallback(Pointer.fromFunction(_axiomCallbackHandler));
-  final processResponses = lib.lookupFunction<_AxiomProcessResponsesNative, _AxiomProcessResponses>('axiom_process_responses');
+  final processResponses = lib
+      .lookupFunction<_AxiomProcessResponsesNative, _AxiomProcessResponses>(
+        'axiom_process_responses',
+      );
 
   shutdownPort.listen((msg) {
     if (msg == 'shutdown') {
@@ -105,16 +113,22 @@ class AxiomRuntime {
   static Future<void> dispose() async {
     if (_instance != null) {
       final completer = Completer<void>();
-      _instance!._mainIsolatePort?.listen(null, onDone: () {
-        if (!completer.isCompleted) completer.complete();
-      });
+      _instance!._mainIsolatePort?.listen(
+        null,
+        onDone: () {
+          if (!completer.isCompleted) completer.complete();
+        },
+      );
       _commandPort?.send('shutdown');
       _instance!._mainIsolatePort?.close();
       _completers.clear();
       _instance = null;
       _commandPort = null;
       _initCompleter = null;
-      await completer.future.timeout(const Duration(milliseconds: 200), onTimeout: () {});
+      await completer.future.timeout(
+        const Duration(milliseconds: 200),
+        onTimeout: () {},
+      );
     }
   }
 
@@ -125,9 +139,13 @@ class AxiomRuntime {
 
   AxiomRuntime._internal() {
     _lib = _openPlatformLibrary();
-    _initFfi = _lib.lookupFunction<_AxiomInitializeNative, _AxiomInitialize>('axiom_initialize');
+    _initFfi = _lib.lookupFunction<_AxiomInitializeNative, _AxiomInitialize>(
+      'axiom_initialize',
+    );
     _callFfi = _lib.lookupFunction<_AxiomCallNative, _AxiomCall>('axiom_call');
-    _freeFfi = _lib.lookupFunction<_AxiomFreeBufferNative, _AxiomFreeBuffer>('axiom_free_buffer');
+    _freeFfi = _lib.lookupFunction<_AxiomFreeBufferNative, _AxiomFreeBuffer>(
+      'axiom_free_buffer',
+    );
   }
 
   Future<void> init() async {
@@ -141,7 +159,7 @@ class AxiomRuntime {
         if (!_initCompleter!.isCompleted) _initCompleter!.complete();
         return;
       }
-      
+
       final int requestId = message[0];
       final int errorCodeValue = message[1];
       final int ptrAddress = message[2];
@@ -150,11 +168,11 @@ class AxiomRuntime {
       final completer = _completers.remove(requestId);
       if (completer == null) {
         if (ptrAddress != 0) {
-            final buffer = calloc<AxiomBuffer>();
-            buffer.ref.ptr = Pointer.fromAddress(ptrAddress);
-            buffer.ref.len = len;
-            _freeFfi(buffer.ref);
-            calloc.free(buffer);
+          final buffer = calloc<AxiomBuffer>();
+          buffer.ref.ptr = Pointer.fromAddress(ptrAddress);
+          buffer.ref.len = len;
+          _freeFfi(buffer.ref);
+          calloc.free(buffer);
         }
         return;
       }
@@ -163,7 +181,7 @@ class AxiomRuntime {
         final ptr = Pointer<Uint8>.fromAddress(ptrAddress);
         final data = Uint8List.fromList(ptr.asTypedList(len));
         completer.complete(data);
-        
+
         final buffer = calloc<AxiomBuffer>();
         buffer.ref.ptr = ptr;
         buffer.ref.len = len;
@@ -172,17 +190,25 @@ class AxiomRuntime {
       } else {
         // Map the integer error code back to the enum for a clear error message.
         final error = FfiError.values[errorCodeValue];
-        completer.completeError(Exception('Axiom FFI call failed for request #$requestId with error: ${error.name}'));
+        completer.completeError(
+          Exception(
+            'Axiom FFI call failed for request #$requestId with error: ${error.name}',
+          ),
+        );
       }
     });
 
     await Isolate.spawn(_runRustEventLoop, [_mainIsolatePort!.sendPort]);
     return _initCompleter!.future;
   }
-  
+
   static DynamicLibrary _openPlatformLibrary() {
-    if (Platform.isIOS) { return DynamicLibrary.process(); }
-    throw UnsupportedError('AxiomRuntime is only available on iOS in this build');
+    if (Platform.isIOS) {
+      return DynamicLibrary.process();
+    }
+    throw UnsupportedError(
+      'AxiomRuntime is only available on iOS in this build',
+    );
   }
 
   void initialize(String baseUrl) {
@@ -190,7 +216,9 @@ class AxiomRuntime {
     final ptr = malloc<Uint8>(units.length);
     ptr.asTypedList(units.length).setAll(0, units);
     final axStrPtr = malloc<AxiomString>();
-    axStrPtr.ref..ptr = ptr..len = units.length;
+    axStrPtr.ref
+      ..ptr = ptr
+      ..len = units.length;
     _initFfi(axStrPtr.ref);
     malloc.free(ptr);
     malloc.free(axStrPtr);
@@ -207,7 +235,9 @@ class AxiomRuntime {
     final inPtr = malloc<Uint8>(requestBytes.length);
     inPtr.asTypedList(requestBytes.length).setAll(0, requestBytes);
     final inBufPtr = malloc<AxiomBuffer>();
-    inBufPtr.ref..ptr = inPtr..len = requestBytes.length;
+    inBufPtr.ref
+      ..ptr = inPtr
+      ..len = requestBytes.length;
 
     try {
       _callFfi(requestId, endpointId, inBufPtr.ref);
