@@ -23,19 +23,39 @@ class _TocEntry {
 }
 
 /// For classifying endpoint return shapes.
-enum _ResponseKind { model, modelVec, json }
+enum _ResponseKind {
+  model,
+  modelVec,
+  primitiveString,
+  primitiveInt,
+  primitiveFloat,
+  primitiveBool,
+  primitiveBytes,
+  voidType,
+  json,
+}
 
 class _ResponseShape {
   final _ResponseKind kind;
-  final String? modelName; // for model / modelVec
+  final String? modelName;
   const _ResponseShape(this.kind, [this.modelName]);
 
   factory _ResponseShape.model(String model) =>
       _ResponseShape(_ResponseKind.model, model);
-
   factory _ResponseShape.modelVec(String model) =>
       _ResponseShape(_ResponseKind.modelVec, model);
-
+  factory _ResponseShape.primitiveString() =>
+      const _ResponseShape(_ResponseKind.primitiveString);
+  factory _ResponseShape.primitiveInt() =>
+      const _ResponseShape(_ResponseKind.primitiveInt);
+  factory _ResponseShape.primitiveFloat() =>
+      const _ResponseShape(_ResponseKind.primitiveFloat);
+  factory _ResponseShape.primitiveBool() =>
+      const _ResponseShape(_ResponseKind.primitiveBool);
+  factory _ResponseShape.primitiveBytes() =>
+      const _ResponseShape(_ResponseKind.primitiveBytes);
+  factory _ResponseShape.voidType() =>
+      const _ResponseShape(_ResponseKind.voidType);
   factory _ResponseShape.json() => const _ResponseShape(_ResponseKind.json);
 }
 
@@ -124,6 +144,7 @@ Future<void> _generateSdk({
   buffer.writeln();
 
   // Local runtime bridge instead of package:axiom_flutter
+  buffer.writeln("import 'dart:convert';");
   buffer.writeln(
     "import 'package:axiom_flutter/axiom_flutter.dart';",
   ); // Import your new package
@@ -350,24 +371,40 @@ String _camelCase(String name) {
 /// Type & endpoint helpers
 /// -------------------------------
 
-_ResponseShape _classifyReturnType(Map<String, dynamic> t) {
+_ResponseShape _classifyDartReturnType(Map<String, dynamic> t) {
   final kind = t['kind'] as String;
   final value = t['value'];
 
-  if (kind == 'named' && value is String) {
-    return _ResponseShape.model(value);
+  switch (kind) {
+    case 'named':
+      return _ResponseShape.model(value as String);
+    case 'list':
+      if (value is Map<String, dynamic>) {
+        final innerKind = value['kind'] as String?;
+        final innerVal = value['value'];
+        if (innerKind == 'named' && innerVal is String) {
+          return _ResponseShape.modelVec(innerVal);
+        }
+      }
+      return _ResponseShape.json();
+    case 'string':
+    case 'dateTime':
+      return _ResponseShape.primitiveString();
+    case 'int32':
+    case 'int64':
+      return _ResponseShape.primitiveInt();
+    case 'float32':
+    case 'float64':
+      return _ResponseShape.primitiveFloat();
+    case 'bool':
+      return _ResponseShape.primitiveBool();
+    case 'bytes':
+      return _ResponseShape.primitiveBytes();
+    case 'void':
+      return _ResponseShape.voidType();
+    default:
+      return _ResponseShape.json();
   }
-
-  if (kind == 'list' && value is Map<String, dynamic>) {
-    final innerKind = value['kind'] as String?;
-    final innerVal = value['value'];
-    if (innerKind == 'named' && innerVal is String) {
-      return _ResponseShape.modelVec(innerVal);
-    }
-  }
-
-  // Fallback: generic JSON
-  return _ResponseShape.json();
 }
 
 /// Generate a single endpoint method into [buffer].
@@ -382,7 +419,8 @@ void _writeEndpointMethod(
   final epId = ep['id'] ?? 0;
   final path = ep['path'] as String? ?? '';
   final returnTypeRef = (ep['returnType'] as Map).cast<String, dynamic>();
-  final responseShape = _classifyReturnType(returnTypeRef);
+  final returnIsOptional = ep['returnIsOptional'] as bool? ?? false;
+  final responseShape = _classifyDartReturnType(returnTypeRef);
 
   final params = (ep['parameters'] as List?) ?? const [];
   final paramDecls = <String>[];
@@ -414,22 +452,43 @@ void _writeEndpointMethod(
   String dartReturnType;
   switch (responseShape.kind) {
     case _ResponseKind.model:
-      dartReturnType = 'models.${_pascalCase(responseShape.modelName ?? '')}';
+      dartReturnType = 'models.${_pascalCase(responseShape.modelName!)}';
       break;
     case _ResponseKind.modelVec:
-      dartReturnType =
-          'List<models.${_pascalCase(responseShape.modelName ?? '')}>';
+      dartReturnType = 'List<models.${_pascalCase(responseShape.modelName!)}>';
+      break;
+    case _ResponseKind.primitiveString:
+      dartReturnType = 'String';
+      break;
+    case _ResponseKind.primitiveInt:
+      dartReturnType = 'int';
+      break;
+    case _ResponseKind.primitiveFloat:
+      dartReturnType = 'double';
+      break;
+    case _ResponseKind.primitiveBool:
+      dartReturnType = 'bool';
+      break;
+    case _ResponseKind.primitiveBytes:
+      dartReturnType = 'Uint8List';
+      break;
+    case _ResponseKind.voidType:
+      dartReturnType = 'void';
       break;
     default:
       dartReturnType = 'dynamic';
   }
 
+  if (returnIsOptional && responseShape.kind != _ResponseKind.voidType) {
+    dartReturnType += '?';
+  }
+
+  final paramsString = paramDecls.isEmpty ? '' : '{${paramDecls.join(', ')}}';
+
   buffer.writeln('  /// Endpoint "$rawName"');
   buffer.writeln('  /// Path: $path');
   buffer.writeln('  /// IR endpoint id: $epId');
-  buffer.writeln(
-    '  Future<$dartReturnType> $fnName({${paramDecls.join(', ')}}) async {',
-  );
+  buffer.writeln('  Future<$dartReturnType> $fnName($paramsString) async {');
 
   final reqType = '${_pascalCase(rawName)}RequestObjectBuilder';
   buffer.writeln('    final requestBytes = schema.$reqType(');
@@ -475,10 +534,16 @@ void _writeEndpointMethod(
       final modelName = _pascalCase(responseShape.modelName!);
       buffer.writeln('    final resp = schema.$respType(responseBytes);');
       buffer.writeln('    final schemaValue = resp.data;');
-      buffer.writeln(
-        '    if (schemaValue == null) { throw StateError("$respType.data was null"); }',
-      );
-      buffer.writeln('    return models.$modelName.fromSchema(schemaValue);');
+      if (returnIsOptional) {
+        buffer.writeln(
+          '    return schemaValue == null ? null : models.$modelName.fromSchema(schemaValue);',
+        );
+      } else {
+        buffer.writeln(
+          '    if (schemaValue == null) { throw StateError("$respType.data was null"); }',
+        );
+        buffer.writeln('    return models.$modelName.fromSchema(schemaValue);');
+      }
       break;
 
     case _ResponseKind.modelVec:
@@ -486,18 +551,37 @@ void _writeEndpointMethod(
       buffer.writeln('    final resp = schema.$respType(responseBytes);');
       buffer.writeln('    final schemaItems = resp.data;');
       buffer.writeln(
-        '    if (schemaItems == null) return <models.$modelName>[];',
+        '    if (schemaItems == null) return ${returnIsOptional ? 'null' : '<models.$modelName>[]'};',
       );
       buffer.writeln(
         '    return schemaItems.map((e) => models.$modelName.fromSchema(e)).toList();',
       );
       break;
 
+    case _ResponseKind.primitiveString:
+    case _ResponseKind.primitiveInt:
+    case _ResponseKind.primitiveFloat:
+    case _ResponseKind.primitiveBool:
+    case _ResponseKind.primitiveBytes:
+      buffer.writeln('    final resp = schema.$respType(responseBytes);');
+      buffer.writeln('    final value = resp.data;');
+      if (!returnIsOptional) {
+        buffer.writeln(
+          '    if (value == null) { throw StateError("$respType.data was null"); }',
+        );
+      }
+      buffer.writeln('    return value;');
+      break;
+
     case _ResponseKind.json:
       buffer.writeln('    final resp = schema.$respType(responseBytes);');
-      buffer.writeln('    final jsonStr = resp.json;');
-      buffer.writeln('    if (jsonStr == null) return null;');
-      buffer.writeln('    return jsonDecode(jsonStr);');
+      buffer.writeln('    final dataStr = resp.data;');
+      buffer.writeln('    if (dataStr == null) return null;');
+      buffer.writeln('    return jsonDecode(dataStr);');
+      break;
+
+    case _ResponseKind.voidType:
+      // Handled above
       break;
   }
 

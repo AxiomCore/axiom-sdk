@@ -1,6 +1,7 @@
 // GENERATED CODE – DO NOT EDIT.
 // Axiom SDK for 
 
+import 'dart:convert';
 import 'package:axiom_flutter/axiom_flutter.dart';
 import 'package:example/generated/schema_axiom_generated.dart' as schema;
 import 'package:example/generated/models.dart' as models;
@@ -77,6 +78,21 @@ class AxiomSdk {
     final schemaValue = resp.data;
     if (schemaValue == null) { throw StateError("CreateUserResponse.data was null"); }
     return models.Message.fromSchema(schemaValue);
+  }
+
+  /// Endpoint "foo_endpoint"
+  /// Path: /foo
+  /// IR endpoint id: 3
+  Future<int?> fooEndpoint() async {
+    final requestBytes = schema.FooEndpointRequestObjectBuilder(
+    ).toBytes();
+    final responseBytes = await _runtime.call(
+      endpointId: 3,
+      requestBytes: requestBytes,
+    );
+    final resp = schema.FooEndpointResponse(responseBytes);
+    final value = resp.data;
+    return value;
   }
 
 }

@@ -615,3 +615,120 @@ class CreateUserResponseObjectBuilder extends fb.ObjectBuilder {
     return fbBuilder.buffer;
   }
 }
+class FooEndpointRequest {
+  FooEndpointRequest._(this._bc, this._bcOffset);
+  factory FooEndpointRequest(List<int> bytes) {
+    final rootRef = fb.BufferContext.fromBytes(bytes);
+    return reader.read(rootRef, 0);
+  }
+
+  static const fb.Reader<FooEndpointRequest> reader = _FooEndpointRequestReader();
+
+  final fb.BufferContext _bc;
+  final int _bcOffset;
+
+
+  @override
+  String toString() {
+    return 'FooEndpointRequest{}';
+  }
+}
+
+class _FooEndpointRequestReader extends fb.TableReader<FooEndpointRequest> {
+  const _FooEndpointRequestReader();
+
+  @override
+  FooEndpointRequest createObject(fb.BufferContext bc, int offset) => 
+    FooEndpointRequest._(bc, offset);
+}
+
+class FooEndpointRequestObjectBuilder extends fb.ObjectBuilder {
+
+  FooEndpointRequestObjectBuilder();
+
+  /// Finish building, and store into the [fbBuilder].
+  @override
+  int finish(fb.Builder fbBuilder) {
+    fbBuilder.startTable(0);
+    return fbBuilder.endTable();
+  }
+
+  /// Convenience method to serialize to byte list.
+  @override
+  Uint8List toBytes([String? fileIdentifier]) {
+    final fbBuilder = fb.Builder(deduplicateTables: false);
+    fbBuilder.finish(finish(fbBuilder), fileIdentifier);
+    return fbBuilder.buffer;
+  }
+}
+class FooEndpointResponse {
+  FooEndpointResponse._(this._bc, this._bcOffset);
+  factory FooEndpointResponse(List<int> bytes) {
+    final rootRef = fb.BufferContext.fromBytes(bytes);
+    return reader.read(rootRef, 0);
+  }
+
+  static const fb.Reader<FooEndpointResponse> reader = _FooEndpointResponseReader();
+
+  final fb.BufferContext _bc;
+  final int _bcOffset;
+
+  int get data => const fb.Int64Reader().vTableGet(_bc, _bcOffset, 4, 0);
+
+  @override
+  String toString() {
+    return 'FooEndpointResponse{data: ${data}}';
+  }
+}
+
+class _FooEndpointResponseReader extends fb.TableReader<FooEndpointResponse> {
+  const _FooEndpointResponseReader();
+
+  @override
+  FooEndpointResponse createObject(fb.BufferContext bc, int offset) => 
+    FooEndpointResponse._(bc, offset);
+}
+
+class FooEndpointResponseBuilder {
+  FooEndpointResponseBuilder(this.fbBuilder);
+
+  final fb.Builder fbBuilder;
+
+  void begin() {
+    fbBuilder.startTable(1);
+  }
+
+  int addData(int? data) {
+    fbBuilder.addInt64(0, data);
+    return fbBuilder.offset;
+  }
+
+  int finish() {
+    return fbBuilder.endTable();
+  }
+}
+
+class FooEndpointResponseObjectBuilder extends fb.ObjectBuilder {
+  final int? _data;
+
+  FooEndpointResponseObjectBuilder({
+    int? data,
+  })
+      : _data = data;
+
+  /// Finish building, and store into the [fbBuilder].
+  @override
+  int finish(fb.Builder fbBuilder) {
+    fbBuilder.startTable(1);
+    fbBuilder.addInt64(0, _data);
+    return fbBuilder.endTable();
+  }
+
+  /// Convenience method to serialize to byte list.
+  @override
+  Uint8List toBytes([String? fileIdentifier]) {
+    final fbBuilder = fb.Builder(deduplicateTables: false);
+    fbBuilder.finish(finish(fbBuilder), fileIdentifier);
+    return fbBuilder.buffer;
+  }
+}

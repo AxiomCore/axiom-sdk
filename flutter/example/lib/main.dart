@@ -31,6 +31,7 @@ class _MyAppState extends State<MyApp> {
     sdk
         .createUser(user: models.User(id: 1, name: "Yash Create"))
         .then((value) => print("response: ${value.message}"));
+    sdk.fooEndpoint().then((value) => print("foo response: $value"));
     super.initState();
   }
 
