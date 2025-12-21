@@ -2,25 +2,9 @@
 
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:args/args.dart';
 import 'package:yaml/yaml.dart';
-
-/// --------------------------
-/// Constants (must match Rust)
-/// --------------------------
-const _magicBytes = [0x41, 0x58, 0x4f, 0x4d]; // "AXOM"
-const int _formatVersion = 1;
-const String _obfuscationKey = 'AxiomCoreSecretKey2025!';
-
-/// TOC entry from .axiom file.
-class _TocEntry {
-  final String name;
-  final int offset;
-  final int size;
-  _TocEntry(this.name, this.offset, this.size);
-}
 
 /// For classifying endpoint return shapes.
 enum _ResponseKind {
@@ -266,45 +250,6 @@ Future<Map<String, dynamic>> _loadIrFromAxiom(String axiomPath) async {
     return ir;
   } catch (e) {
     throw Exception('Failed to parse .axiom file payload as JSON: $e');
-  }
-}
-
-List<_TocEntry> _parseBincodeToc(Uint8List data) {
-  final bd = ByteData.sublistView(data);
-  int pos = 0;
-
-  int readU64() {
-    final value = bd.getUint64(pos, Endian.little);
-    pos += 8;
-    return value;
-  }
-
-  final vecLen = readU64();
-  final entries = <_TocEntry>[];
-
-  for (int i = 0; i < vecLen; i++) {
-    final nameLen = readU64();
-    final nameEnd = pos + nameLen;
-    if (nameEnd > data.length) {
-      throw Exception('Invalid TOC: name length out of range');
-    }
-    final nameBytes = data.sublist(pos, nameEnd);
-    pos = nameEnd;
-    final name = utf8.decode(nameBytes);
-
-    final offset = readU64();
-    final size = readU64();
-
-    entries.add(_TocEntry(name, offset, size));
-  }
-
-  return entries;
-}
-
-void _xorCipher(Uint8List data) {
-  final key = utf8.encode(_obfuscationKey);
-  for (var i = 0; i < data.length; i++) {
-    data[i] = data[i] ^ key[i % key.length];
   }
 }
 
