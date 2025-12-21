@@ -28,10 +28,10 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   @override
   void initState() {
-    sdk
-        .createUser(user: models.User(id: 1, name: "Yash Create"))
-        .then((value) => print("response: ${value.message}"));
-    sdk.fooEndpoint().then((value) => print("foo response: $value"));
+    // sdk
+    //     .createUser(user: models.User(id: 1, name: "Yash Create"))
+    //     .then((value) => print("response: ${value.message}"));
+    // sdk.fooEndpoint().then((value) => print("foo response: $value"));
     super.initState();
   }
 
@@ -48,6 +48,7 @@ class _MyAppState extends State<MyApp> {
               return const Center(child: CircularProgressIndicator());
             }
             if (snap.hasError) {
+              print(snap.error);
               return Center(child: Text("Error: ${snap.error}"));
             }
             if (!snap.hasData) {

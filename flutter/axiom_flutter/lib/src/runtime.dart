@@ -1,7 +1,8 @@
-// Low-level FFI bridge to AxiomRuntime (Rust) for this project only.
+// axiom_flutter/lib/src/runtime.dart
 
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:isolate';
@@ -22,37 +23,74 @@ base class AxiomBuffer extends Struct {
   external int len;
 }
 
-enum FfiError {
-  success,
-  unknownError,
-  requestParsingFailed,
-  networkError,
-  responseDeserializationFailed,
-  unknownEndpoint,
+class FfiError {
+  static const int success = 0;
+  static const int unknownError = 1;
+  static const int requestParsingFailed = 2;
+  static const int networkError = 3;
+  static const int responseDeserializationFailed = 4;
+  static const int unknownEndpoint = 5;
+  static const int invalidContract = 10;
+  static const int runtimeTooOld = 11;
+  static const int contractNotLoaded = 12;
+
+  // Helper to convert code to a string name for debugging
+  static String name(int code) {
+    switch (code) {
+      case success:
+        return 'success';
+      case unknownError:
+        return 'unknownError';
+      case requestParsingFailed:
+        return 'requestParsingFailed';
+      case networkError:
+        return 'networkError';
+      case responseDeserializationFailed:
+        return 'responseDeserializationFailed';
+      case unknownEndpoint:
+        return 'unknownEndpoint';
+      case invalidContract:
+        return 'invalidContract';
+      case runtimeTooOld:
+        return 'runtimeTooOld';
+      case contractNotLoaded:
+        return 'contractNotLoaded';
+      default:
+        return 'unrecognizedErrorCode';
+    }
+  }
 }
 
 base class AxiomResponseBuffer extends Struct {
   @Uint64()
   external int requestId;
   @Int32()
-  external int errorCode; // Use Int32 for enums
+  external int errorCode;
   external AxiomBuffer data;
+  external AxiomBuffer errorMessage; // NEW
 }
 
 // --- FFI Function Signatures ---
-typedef AxiomCallback = Void Function(AxiomResponseBuffer response);
+typedef AxiomCallback = Void Function(Pointer<AxiomResponseBuffer> response);
 typedef _AxiomInitializeNative = Void Function(AxiomString);
 typedef _AxiomInitialize = void Function(AxiomString);
+typedef _AxiomLoadContractNative = Int32 Function(AxiomBuffer);
+typedef _AxiomLoadContract = int Function(AxiomBuffer);
 typedef _AxiomRegisterCallbackNative =
     Void Function(Pointer<NativeFunction<AxiomCallback>>);
 typedef _AxiomRegisterCallback =
     void Function(Pointer<NativeFunction<AxiomCallback>>);
-typedef _AxiomCallNative = Void Function(Uint64, Uint32, AxiomBuffer);
-typedef _AxiomCall = void Function(int, int, AxiomBuffer);
+typedef _AxiomCallNative =
+    Void Function(Uint64, Uint32, AxiomString, AxiomString, AxiomBuffer);
+typedef _AxiomCall =
+    void Function(int, int, AxiomString, AxiomString, AxiomBuffer);
 typedef _AxiomFreeBufferNative = Void Function(AxiomBuffer);
 typedef _AxiomFreeBuffer = void Function(AxiomBuffer);
 typedef _AxiomProcessResponsesNative = Void Function();
 typedef _AxiomProcessResponses = void Function();
+typedef _AxiomFreeResponseBufferNative =
+    Void Function(Pointer<AxiomResponseBuffer>);
+typedef _AxiomFreeResponseBuffer = void Function(Pointer<AxiomResponseBuffer>);
 
 // --- Global state for managing async callbacks ---
 final _completers = HashMap<int, Completer<Uint8List>>();
@@ -61,14 +99,23 @@ SendPort? _commandPort;
 Completer<void>? _initCompleter;
 SendPort? _dataPort;
 
+_AxiomFreeResponseBuffer? _freeResponseFfiBackground;
+
 @pragma('vm:entry-point')
-void _axiomCallbackHandler(AxiomResponseBuffer response) {
+void _axiomCallbackHandler(Pointer<AxiomResponseBuffer> responsePtr) {
+  if (responsePtr == nullptr) return;
+
+  final response = responsePtr.ref;
   _dataPort?.send([
     response.requestId,
-    response.errorCode, // Now sending the integer error code
+    response.errorCode,
     response.data.ptr.address,
     response.data.len,
+    response.errorMessage.ptr.address, // NEW
+    response.errorMessage.len, // NEW
   ]);
+
+  _freeResponseFfiBackground?.call(responsePtr);
 }
 
 @pragma('vm:entry-point')
@@ -79,11 +126,17 @@ void _runRustEventLoop(List<Object> args) {
   _dataPort = mainIsolateDataPort;
 
   final lib = AxiomRuntime._openPlatformLibrary();
+
+  _freeResponseFfiBackground = lib
+      .lookupFunction<_AxiomFreeResponseBufferNative, _AxiomFreeResponseBuffer>(
+        'axiom_free_response_buffer',
+      );
   final registerCallback = lib
       .lookupFunction<_AxiomRegisterCallbackNative, _AxiomRegisterCallback>(
         'axiom_register_callback',
       );
   registerCallback(Pointer.fromFunction(_axiomCallbackHandler));
+
   final processResponses = lib
       .lookupFunction<_AxiomProcessResponsesNative, _AxiomProcessResponses>(
         'axiom_process_responses',
@@ -125,6 +178,7 @@ class AxiomRuntime {
       _instance = null;
       _commandPort = null;
       _initCompleter = null;
+      _freeResponseFfiBackground = null;
       await completer.future.timeout(
         const Duration(milliseconds: 200),
         onTimeout: () {},
@@ -134,6 +188,7 @@ class AxiomRuntime {
 
   static late final DynamicLibrary _lib;
   late final _AxiomInitialize _initFfi;
+  late final _AxiomLoadContract _loadContractFfi;
   late final _AxiomCall _callFfi;
   static late final _AxiomFreeBuffer _freeFfi;
 
@@ -142,6 +197,10 @@ class AxiomRuntime {
     _initFfi = _lib.lookupFunction<_AxiomInitializeNative, _AxiomInitialize>(
       'axiom_initialize',
     );
+    _loadContractFfi = _lib
+        .lookupFunction<_AxiomLoadContractNative, _AxiomLoadContract>(
+          'axiom_load_contract',
+        );
     _callFfi = _lib.lookupFunction<_AxiomCallNative, _AxiomCall>('axiom_call');
     _freeFfi = _lib.lookupFunction<_AxiomFreeBufferNative, _AxiomFreeBuffer>(
       'axiom_free_buffer',
@@ -163,36 +222,60 @@ class AxiomRuntime {
       final int requestId = message[0];
       final int errorCodeValue = message[1];
       final int ptrAddress = message[2];
-      final int len = message[3];
+      final int dataLen = message[3];
+      final int errorPtrAddress = message[4]; // NEW
+      final int errorLen = message[5]; // NEW
 
       final completer = _completers.remove(requestId);
       if (completer == null) {
         if (ptrAddress != 0) {
           final buffer = calloc<AxiomBuffer>();
           buffer.ref.ptr = Pointer.fromAddress(ptrAddress);
-          buffer.ref.len = len;
+          buffer.ref.len = dataLen;
           _freeFfi(buffer.ref);
           calloc.free(buffer);
         }
+
+        if (errorPtrAddress != 0) {
+          final buffer = calloc<AxiomBuffer>();
+          buffer.ref.ptr = Pointer.fromAddress(errorPtrAddress);
+          buffer.ref.len = errorLen;
+          _freeFfi(buffer.ref);
+          calloc.free(buffer);
+        }
+
         return;
       }
 
-      if (errorCodeValue == FfiError.success.index && ptrAddress != 0) {
+      if (errorCodeValue == FfiError.success && ptrAddress != 0) {
         final ptr = Pointer<Uint8>.fromAddress(ptrAddress);
-        final data = Uint8List.fromList(ptr.asTypedList(len));
+        final data = Uint8List.fromList(ptr.asTypedList(dataLen));
         completer.complete(data);
 
         final buffer = calloc<AxiomBuffer>();
         buffer.ref.ptr = ptr;
-        buffer.ref.len = len;
+        buffer.ref.len = dataLen;
         _freeFfi(buffer.ref);
         calloc.free(buffer);
       } else {
-        // Map the integer error code back to the enum for a clear error message.
-        final error = FfiError.values[errorCodeValue];
+        String errorDetails = "No additional details from runtime.";
+
+        // Decode the error message from Rust if it exists
+        if (errorPtrAddress != 0 && errorLen > 0) {
+          final errorPtr = Pointer<Uint8>.fromAddress(errorPtrAddress);
+          errorDetails = utf8.decode(errorPtr.asTypedList(errorLen));
+
+          // Free the error message buffer
+          final buffer = calloc<AxiomBuffer>();
+          buffer.ref.ptr = Pointer.fromAddress(errorPtrAddress);
+          buffer.ref.len = errorLen;
+          _freeFfi(buffer.ref);
+          calloc.free(buffer);
+        }
+
         completer.completeError(
           Exception(
-            'Axiom FFI call failed for request #$requestId with error: ${error.name}',
+            'Axiom FFI call failed for request #$requestId with error: ${FfiError.name(errorCodeValue)}\n---\n$errorDetails\n---',
           ),
         );
       }
@@ -212,41 +295,82 @@ class AxiomRuntime {
   }
 
   void initialize(String baseUrl) {
-    final units = Uint8List.fromList(baseUrl.codeUnits);
-    final ptr = malloc<Uint8>(units.length);
+    final units = utf8.encode(baseUrl);
+    final ptr = calloc<Uint8>(units.length);
     ptr.asTypedList(units.length).setAll(0, units);
-    final axStrPtr = malloc<AxiomString>();
-    axStrPtr.ref
-      ..ptr = ptr
-      ..len = units.length;
-    _initFfi(axStrPtr.ref);
-    malloc.free(ptr);
-    malloc.free(axStrPtr);
+    final axStr = calloc<AxiomString>();
+    axStr.ref.ptr = ptr;
+    axStr.ref.len = units.length;
+    _initFfi(axStr.ref);
+    calloc.free(ptr);
+    calloc.free(axStr);
+  }
+
+  void loadContract(Uint8List contractBytes) {
+    final ptr = calloc<Uint8>(contractBytes.length);
+    ptr.asTypedList(contractBytes.length).setAll(0, contractBytes);
+    final axBuf = calloc<AxiomBuffer>();
+    axBuf.ref.ptr = ptr;
+    axBuf.ref.len = contractBytes.length;
+
+    final result = _loadContractFfi(axBuf.ref);
+
+    calloc.free(ptr);
+    calloc.free(axBuf);
+
+    if (result != FfiError.success) {
+      throw Exception(
+        'Failed to load Axiom contract. Error: ${FfiError.name(result)}',
+      );
+    }
   }
 
   Future<Uint8List> call({
     required int endpointId,
+    required String path,
+    required String method,
     required Uint8List requestBytes,
   }) {
     final requestId = _nextRequestId++;
     final completer = Completer<Uint8List>();
     _completers[requestId] = completer;
 
-    final inPtr = malloc<Uint8>(requestBytes.length);
-    inPtr.asTypedList(requestBytes.length).setAll(0, requestBytes);
-    final inBufPtr = malloc<AxiomBuffer>();
-    inBufPtr.ref
-      ..ptr = inPtr
-      ..len = requestBytes.length;
+    final pathUnits = utf8.encode(path);
+    final pathPtr = calloc<Uint8>(pathUnits.length);
+    pathPtr.asTypedList(pathUnits.length).setAll(0, pathUnits);
+    final pathStr = calloc<AxiomString>();
+    pathStr.ref.ptr = pathPtr;
+    pathStr.ref.len = pathUnits.length;
+
+    final bodyPtr = calloc<Uint8>(requestBytes.length);
+    bodyPtr.asTypedList(requestBytes.length).setAll(0, requestBytes);
+    final bodyBuf = calloc<AxiomBuffer>();
+    bodyBuf.ref.ptr = bodyPtr;
+    bodyBuf.ref.len = requestBytes.length;
+
+    final methodUnits = utf8.encode(method);
+    final methodPtr = calloc<Uint8>(methodUnits.length);
+    methodPtr.asTypedList(methodUnits.length).setAll(0, methodUnits);
+    final methodStr = calloc<AxiomString>();
+    methodStr.ref.ptr = methodPtr;
+    methodStr.ref.len = methodUnits.length;
+
+    void cleanup() {
+      calloc.free(pathPtr);
+      calloc.free(pathStr);
+      calloc.free(bodyPtr);
+      calloc.free(bodyBuf);
+      calloc.free(methodPtr);
+      calloc.free(methodStr);
+    }
+
+    completer.future.whenComplete(cleanup);
 
     try {
-      _callFfi(requestId, endpointId, inBufPtr.ref);
+      _callFfi(requestId, endpointId, methodStr.ref, pathStr.ref, bodyBuf.ref);
     } catch (e) {
       _completers.remove(requestId);
       completer.completeError(e);
-    } finally {
-      malloc.free(inPtr);
-      malloc.free(inBufPtr);
     }
 
     return completer.future;

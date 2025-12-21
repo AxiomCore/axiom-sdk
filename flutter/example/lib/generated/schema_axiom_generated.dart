@@ -7,6 +7,79 @@ import 'dart:typed_data' show Uint8List;
 import 'package:flat_buffers/flat_buffers.dart' as fb;
 
 
+class Message {
+  Message._(this._bc, this._bcOffset);
+  factory Message(List<int> bytes) {
+    final rootRef = fb.BufferContext.fromBytes(bytes);
+    return reader.read(rootRef, 0);
+  }
+
+  static const fb.Reader<Message> reader = _MessageReader();
+
+  final fb.BufferContext _bc;
+  final int _bcOffset;
+
+  String? get message => const fb.StringReader().vTableGetNullable(_bc, _bcOffset, 4);
+
+  @override
+  String toString() {
+    return 'Message{message: ${message}}';
+  }
+}
+
+class _MessageReader extends fb.TableReader<Message> {
+  const _MessageReader();
+
+  @override
+  Message createObject(fb.BufferContext bc, int offset) => 
+    Message._(bc, offset);
+}
+
+class MessageBuilder {
+  MessageBuilder(this.fbBuilder);
+
+  final fb.Builder fbBuilder;
+
+  void begin() {
+    fbBuilder.startTable(1);
+  }
+
+  int addMessageOffset(int? offset) {
+    fbBuilder.addOffset(0, offset);
+    return fbBuilder.offset;
+  }
+
+  int finish() {
+    return fbBuilder.endTable();
+  }
+}
+
+class MessageObjectBuilder extends fb.ObjectBuilder {
+  final String? _message;
+
+  MessageObjectBuilder({
+    String? message,
+  })
+      : _message = message;
+
+  /// Finish building, and store into the [fbBuilder].
+  @override
+  int finish(fb.Builder fbBuilder) {
+    final int? messageOffset = _message == null ? null
+        : fbBuilder.writeString(_message!);
+    fbBuilder.startTable(1);
+    fbBuilder.addOffset(0, messageOffset);
+    return fbBuilder.endTable();
+  }
+
+  /// Convenience method to serialize to byte list.
+  @override
+  Uint8List toBytes([String? fileIdentifier]) {
+    final fbBuilder = fb.Builder(deduplicateTables: false);
+    fbBuilder.finish(finish(fbBuilder), fileIdentifier);
+    return fbBuilder.buffer;
+  }
+}
 class User {
   User._(this._bc, this._bcOffset);
   factory User(List<int> bytes) {
@@ -100,79 +173,6 @@ class UserObjectBuilder extends fb.ObjectBuilder {
     fbBuilder.addOffset(1, nameOffset);
     fbBuilder.addOffset(2, roleOffset);
     fbBuilder.addOffset(3, emailOffset);
-    return fbBuilder.endTable();
-  }
-
-  /// Convenience method to serialize to byte list.
-  @override
-  Uint8List toBytes([String? fileIdentifier]) {
-    final fbBuilder = fb.Builder(deduplicateTables: false);
-    fbBuilder.finish(finish(fbBuilder), fileIdentifier);
-    return fbBuilder.buffer;
-  }
-}
-class Message {
-  Message._(this._bc, this._bcOffset);
-  factory Message(List<int> bytes) {
-    final rootRef = fb.BufferContext.fromBytes(bytes);
-    return reader.read(rootRef, 0);
-  }
-
-  static const fb.Reader<Message> reader = _MessageReader();
-
-  final fb.BufferContext _bc;
-  final int _bcOffset;
-
-  String? get message => const fb.StringReader().vTableGetNullable(_bc, _bcOffset, 4);
-
-  @override
-  String toString() {
-    return 'Message{message: ${message}}';
-  }
-}
-
-class _MessageReader extends fb.TableReader<Message> {
-  const _MessageReader();
-
-  @override
-  Message createObject(fb.BufferContext bc, int offset) => 
-    Message._(bc, offset);
-}
-
-class MessageBuilder {
-  MessageBuilder(this.fbBuilder);
-
-  final fb.Builder fbBuilder;
-
-  void begin() {
-    fbBuilder.startTable(1);
-  }
-
-  int addMessageOffset(int? offset) {
-    fbBuilder.addOffset(0, offset);
-    return fbBuilder.offset;
-  }
-
-  int finish() {
-    return fbBuilder.endTable();
-  }
-}
-
-class MessageObjectBuilder extends fb.ObjectBuilder {
-  final String? _message;
-
-  MessageObjectBuilder({
-    String? message,
-  })
-      : _message = message;
-
-  /// Finish building, and store into the [fbBuilder].
-  @override
-  int finish(fb.Builder fbBuilder) {
-    final int? messageOffset = _message == null ? null
-        : fbBuilder.writeString(_message!);
-    fbBuilder.startTable(1);
-    fbBuilder.addOffset(0, messageOffset);
     return fbBuilder.endTable();
   }
 

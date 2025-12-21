@@ -3,6 +3,25 @@
 
 import 'package:example/generated/schema_axiom_generated.dart' as schema;
 
+class Message {
+  final String message;
+
+  const Message({
+    required this.message,
+  });
+
+  factory Message.fromSchema(schema.Message schemaModel) {
+    return Message(
+      message: schemaModel.message!,
+    );
+  }
+  factory Message.fromJson(Map<String, dynamic> json) {
+    return Message(
+      message: json['message'],
+    );
+  }
+}
+
 class User {
   final int id;
   final String name;
@@ -24,18 +43,12 @@ class User {
       email: schemaModel.email,
     );
   }
-}
-
-class Message {
-  final String message;
-
-  const Message({
-    required this.message,
-  });
-
-  factory Message.fromSchema(schema.Message schemaModel) {
-    return Message(
-      message: schemaModel.message!,
+  factory User.fromJson(Map<String, dynamic> json) {
+    return User(
+      id: json['id'],
+      name: json['name'],
+      role: json['role'],
+      email: json['email'],
     );
   }
 }
