@@ -72,8 +72,8 @@ base class AxiomResponseBuffer extends Struct {
 
 // --- FFI Function Signatures ---
 typedef AxiomCallback = Void Function(Pointer<AxiomResponseBuffer> response);
-typedef _AxiomInitializeNative = Void Function(AxiomString);
-typedef _AxiomInitialize = void Function(AxiomString);
+typedef _AxiomInitializeNative = Int32 Function(AxiomString);
+typedef _AxiomInitialize = int Function(AxiomString);
 typedef _AxiomLoadContractNative = Int32 Function(AxiomBuffer);
 typedef _AxiomLoadContract = int Function(AxiomBuffer);
 typedef _AxiomRegisterCallbackNative =
@@ -301,7 +301,10 @@ class AxiomRuntime {
     final axStr = calloc<AxiomString>();
     axStr.ref.ptr = ptr;
     axStr.ref.len = units.length;
-    _initFfi(axStr.ref);
+    final result = _initFfi(axStr.ref);
+    if (result != FfiError.success) {
+      throw Exception('Failed to initialize runtime. Error code: $result');
+    }
     calloc.free(ptr);
     calloc.free(axStr);
   }

@@ -28,10 +28,17 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   @override
   void initState() {
-    // sdk
-    //     .createUser(user: models.User(id: 1, name: "Yash Create"))
-    //     .then((value) => print("response: ${value.message}"));
-    // sdk.fooEndpoint().then((value) => print("foo response: $value"));
+    sdk
+        .createUser(
+          user: models.User(
+            id: 1,
+            name: "Yash Create",
+            email: 'temp@gmail.com',
+            role: 'dodo',
+          ),
+        )
+        .then((value) => print("response: ${value.message}"));
+    sdk.fooEndpoint().then((value) => print("foo response: $value"));
     super.initState();
   }
 

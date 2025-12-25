@@ -2,35 +2,28 @@
 // Axiom SDK for 
 
 import 'dart:convert';
+import 'dart:typed_data';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/widgets.dart' show WidgetsFlutterBinding;
 import 'package:axiom_flutter/axiom_flutter.dart';
 import 'package:example/generated/schema_axiom_generated.dart' as schema;
 import 'package:example/generated/models.dart' as models;
-import 'package:flutter/services.dart' show rootBundle;
-import 'package:flutter/widgets.dart' show WidgetsFlutterBinding;
 
 class AxiomSdk {
   final AxiomRuntime _runtime;
 
   AxiomSdk._(this._runtime);
 
-  /// Asynchronously creates and initializes the Axiom SDK.
   static Future<AxiomSdk> create({required String baseUrl}) async {
-    // Ensure Flutter bindings are initialized for asset loading.
     WidgetsFlutterBinding.ensureInitialized();
 
-    // Load the contract file automatically from assets.
     final contractData = await rootBundle.load('python-example_mobile_0.1.0.axiom');
     final contractBytes = contractData.buffer.asUint8List();
 
-    // Get the singleton instance of the runtime.
     final runtime = AxiomRuntime();
-    // Ensure the background isolate is running and ready.
     await runtime.init();
-    // Set the base URL for the runtime.
     runtime.initialize(baseUrl);
-    // Load the contract into the Rust runtime.
     runtime.loadContract(contractBytes);
-    // Return the fully initialized SDK.
     return AxiomSdk._(runtime);
   }
 
@@ -44,7 +37,6 @@ class AxiomSdk {
 
     // 2. Build the request body (if any)
     final requestBytes = schema.GetUserRequestObjectBuilder(
-      userId: userId,
     ).toBytes();
 
     // 3. Call the runtime

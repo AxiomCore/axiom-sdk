@@ -2,6 +2,7 @@
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:args/args.dart';
 import 'package:yaml/yaml.dart';
@@ -89,82 +90,71 @@ Future<void> main(List<String> args) async {
 }
 
 /// Main generator entry.
+// In your generate.dart script
+
+/// Main generator entry.
 Future<void> _generateSdk({
   required String axiomPath,
   required String outDirRelToLib,
   required String projectRoot,
 }) async {
-  // 1) Decode IR from .axiom
+  // 1) Decode IR from .axiom (now correctly parses JSON)
   final ir = await _loadIrFromAxiom(axiomPath);
-
   final serviceName = (ir['serviceName'] as String?) ?? '';
-
-  // 2) Compute normalized output dir (relative to lib/)
   final outDir = _normalizeOutDir(outDirRelToLib);
-
-  // 3) Determine Dart package name from pubspec.yaml
   final packageName = _readPubspecName(projectRoot);
-
-  // 4) Prepare output directory under lib/
   final libOutDir = Directory('$projectRoot/lib/$outDir');
   if (!libOutDir.existsSync()) {
     libOutDir.createSync(recursive: true);
   }
 
+  // Extract the filename to be used in the generated code
   final axiomFilename = axiomPath.split(Platform.pathSeparator).last;
 
+  // --- Generate models.dart ---
   final modelsFile = File('${libOutDir.path}/models.dart');
   final modelsBuffer = StringBuffer();
   _writeModelsFile(modelsBuffer, ir, packageName, outDir);
   modelsFile.writeAsStringSync(modelsBuffer.toString());
   stdout.writeln('✅ Successfully wrote ${modelsFile.path}');
 
-  // 5) Compute target file path for SDK
+  // --- Generate axiom_sdk.dart ---
   final sdkFile = File('${libOutDir.path}/axiom_sdk.dart');
-
-  // 6) Build Dart source for SDK
   final buffer = StringBuffer();
 
   buffer.writeln('// GENERATED CODE – DO NOT EDIT.');
   buffer.writeln('// Axiom SDK for $serviceName');
   buffer.writeln();
-
-  // Local runtime bridge instead of package:axiom_flutter
   buffer.writeln("import 'dart:convert';");
+  buffer.writeln("import 'dart:typed_data';");
+  buffer.writeln("import 'package:flutter/services.dart' show rootBundle;");
   buffer.writeln(
-    "import 'package:axiom_flutter/axiom_flutter.dart';",
-  ); // Import your new package
+    "import 'package:flutter/widgets.dart' show WidgetsFlutterBinding;",
+  );
+  buffer.writeln("import 'package:axiom_flutter/axiom_flutter.dart';");
+
   final schemaImportPath = outDir.isEmpty
       ? 'schema_axiom_generated.dart'
       : '$outDir/schema_axiom_generated.dart';
   final modelsImportPath = outDir.isEmpty
       ? 'models.dart'
       : '$outDir/models.dart';
+
   buffer.writeln("import 'package:$packageName/$schemaImportPath' as schema;");
   buffer.writeln("import 'package:$packageName/$modelsImportPath' as models;");
-  buffer.writeln("import 'package:flutter/services.dart' show rootBundle;");
-  buffer.writeln(
-    "import 'package:flutter/widgets.dart' show WidgetsFlutterBinding;",
-  );
-
   buffer.writeln();
 
-  // Class header
+  // --- CORRECTED SDK CLASS HEADER ---
   buffer.writeln('class AxiomSdk {');
   buffer.writeln('  final AxiomRuntime _runtime;');
   buffer.writeln();
   buffer.writeln('  AxiomSdk._(this._runtime);');
   buffer.writeln();
-  buffer.writeln('  /// Asynchronously creates and initializes the Axiom SDK.');
   buffer.writeln(
     '  static Future<AxiomSdk> create({required String baseUrl}) async {',
   );
-  buffer.writeln(
-    '    // Ensure Flutter bindings are initialized for asset loading.',
-  );
   buffer.writeln('    WidgetsFlutterBinding.ensureInitialized();');
   buffer.writeln();
-  buffer.writeln('    // Load the contract file automatically from assets.');
   buffer.writeln(
     "    final contractData = await rootBundle.load('$axiomFilename');",
   );
@@ -172,20 +162,15 @@ Future<void> _generateSdk({
     '    final contractBytes = contractData.buffer.asUint8List();',
   );
   buffer.writeln();
-  buffer.writeln('    // Get the singleton instance of the runtime.');
   buffer.writeln('    final runtime = AxiomRuntime();');
-  buffer.writeln('    // Ensure the background isolate is running and ready.');
   buffer.writeln('    await runtime.init();');
-  buffer.writeln('    // Set the base URL for the runtime.');
   buffer.writeln('    runtime.initialize(baseUrl);');
-  buffer.writeln('    // Load the contract into the Rust runtime.');
   buffer.writeln('    runtime.loadContract(contractBytes);');
-  buffer.writeln('    // Return the fully initialized SDK.');
   buffer.writeln('    return AxiomSdk._(runtime);');
   buffer.writeln('  }');
   buffer.writeln();
 
-  // 7) Endpoints
+  // Endpoints
   final endpoints = (ir['endpoints'] as List?) ?? const [];
   for (final ep in endpoints) {
     if (ep is Map<String, dynamic>) {
@@ -200,8 +185,6 @@ Future<void> _generateSdk({
   }
 
   buffer.writeln('}');
-
-  // 8) Write axiom_sdk.dart
   sdkFile.writeAsStringSync(buffer.toString());
   stdout.writeln('✅ Successfully wrote ${sdkFile.path}');
 }
@@ -209,6 +192,16 @@ Future<void> _generateSdk({
 /// -------------------------------
 /// .axiom decoding helpers
 /// -------------------------------
+const _obfuscationKey = 'AxiomCoreSecretKey2025!';
+
+Uint8List _xorCipher(Uint8List data) {
+  final key = utf8.encode(_obfuscationKey);
+  final result = Uint8List(data.length);
+  for (var i = 0; i < data.length; i++) {
+    result[i] = data[i] ^ key[i % key.length];
+  }
+  return result;
+}
 
 Future<Map<String, dynamic>> _loadIrFromAxiom(String axiomPath) async {
   final file = File(axiomPath);
@@ -216,41 +209,65 @@ Future<Map<String, dynamic>> _loadIrFromAxiom(String axiomPath) async {
     throw Exception('Axiom file not found: $axiomPath');
   }
 
-  // 1. Read the entire file as raw bytes.
+  // 1. Read File Bytes
   final fileBytes = await file.readAsBytes();
 
-  // 2. Separate the JSON payload from the 64-byte signature.
-  if (fileBytes.length < 64) {
-    throw Exception('Invalid .axiom file: too small to contain a signature.');
-  }
-  final payloadEnd = fileBytes.length - 64;
-  final payloadBytes = fileBytes.sublist(0, payloadEnd);
+  // 2. Decrypt Outer Layer (XOR)
+  // This reveals the JSON Envelope string
+  final envelopeBytes = _xorCipher(fileBytes);
 
-  // In a production-grade CLI, you would also read the signature and
-  // verify it here using a Dart crypto library, but for the generator's
-  // purpose of reading the IR, this is optional. We assume the `pull`
-  // command has already verified it.
+  // 3. Parse JSON Envelope
+  // Using explicit JSON decoding to handle potential trailing garbage if needed,
+  // but standard jsonDecode usually handles trailing whitespace/nulls poorly if they aren't whitespace.
+  // Given your rust code handles stream deserialization, the dart code might need to be robust.
+  // For now, let's assume the file is clean.
+  final envelopeJsonStr = utf8
+      .decode(envelopeBytes, allowMalformed: true)
+      .trim();
 
-  // 3. Decode the payload bytes as a UTF-8 string and then parse as JSON.
+  // Find the last '}' to strip any trailing garbage from the XOR process if the file size wasn't exact?
+  // Actually, your Rust XOR preserves length exactly. If there's garbage it was there before.
+  // Let's try direct decode first.
+
+  Map<String, dynamic> envelope;
   try {
-    final jsonStr = utf8.decode(payloadBytes);
-    final axiomFile = jsonDecode(jsonStr);
-    if (axiomFile is! Map<String, dynamic>) {
-      throw Exception(
-        '.axiom file payload did not decode to a valid JSON object',
-      );
-    }
-
-    // 4. The IR is a nested object within the AxiomFile JSON.
-    final ir = axiomFile['ir'];
-    if (ir is! Map<String, dynamic>) {
-      throw Exception('IR object not found or invalid within the .axiom file');
-    }
-
-    return ir;
+    envelope = jsonDecode(envelopeJsonStr);
   } catch (e) {
-    throw Exception('Failed to parse .axiom file payload as JSON: $e');
+    // Fallback: try to find the JSON object boundaries if there is garbage
+    final start = envelopeJsonStr.indexOf('{');
+    final end = envelopeJsonStr.lastIndexOf('}');
+    if (start != -1 && end != -1) {
+      envelope = jsonDecode(envelopeJsonStr.substring(start, end + 1));
+    } else {
+      throw e;
+    }
   }
+
+  final payloadBase64 = envelope['payload'] as String;
+  // We can ignore the signature here for IR extraction purposes,
+  // as the runtime will verify it securely.
+
+  // 4. Decode Base64 (Inner Layer)
+  final innerObfuscated = base64Decode(payloadBase64);
+
+  // 5. De-obfuscate Inner Payload (XOR)
+  final plainBytes = _xorCipher(innerObfuscated);
+
+  // 6. Parse the Actual Contract
+  final plainJsonStr = utf8.decode(plainBytes);
+  final axiomFile = jsonDecode(plainJsonStr);
+
+  if (axiomFile is! Map<String, dynamic>) {
+    throw Exception('Decrypted payload did not decode to a valid JSON object');
+  }
+
+  // 7. Extract IR
+  final ir = axiomFile['ir'];
+  if (ir is! Map<String, dynamic>) {
+    throw Exception('IR object not found or invalid within the .axiom file');
+  }
+
+  return ir;
 }
 
 /// -------------------------------
@@ -351,7 +368,6 @@ _ResponseShape _classifyDartReturnType(Map<String, dynamic> t) {
   }
 }
 
-/// Generate a single endpoint method into [buffer].
 void _writeEndpointMethod(
   StringBuffer buffer,
   Map<String, dynamic> ep,
@@ -363,7 +379,6 @@ void _writeEndpointMethod(
   final epId = ep['id'] ?? 0;
   final pathTemplate = ep['path'] as String? ?? '';
   final method = ep['method'] as String? ?? 'GET';
-  final path = ep['path'] as String? ?? '';
   final returnTypeRef = (ep['returnType'] as Map).cast<String, dynamic>();
   final returnIsOptional = ep['returnIsOptional'] as bool? ?? false;
   final responseShape = _classifyDartReturnType(returnTypeRef);
@@ -378,8 +393,6 @@ void _writeEndpointMethod(
     final name = param['name'] as String? ?? 'arg';
     final camelName = _camelCase(name);
     final typeRef = (param['typeRef'] as Map).cast<String, dynamic>();
-    // --- FIX #3 HERE ---
-    // Use the model-aware type mapper for user-facing types
     final dartType = _dartModelTypeForTypeRef(typeRef, allModels);
     final isOptional = param['isOptional'] as bool? ?? false;
 
@@ -433,7 +446,7 @@ void _writeEndpointMethod(
   final paramsString = paramDecls.isEmpty ? '' : '{${paramDecls.join(', ')}}';
 
   buffer.writeln('  /// Endpoint "$rawName"');
-  buffer.writeln('  /// Path: $path');
+  buffer.writeln('  /// Path: $pathTemplate');
   buffer.writeln('  /// IR endpoint id: $epId');
   buffer.writeln('  Future<$dartReturnType> $fnName($paramsString) async {');
 
@@ -441,7 +454,6 @@ void _writeEndpointMethod(
   buffer.writeln("    var path = '$pathTemplate';");
   for (final p in paramInfos) {
     if (p['source'] == 'path') {
-      // Now we can check it
       final camelName = p['camelName'];
       buffer.writeln(
         "    path = path.replaceAll('{${p['origName']}}', $camelName.toString());",
@@ -454,25 +466,22 @@ void _writeEndpointMethod(
   buffer.writeln('    final requestBytes = schema.$reqType(');
 
   for (final p in paramInfos) {
-    if (p['sounce'] != 'path') {
+    // --- THIS IS THE FIX ---
+    // Correctly check for `source` and only include body/query params
+    if (p['source'] != 'path') {
       final camel = p['camelName'];
       final t = p['typeRef'] as Map<String, dynamic>;
       final kind = t['kind'] as String;
-
-      // --- FIX #2 HERE ---
-      // Use the camelCase name for the ObjectBuilder property
       final builderParamName = _camelCase(p['origName']);
 
       if (kind == 'named') {
         final modelName = _pascalCase(t['value']);
         final obName = 'schema.${modelName}ObjectBuilder';
         buffer.writeln('      $builderParamName: $obName(');
-
         final modelDef = allModels[t['value']] as Map<String, dynamic>;
         final fields = (modelDef['fields'] as List);
         for (final f in fields) {
           final fieldName = f['name'];
-          // The properties of the ObjectBuilder also need to be camelCase
           final builderFieldName = _camelCase(fieldName);
           final modelFieldName = _camelCase(fieldName);
           buffer.writeln('        $builderFieldName: $camel.$modelFieldName,');
@@ -484,8 +493,6 @@ void _writeEndpointMethod(
     }
   }
   buffer.writeln('    ).toBytes();');
-
-  // --- 3. Call the runtime with all parts ---
   buffer.writeln("\n    // 3. Call the runtime");
 
   if (responseShape.kind == _ResponseKind.voidType) {
@@ -520,95 +527,28 @@ void _writeEndpointMethod(
       final modelName = _pascalCase(responseShape.modelName!);
       buffer.writeln('    return models.$modelName.fromJson(jsonObject);');
       break;
-
     case _ResponseKind.modelVec:
       final modelName = _pascalCase(responseShape.modelName!);
       buffer.writeln(
         '    return (jsonObject as List<dynamic>).map((e) => models.$modelName.fromJson(e)).toList();',
       );
       break;
-
-    // For primitives, the backend likely returns them directly, not wrapped in JSON.
-    // Or if it does wrap them, e.g. `{"value": "bar"}`, the logic would be `jsonObject['value']`.
-    // Assuming for now it's a direct value for primitives.
     case _ResponseKind.primitiveString:
     case _ResponseKind.primitiveInt:
     case _ResponseKind.primitiveFloat:
     case _ResponseKind.primitiveBool:
       buffer.writeln('    return jsonObject as $dartReturnType;');
       break;
-
     case _ResponseKind.primitiveBytes:
-      // Bytes are usually not sent as JSON, but if so, it's often Base64.
       buffer.writeln('    return base64Decode(jsonObject as String);');
       break;
-
     case _ResponseKind.voidType:
       buffer.writeln('    return;');
       break;
-
     default: // json
       buffer.writeln('    return jsonObject;');
       break;
   }
-
-  // final respType = '${_pascalCase(rawName)}Response';
-  // switch (responseShape.kind) {
-  //   case _ResponseKind.model:
-  //     final modelName = _pascalCase(responseShape.modelName!);
-  //     buffer.writeln('    final resp = schema.$respType(responseBytes);');
-  //     buffer.writeln('    final schemaValue = resp.data;');
-  //     if (returnIsOptional) {
-  //       buffer.writeln(
-  //         '    return schemaValue == null ? null : models.$modelName.fromSchema(schemaValue);',
-  //       );
-  //     } else {
-  //       buffer.writeln(
-  //         '    if (schemaValue == null) { throw StateError("$respType.data was null"); }',
-  //       );
-  //       buffer.writeln('    return models.$modelName.fromSchema(schemaValue);');
-  //     }
-  //     break;
-
-  //   case _ResponseKind.modelVec:
-  //     final modelName = _pascalCase(responseShape.modelName!);
-  //     buffer.writeln('    final resp = schema.$respType(responseBytes);');
-  //     buffer.writeln('    final schemaItems = resp.data;');
-  //     buffer.writeln(
-  //       '    if (schemaItems == null) return ${returnIsOptional ? 'null' : '<models.$modelName>[]'};',
-  //     );
-  //     buffer.writeln(
-  //       '    return schemaItems.map((e) => models.$modelName.fromSchema(e)).toList();',
-  //     );
-  //     break;
-
-  //   case _ResponseKind.primitiveString:
-  //   case _ResponseKind.primitiveInt:
-  //   case _ResponseKind.primitiveFloat:
-  //   case _ResponseKind.primitiveBool:
-  //   case _ResponseKind.primitiveBytes:
-  //     buffer.writeln('    final resp = schema.$respType(responseBytes);');
-  //     buffer.writeln('    final value = resp.data;');
-  //     if (!returnIsOptional) {
-  //       buffer.writeln(
-  //         '    if (value == null) { throw StateError("$respType.data was null"); }',
-  //       );
-  //     }
-  //     buffer.writeln('    return value;');
-  //     break;
-
-  //   case _ResponseKind.json:
-  //     buffer.writeln('    final resp = schema.$respType(responseBytes);');
-  //     buffer.writeln('    final dataStr = resp.data;');
-  //     buffer.writeln('    if (dataStr == null) return null;');
-  //     buffer.writeln('    return jsonDecode(dataStr);');
-  //     break;
-
-  //   case _ResponseKind.voidType:
-  //     // Handled above
-  //     break;
-  // }
-
   buffer.writeln('  }');
 }
 
