@@ -33,6 +33,8 @@ class FfiError {
   static const int invalidContract = 10;
   static const int runtimeTooOld = 11;
   static const int contractNotLoaded = 12;
+  static const int initializationFailed = 13;
+  static const int internalError = 14;
 
   // Helper to convert code to a string name for debugging
   static String name(int code) {
@@ -55,6 +57,10 @@ class FfiError {
         return 'runtimeTooOld';
       case contractNotLoaded:
         return 'contractNotLoaded';
+      case initializationFailed:
+        return 'initializationFailed';
+      case internalError:
+        return 'internalError';
       default:
         return 'unrecognizedErrorCode';
     }

@@ -12,18 +12,26 @@ import 'package:example/generated/models.dart' as models;
 class AxiomSdk {
   final AxiomRuntime _runtime;
 
+  // Private constructor to ensure proper initialization.
   AxiomSdk._(this._runtime);
 
+  /// Asynchronously creates and initializes the Axiom SDK.
   static Future<AxiomSdk> create({required String baseUrl}) async {
+    // Ensure Flutter bindings are initialized for asset loading.
     WidgetsFlutterBinding.ensureInitialized();
 
     final contractData = await rootBundle.load('python-example_mobile_0.1.0.axiom');
     final contractBytes = contractData.buffer.asUint8List();
 
+    // Get the singleton instance of the runtime.
     final runtime = AxiomRuntime();
+    // Ensure the background isolate is running and ready.
     await runtime.init();
+    // Set the base URL for the runtime.
     runtime.initialize(baseUrl);
+    // Load the contract into the Rust runtime.
     runtime.loadContract(contractBytes);
+    // Return the fully initialized SDK.
     return AxiomSdk._(runtime);
   }
 
@@ -36,8 +44,7 @@ class AxiomSdk {
     path = path.replaceAll('{user_id}', userId.toString());
 
     // 2. Build the request body (if any)
-    final requestBytes = schema.GetUserRequestObjectBuilder(
-    ).toBytes();
+    final requestBytes = Uint8List(0);
 
     // 3. Call the runtime
     final responseBytes = await _runtime.call(endpointId: 0, method: "GET", path: path, requestBytes: requestBytes);
@@ -57,9 +64,7 @@ class AxiomSdk {
     var path = '/users';
 
     // 2. Build the request body (if any)
-    final requestBytes = schema.ListUsersRequestObjectBuilder(
-      limit: limit,
-    ).toBytes();
+    final requestBytes = Uint8List(0);
 
     // 3. Call the runtime
     final responseBytes = await _runtime.call(endpointId: 1, method: "GET", path: path, requestBytes: requestBytes);
@@ -79,14 +84,7 @@ class AxiomSdk {
     var path = '/users';
 
     // 2. Build the request body (if any)
-    final requestBytes = schema.CreateUserRequestObjectBuilder(
-      user: schema.UserObjectBuilder(
-        id: user.id,
-        name: user.name,
-        role: user.role,
-        email: user.email,
-      ),
-    ).toBytes();
+    final requestBytes = Uint8List.fromList(utf8.encode(jsonEncode(user)));
 
     // 3. Call the runtime
     final responseBytes = await _runtime.call(endpointId: 2, method: "POST", path: path, requestBytes: requestBytes);
@@ -106,8 +104,7 @@ class AxiomSdk {
     var path = '/foo';
 
     // 2. Build the request body (if any)
-    final requestBytes = schema.FooEndpointRequestObjectBuilder(
-    ).toBytes();
+    final requestBytes = Uint8List(0);
 
     // 3. Call the runtime
     final responseBytes = await _runtime.call(endpointId: 3, method: "GET", path: path, requestBytes: requestBytes);

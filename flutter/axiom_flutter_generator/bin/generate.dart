@@ -90,19 +90,23 @@ Future<void> main(List<String> args) async {
 }
 
 /// Main generator entry.
-// In your generate.dart script
-
-/// Main generator entry.
 Future<void> _generateSdk({
   required String axiomPath,
   required String outDirRelToLib,
   required String projectRoot,
 }) async {
-  // 1) Decode IR from .axiom (now correctly parses JSON)
+  // 1) Decode IR from .axiom
   final ir = await _loadIrFromAxiom(axiomPath);
+
   final serviceName = (ir['serviceName'] as String?) ?? '';
+
+  // 2) Compute normalized output dir (relative to lib/)
   final outDir = _normalizeOutDir(outDirRelToLib);
+
+  // 3) Determine Dart package name from pubspec.yaml
   final packageName = _readPubspecName(projectRoot);
+
+  // 4) Prepare output directory under lib/
   final libOutDir = Directory('$projectRoot/lib/$outDir');
   if (!libOutDir.existsSync()) {
     libOutDir.createSync(recursive: true);
@@ -120,11 +124,15 @@ Future<void> _generateSdk({
 
   // --- Generate axiom_sdk.dart ---
   final sdkFile = File('${libOutDir.path}/axiom_sdk.dart');
+
+  // 6) Build Dart source for SDK
   final buffer = StringBuffer();
 
   buffer.writeln('// GENERATED CODE – DO NOT EDIT.');
   buffer.writeln('// Axiom SDK for $serviceName');
   buffer.writeln();
+
+  // Local runtime bridge instead of package:axiom_flutter
   buffer.writeln("import 'dart:convert';");
   buffer.writeln("import 'dart:typed_data';");
   buffer.writeln("import 'package:flutter/services.dart' show rootBundle;");
@@ -144,15 +152,18 @@ Future<void> _generateSdk({
   buffer.writeln("import 'package:$packageName/$modelsImportPath' as models;");
   buffer.writeln();
 
-  // --- CORRECTED SDK CLASS HEADER ---
+  // Class header
   buffer.writeln('class AxiomSdk {');
   buffer.writeln('  final AxiomRuntime _runtime;');
   buffer.writeln();
+  buffer.writeln('  // Private constructor to ensure proper initialization.');
   buffer.writeln('  AxiomSdk._(this._runtime);');
   buffer.writeln();
+  buffer.writeln('  /// Asynchronously creates and initializes the Axiom SDK.');
   buffer.writeln(
     '  static Future<AxiomSdk> create({required String baseUrl}) async {',
   );
+  buffer.writeln('    // Ensure Flutter bindings are initialized for asset loading.');
   buffer.writeln('    WidgetsFlutterBinding.ensureInitialized();');
   buffer.writeln();
   buffer.writeln(
@@ -162,15 +173,20 @@ Future<void> _generateSdk({
     '    final contractBytes = contractData.buffer.asUint8List();',
   );
   buffer.writeln();
+  buffer.writeln('    // Get the singleton instance of the runtime.');
   buffer.writeln('    final runtime = AxiomRuntime();');
+  buffer.writeln('    // Ensure the background isolate is running and ready.');
   buffer.writeln('    await runtime.init();');
+  buffer.writeln('    // Set the base URL for the runtime.');
   buffer.writeln('    runtime.initialize(baseUrl);');
+  buffer.writeln('    // Load the contract into the Rust runtime.');
   buffer.writeln('    runtime.loadContract(contractBytes);');
+  buffer.writeln('    // Return the fully initialized SDK.');
   buffer.writeln('    return AxiomSdk._(runtime);');
   buffer.writeln('  }');
   buffer.writeln();
 
-  // Endpoints
+  // 7) Endpoints
   final endpoints = (ir['endpoints'] as List?) ?? const [];
   for (final ep in endpoints) {
     if (ep is Map<String, dynamic>) {
@@ -185,6 +201,8 @@ Future<void> _generateSdk({
   }
 
   buffer.writeln('}');
+
+  // 8) Write axiom_sdk.dart
   sdkFile.writeAsStringSync(buffer.toString());
   stdout.writeln('✅ Successfully wrote ${sdkFile.path}');
 }
@@ -213,21 +231,12 @@ Future<Map<String, dynamic>> _loadIrFromAxiom(String axiomPath) async {
   final fileBytes = await file.readAsBytes();
 
   // 2. Decrypt Outer Layer (XOR)
-  // This reveals the JSON Envelope string
   final envelopeBytes = _xorCipher(fileBytes);
 
   // 3. Parse JSON Envelope
-  // Using explicit JSON decoding to handle potential trailing garbage if needed,
-  // but standard jsonDecode usually handles trailing whitespace/nulls poorly if they aren't whitespace.
-  // Given your rust code handles stream deserialization, the dart code might need to be robust.
-  // For now, let's assume the file is clean.
   final envelopeJsonStr = utf8
       .decode(envelopeBytes, allowMalformed: true)
       .trim();
-
-  // Find the last '}' to strip any trailing garbage from the XOR process if the file size wasn't exact?
-  // Actually, your Rust XOR preserves length exactly. If there's garbage it was there before.
-  // Let's try direct decode first.
 
   Map<String, dynamic> envelope;
   try {
@@ -244,8 +253,6 @@ Future<Map<String, dynamic>> _loadIrFromAxiom(String axiomPath) async {
   }
 
   final payloadBase64 = envelope['payload'] as String;
-  // We can ignore the signature here for IR extraction purposes,
-  // as the runtime will verify it securely.
 
   // 4. Decode Base64 (Inner Layer)
   final innerObfuscated = base64Decode(payloadBase64);
@@ -454,7 +461,8 @@ void _writeEndpointMethod(
   buffer.writeln("    var path = '$pathTemplate';");
   for (final p in paramInfos) {
     if (p['source'] == 'path') {
-      final camelName = p['camelName'];
+      final camelName = p['camelName']; // Defined here
+      // Used here
       buffer.writeln(
         "    path = path.replaceAll('{${p['origName']}}', $camelName.toString());",
       );
@@ -462,37 +470,25 @@ void _writeEndpointMethod(
   }
 
   buffer.writeln("\n    // 2. Build the request body (if any)");
-  final reqType = '${_pascalCase(rawName)}RequestObjectBuilder';
-  buffer.writeln('    final requestBytes = schema.$reqType(');
+  
+  // FIX: JSON Body Construction
+  bool hasBody = false;
+  List<String> bodyEntries = [];
 
   for (final p in paramInfos) {
-    // --- THIS IS THE FIX ---
-    // Correctly check for `source` and only include body/query params
-    if (p['source'] != 'path') {
-      final camel = p['camelName'];
-      final t = p['typeRef'] as Map<String, dynamic>;
-      final kind = t['kind'] as String;
-      final builderParamName = _camelCase(p['origName']);
-
-      if (kind == 'named') {
-        final modelName = _pascalCase(t['value']);
-        final obName = 'schema.${modelName}ObjectBuilder';
-        buffer.writeln('      $builderParamName: $obName(');
-        final modelDef = allModels[t['value']] as Map<String, dynamic>;
-        final fields = (modelDef['fields'] as List);
-        for (final f in fields) {
-          final fieldName = f['name'];
-          final builderFieldName = _camelCase(fieldName);
-          final modelFieldName = _camelCase(fieldName);
-          buffer.writeln('        $builderFieldName: $camel.$modelFieldName,');
-        }
-        buffer.writeln('      ),');
-      } else {
-        buffer.writeln('      $builderParamName: $camel,');
-      }
+    if (p['source'] == 'body') {
+       hasBody = true;
+       final camelName = p['camelName'];
+       bodyEntries.add(camelName); 
     }
   }
-  buffer.writeln('    ).toBytes();');
+
+  if (bodyEntries.isNotEmpty) {
+      buffer.writeln("    final requestBytes = Uint8List.fromList(utf8.encode(jsonEncode(${bodyEntries.first})));");
+  } else {
+      buffer.writeln("    final requestBytes = Uint8List(0);"); 
+  }
+
   buffer.writeln("\n    // 3. Call the runtime");
 
   if (responseShape.kind == _ResponseKind.voidType) {
@@ -518,6 +514,7 @@ void _writeEndpointMethod(
   }
   buffer.writeln('    }');
   buffer.writeln();
+  
   buffer.writeln(
     '    final jsonObject = jsonDecode(utf8.decode(responseBytes));',
   );
@@ -527,28 +524,34 @@ void _writeEndpointMethod(
       final modelName = _pascalCase(responseShape.modelName!);
       buffer.writeln('    return models.$modelName.fromJson(jsonObject);');
       break;
+
     case _ResponseKind.modelVec:
       final modelName = _pascalCase(responseShape.modelName!);
       buffer.writeln(
         '    return (jsonObject as List<dynamic>).map((e) => models.$modelName.fromJson(e)).toList();',
       );
       break;
+
     case _ResponseKind.primitiveString:
     case _ResponseKind.primitiveInt:
     case _ResponseKind.primitiveFloat:
     case _ResponseKind.primitiveBool:
       buffer.writeln('    return jsonObject as $dartReturnType;');
       break;
+
     case _ResponseKind.primitiveBytes:
       buffer.writeln('    return base64Decode(jsonObject as String);');
       break;
-    case _ResponseKind.voidType:
-      buffer.writeln('    return;');
-      break;
-    default: // json
+
+    case _ResponseKind.json:
       buffer.writeln('    return jsonObject;');
       break;
+
+    case _ResponseKind.voidType:
+      // Handled above
+      break;
   }
+
   buffer.writeln('  }');
 }
 
@@ -609,7 +612,7 @@ void _writeModelsFile(
     buffer.writeln('  });');
     buffer.writeln();
 
-    // Generate a `fromSchema` factory constructor
+    // Generate a `fromSchema` factory constructor (Keep this for backward compatibility if needed, or remove)
     buffer.writeln(
       '  factory $modelName.fromSchema(schema.$modelName schemaModel) {',
     );
@@ -621,7 +624,7 @@ void _writeModelsFile(
       final typeRef = (field['typeRef'] as Map).cast<String, dynamic>();
       final kind = typeRef['kind'] as String;
       final isOptional = field['isOptional'] as bool? ?? false;
-      final bang = isOptional ? '' : '!'; // <-- FIX #1 HERE
+      final bang = isOptional ? '' : '!';
 
       // Handle nested models and lists of models
       if (kind == 'named') {
@@ -654,6 +657,7 @@ void _writeModelsFile(
     buffer.writeln('    );');
     buffer.writeln('  }');
 
+    // --- NEW: Add `fromJson` factory ---
     buffer.writeln(
       '  factory $modelName.fromJson(Map<String, dynamic> json) {',
     );
@@ -683,6 +687,27 @@ void _writeModelsFile(
       buffer.writeln('      $camelName: $parsingLogic,');
     }
     buffer.writeln('    );');
+    buffer.writeln('  }');
+
+    // --- NEW: Add `toJson` method ---
+    buffer.writeln('  Map<String, dynamic> toJson() {');
+    buffer.writeln('    return {');
+    for (final field in fields) {
+      if (field is! Map<String, dynamic>) continue;
+      final origName = field['name'] as String;
+      final camelName = _camelCase(origName);
+      final typeRef = (field['typeRef'] as Map).cast<String, dynamic>();
+      final kind = typeRef['kind'] as String;
+
+      if (kind == 'named') {
+        buffer.writeln("      '$origName': $camelName?.toJson(),");
+      } else if (kind == 'list' && (typeRef['value'] as Map)['kind'] == 'named') {
+        buffer.writeln("      '$origName': $camelName?.map((e) => e.toJson()).toList(),");
+      } else {
+        buffer.writeln("      '$origName': $camelName,");
+      }
+    }
+    buffer.writeln('    };');
     buffer.writeln('  }');
 
     buffer.writeln('}');
