@@ -1,24 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:axiom_flutter/axiom_flutter.dart';
 import 'generated/axiom_sdk.dart';
 import 'generated/models.dart' as models;
 
-// Make the SDK a global variable, as it's initialized asynchronously.
 late final AxiomSdk sdk;
 
 Future<void> main() async {
-  // This is required when main is async.
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Asynchronously create and initialize the SDK.
-  // The app will not start until the background isolate is ready.
   sdk = await AxiomSdk.create(baseUrl: "http://127.0.0.1:8000");
-
-  // Now, run the app with the fully initialized SDK.
   runApp(const MyApp());
 }
 
 class MyApp extends StatefulWidget {
-  // No longer need to pass the SDK, as it's a global.
   const MyApp({super.key});
 
   @override
@@ -28,43 +21,117 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   @override
   void initState() {
-    sdk
-        .createUser(
-          user: models.User(
-            id: 1,
-            name: "Yash Create",
-            email: 'temp@gmail.com',
-            role: 'dodo',
-          ),
-        )
-        .then((value) => print("response: ${value.message}"));
-    sdk.fooEndpoint().then((value) => print("foo response: $value"));
+    sdk.fooEndpoint().stream.listen((data) {
+      print(data);
+    });
     super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(title: const Text("Axiom Example")),
-        body: FutureBuilder<models.User>(
-          // Use the global sdk instance.
-          future: sdk.getUser(userId: 1),
-          builder: (ctx, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snap.hasError) {
-              print(snap.error);
-              return Center(child: Text("Error: ${snap.error}"));
-            }
-            if (!snap.hasData) {
-              return const Center(child: Text("No data received."));
-            }
-            final user = snap.data!;
-            return Center(child: Text("User from Axiom: ${user.role}"));
-          },
-        ),
+    return const MaterialApp(home: UserProfileScreen());
+  }
+}
+
+class UserProfileScreen extends StatelessWidget {
+  const UserProfileScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final userQuery = sdk.getUser(userId: 1);
+
+    return Scaffold(
+      appBar: AppBar(title: const Text("Axiom Profile")),
+      body: const Column(children: [UserHeader(), Divider(), UserStats()]),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          userQuery.refresh();
+        },
+        label: const Text("Refresh All"),
+        icon: const Icon(Icons.refresh),
+      ),
+    );
+  }
+}
+
+class UserHeader extends StatelessWidget {
+  const UserHeader({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(20.0),
+      child: AxiomBuilder<models.User, models.User>(
+        query: sdk.getUser(userId: 1),
+        selector: (user) => [user.name, user.email],
+        loading: (_) => const Center(child: CircularProgressIndicator()),
+        builder: (context, state, user) {
+          print("Building UserHeader... ${user.toJson()}");
+          return Row(
+            children: [
+              const CircleAvatar(radius: 30, child: Icon(Icons.person)),
+              const SizedBox(width: 16),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    user.name,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  Text(
+                    user.email,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+
+                  // Show if we are fetching in the background
+                  if (state.isFetching)
+                    const Text(
+                      "Updating...",
+                      style: TextStyle(fontSize: 10, color: Colors.grey),
+                    ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class UserStats extends StatelessWidget {
+  const UserStats({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      color: Colors.grey[100],
+      child: AxiomBuilder(
+        query: sdk.getUser(userId: 1),
+        transform: (user) => (user.id, user.role),
+        selector: (statusString) => statusString,
+        loading: (_) => const LinearProgressIndicator(),
+        builder: (context, state, result) {
+          print("Building UserStats...");
+          String statusString =
+              "ID: ${result.$1} | Role: ${result.$2 ?? 'Guest'}";
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                "User Statistics",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Chip(
+                label: Text(statusString),
+                backgroundColor: state.source == AxiomSource.cache
+                    ? Colors.orange[100]
+                    : Colors.green[100],
+              ),
+            ],
+          );
+        },
       ),
     );
   }

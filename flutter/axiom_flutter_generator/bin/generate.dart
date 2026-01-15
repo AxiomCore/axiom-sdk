@@ -124,15 +124,12 @@ Future<void> _generateSdk({
 
   // --- Generate axiom_sdk.dart ---
   final sdkFile = File('${libOutDir.path}/axiom_sdk.dart');
-
-  // 6) Build Dart source for SDK
   final buffer = StringBuffer();
 
   buffer.writeln('// GENERATED CODE – DO NOT EDIT.');
   buffer.writeln('// Axiom SDK for $serviceName');
   buffer.writeln();
 
-  // Local runtime bridge instead of package:axiom_flutter
   buffer.writeln("import 'dart:convert';");
   buffer.writeln("import 'dart:typed_data';");
   buffer.writeln("import 'package:flutter/services.dart' show rootBundle;");
@@ -177,10 +174,8 @@ Future<void> _generateSdk({
   buffer.writeln('    final runtime = AxiomRuntime();');
   buffer.writeln('    // Ensure the background isolate is running and ready.');
   buffer.writeln('    await runtime.init();');
-  buffer.writeln('    // Set the base URL for the runtime.');
-  buffer.writeln('    runtime.initialize(baseUrl);');
-  buffer.writeln('    // Load the contract into the Rust runtime.');
-  buffer.writeln('    runtime.loadContract(contractBytes);');
+  buffer.writeln('    // Start the runtime with the contract and base URL.');
+  buffer.writeln('    await runtime.startup(baseUrl: baseUrl, contractBytes: contractBytes);');
   buffer.writeln('    // Return the fully initialized SDK.');
   buffer.writeln('    return AxiomSdk._(runtime);');
   buffer.writeln('  }');
@@ -381,6 +376,7 @@ void _writeEndpointMethod(
   Map<String, dynamic> ir,
   Map<String, dynamic> allModels,
 ) {
+  // ... (setup code unchanged) ...
   final rawName = ep['name'] as String? ?? 'endpoint';
   final fnName = _camelCase(rawName);
   final epId = ep['id'] ?? 0;
@@ -452,34 +448,46 @@ void _writeEndpointMethod(
 
   final paramsString = paramDecls.isEmpty ? '' : '{${paramDecls.join(', ')}}';
 
-  buffer.writeln('  /// Endpoint "$rawName"');
+  // --- 1. Generate Stream Method ---
+  buffer.writeln('  /// Endpoint "$rawName" (Stream)');
   buffer.writeln('  /// Path: $pathTemplate');
   buffer.writeln('  /// IR endpoint id: $epId');
-  buffer.writeln('  Future<$dartReturnType> $fnName($paramsString) async {');
+  buffer.writeln('  AxiomQuery<$dartReturnType>  $fnName($paramsString) {');
 
-  buffer.writeln("    // 1. Build the path string");
+  // 1. Generate the Unique Key
+  // We use a Map literal of the arguments to create a stable key
+  buffer.writeln('    final queryArgs = <String, dynamic>{');
+  for (final p in paramInfos) {
+    // If it's a model, we need it to be json-encodable or use toString() 
+    // Ideally models implement toJson() or toString() stably.
+    // For simplicity here, we rely on standard string interpolation/jsonEncode in the manager.
+    final name = p['camelName'];
+    if (p['typeRef']['kind'] == 'named') {
+         buffer.writeln("      '${p['origName']}': $name.toJson(),"); // Models must have toJson
+    } else {
+         buffer.writeln("      '${p['origName']}': $name,");
+    }
+  }
+  buffer.writeln('    };');
+  buffer.writeln("    final queryKey = '$rawName:\${jsonEncode(queryArgs)}';");
+
+  // 2. Define the Create Function (The closure that calls Rust)
+  buffer.writeln('    final stream = AxiomQueryManager().watch<$dartReturnType>(queryKey, () {');
+  
   buffer.writeln("    var path = '$pathTemplate';");
   for (final p in paramInfos) {
     if (p['source'] == 'path') {
-      final camelName = p['camelName']; // Defined here
-      // Used here
-      buffer.writeln(
-        "    path = path.replaceAll('{${p['origName']}}', $camelName.toString());",
-      );
+      final camelName = p['camelName'];
+      buffer.writeln("    path = path.replaceAll('{${p['origName']}}', $camelName.toString());");
     }
   }
 
-  buffer.writeln("\n    // 2. Build the request body (if any)");
-  
-  // FIX: JSON Body Construction
   bool hasBody = false;
   List<String> bodyEntries = [];
-
   for (final p in paramInfos) {
     if (p['source'] == 'body') {
        hasBody = true;
-       final camelName = p['camelName'];
-       bodyEntries.add(camelName); 
+       bodyEntries.add(p['camelName']); 
     }
   }
 
@@ -489,70 +497,46 @@ void _writeEndpointMethod(
       buffer.writeln("    final requestBytes = Uint8List(0);"); 
   }
 
-  buffer.writeln("\n    // 3. Call the runtime");
-
-  if (responseShape.kind == _ResponseKind.voidType) {
-    buffer.writeln(
-      '    await _runtime.call(endpointId: $epId, method: "$method", path: path, requestBytes: requestBytes);',
-    );
-    buffer.writeln('    return;');
-  } else {
-    buffer.writeln(
-      '    final responseBytes = await _runtime.call(endpointId: $epId, method: "$method", path: path, requestBytes: requestBytes);',
-    );
-  }
-
-  buffer.writeln('    if (responseBytes.isEmpty) {');
-  if (returnIsOptional) {
-    buffer.writeln('      return null;');
-  } else if (dartReturnType == 'void') {
-    buffer.writeln('      return;');
-  } else {
-    buffer.writeln(
-      '      throw StateError("Received empty response for a non-nullable return type.");',
-    );
-  }
-  buffer.writeln('    }');
-  buffer.writeln();
+  buffer.writeln("    final rawStream = _runtime.callStream(endpointId: $epId, method: \"$method\", path: path, requestBytes: requestBytes);");
   
-  buffer.writeln(
-    '    final jsonObject = jsonDecode(utf8.decode(responseBytes));',
-  );
-
-  switch (responseShape.kind) {
-    case _ResponseKind.model:
-      final modelName = _pascalCase(responseShape.modelName!);
-      buffer.writeln('    return models.$modelName.fromJson(jsonObject);');
-      break;
-
-    case _ResponseKind.modelVec:
-      final modelName = _pascalCase(responseShape.modelName!);
-      buffer.writeln(
-        '    return (jsonObject as List<dynamic>).map((e) => models.$modelName.fromJson(e)).toList();',
-      );
-      break;
-
-    case _ResponseKind.primitiveString:
-    case _ResponseKind.primitiveInt:
-    case _ResponseKind.primitiveFloat:
-    case _ResponseKind.primitiveBool:
-      buffer.writeln('    return jsonObject as $dartReturnType;');
-      break;
-
-    case _ResponseKind.primitiveBytes:
-      buffer.writeln('    return base64Decode(jsonObject as String);');
-      break;
-
-    case _ResponseKind.json:
-      buffer.writeln('    return jsonObject;');
-      break;
-
-    case _ResponseKind.voidType:
-      // Handled above
-      break;
+  buffer.writeln("    return rawStream.map((state) {");
+  
+  // Use state.map() helper
+  buffer.writeln("       return state.map((bytes) {");
+  
+  if (responseShape.kind == _ResponseKind.voidType) {
+      buffer.writeln("         return null;");
+  } else {
+      buffer.writeln("         final jsonObject = jsonDecode(utf8.decode(bytes));");
+      
+      switch (responseShape.kind) {
+        case _ResponseKind.model:
+          final modelName = _pascalCase(responseShape.modelName!);
+          buffer.writeln('         return models.$modelName.fromJson(jsonObject);');
+          break;
+        case _ResponseKind.modelVec:
+          final modelName = _pascalCase(responseShape.modelName!);
+          buffer.writeln('         return (jsonObject as List<dynamic>).map((e) => models.$modelName.fromJson(e)).toList();');
+          break;
+        case _ResponseKind.primitiveString:
+        case _ResponseKind.primitiveInt:
+        case _ResponseKind.primitiveFloat:
+        case _ResponseKind.primitiveBool:
+          buffer.writeln('         return jsonObject as $dartReturnType;');
+          break;
+        case _ResponseKind.primitiveBytes:
+          buffer.writeln('         return base64Decode(jsonObject as String);');
+          break;
+        default:
+          buffer.writeln('         return jsonObject;');
+      }
   }
-
-  buffer.writeln('  }');
+  buffer.writeln("       });"); // Close map callback
+  buffer.writeln("    });");    // Close stream map
+  buffer.writeln('    });');
+  buffer.writeln("    return AxiomQuery(queryKey, stream);");
+  buffer.writeln('  }'); // --- FIX: Close Stream Method ---
+  buffer.writeln();
 }
 
 void _writeModelsFile(
@@ -612,7 +596,7 @@ void _writeModelsFile(
     buffer.writeln('  });');
     buffer.writeln();
 
-    // Generate a `fromSchema` factory constructor (Keep this for backward compatibility if needed, or remove)
+    // Generate a `fromSchema` factory constructor
     buffer.writeln(
       '  factory $modelName.fromSchema(schema.$modelName schemaModel) {',
     );
@@ -657,7 +641,7 @@ void _writeModelsFile(
     buffer.writeln('    );');
     buffer.writeln('  }');
 
-    // --- NEW: Add `fromJson` factory ---
+    // --- `fromJson` factory ---
     buffer.writeln(
       '  factory $modelName.fromJson(Map<String, dynamic> json) {',
     );
@@ -689,7 +673,7 @@ void _writeModelsFile(
     buffer.writeln('    );');
     buffer.writeln('  }');
 
-    // --- NEW: Add `toJson` method ---
+    // --- `toJson` method ---
     buffer.writeln('  Map<String, dynamic> toJson() {');
     buffer.writeln('    return {');
     for (final field in fields) {

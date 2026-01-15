@@ -9,6 +9,7 @@ environment:
 
 dependencies:
   ffi: ^2.1.4
+  path_provider:
   flutter:
     sdk: flutter
 

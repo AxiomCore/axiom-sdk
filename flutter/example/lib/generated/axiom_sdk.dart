@@ -27,93 +27,102 @@ class AxiomSdk {
     final runtime = AxiomRuntime();
     // Ensure the background isolate is running and ready.
     await runtime.init();
-    // Set the base URL for the runtime.
-    runtime.initialize(baseUrl);
-    // Load the contract into the Rust runtime.
-    runtime.loadContract(contractBytes);
+    // Start the runtime with the contract and base URL.
+    await runtime.startup(baseUrl: baseUrl, contractBytes: contractBytes);
     // Return the fully initialized SDK.
     return AxiomSdk._(runtime);
   }
 
-  /// Endpoint "get_user"
+  /// Endpoint "get_user" (Stream)
   /// Path: /users/{user_id}
   /// IR endpoint id: 0
-  Future<models.User> getUser({required int userId}) async {
-    // 1. Build the path string
+  AxiomQuery<models.User>  getUser({required int userId}) {
+    final queryArgs = <String, dynamic>{
+      'user_id': userId,
+    };
+    final queryKey = 'get_user:${jsonEncode(queryArgs)}';
+    final stream = AxiomQueryManager().watch<models.User>(queryKey, () {
     var path = '/users/{user_id}';
     path = path.replaceAll('{user_id}', userId.toString());
-
-    // 2. Build the request body (if any)
     final requestBytes = Uint8List(0);
-
-    // 3. Call the runtime
-    final responseBytes = await _runtime.call(endpointId: 0, method: "GET", path: path, requestBytes: requestBytes);
-    if (responseBytes.isEmpty) {
-      throw StateError("Received empty response for a non-nullable return type.");
-    }
-
-    final jsonObject = jsonDecode(utf8.decode(responseBytes));
-    return models.User.fromJson(jsonObject);
+    final rawStream = _runtime.callStream(endpointId: 0, method: "GET", path: path, requestBytes: requestBytes);
+    return rawStream.map((state) {
+       return state.map((bytes) {
+         final jsonObject = jsonDecode(utf8.decode(bytes));
+         return models.User.fromJson(jsonObject);
+       });
+    });
+    });
+    return AxiomQuery(queryKey, stream);
   }
 
-  /// Endpoint "list_users"
+
+  /// Endpoint "list_users" (Stream)
   /// Path: /users
   /// IR endpoint id: 1
-  Future<List<models.User>> listUsers({required int limit}) async {
-    // 1. Build the path string
+  AxiomQuery<List<models.User>>  listUsers({required int limit}) {
+    final queryArgs = <String, dynamic>{
+      'limit': limit,
+    };
+    final queryKey = 'list_users:${jsonEncode(queryArgs)}';
+    final stream = AxiomQueryManager().watch<List<models.User>>(queryKey, () {
     var path = '/users';
-
-    // 2. Build the request body (if any)
     final requestBytes = Uint8List(0);
-
-    // 3. Call the runtime
-    final responseBytes = await _runtime.call(endpointId: 1, method: "GET", path: path, requestBytes: requestBytes);
-    if (responseBytes.isEmpty) {
-      throw StateError("Received empty response for a non-nullable return type.");
-    }
-
-    final jsonObject = jsonDecode(utf8.decode(responseBytes));
-    return (jsonObject as List<dynamic>).map((e) => models.User.fromJson(e)).toList();
+    final rawStream = _runtime.callStream(endpointId: 1, method: "GET", path: path, requestBytes: requestBytes);
+    return rawStream.map((state) {
+       return state.map((bytes) {
+         final jsonObject = jsonDecode(utf8.decode(bytes));
+         return (jsonObject as List<dynamic>).map((e) => models.User.fromJson(e)).toList();
+       });
+    });
+    });
+    return AxiomQuery(queryKey, stream);
   }
 
-  /// Endpoint "create_user"
+
+  /// Endpoint "create_user" (Stream)
   /// Path: /users
   /// IR endpoint id: 2
-  Future<models.Message> createUser({required models.User user}) async {
-    // 1. Build the path string
+  AxiomQuery<models.Message>  createUser({required models.User user}) {
+    final queryArgs = <String, dynamic>{
+      'user': user.toJson(),
+    };
+    final queryKey = 'create_user:${jsonEncode(queryArgs)}';
+    final stream = AxiomQueryManager().watch<models.Message>(queryKey, () {
     var path = '/users';
-
-    // 2. Build the request body (if any)
     final requestBytes = Uint8List.fromList(utf8.encode(jsonEncode(user)));
-
-    // 3. Call the runtime
-    final responseBytes = await _runtime.call(endpointId: 2, method: "POST", path: path, requestBytes: requestBytes);
-    if (responseBytes.isEmpty) {
-      throw StateError("Received empty response for a non-nullable return type.");
-    }
-
-    final jsonObject = jsonDecode(utf8.decode(responseBytes));
-    return models.Message.fromJson(jsonObject);
+    final rawStream = _runtime.callStream(endpointId: 2, method: "POST", path: path, requestBytes: requestBytes);
+    return rawStream.map((state) {
+       return state.map((bytes) {
+         final jsonObject = jsonDecode(utf8.decode(bytes));
+         return models.Message.fromJson(jsonObject);
+       });
+    });
+    });
+    return AxiomQuery(queryKey, stream);
   }
 
-  /// Endpoint "foo_endpoint"
+
+  /// Endpoint "foo_endpoint" (Stream)
   /// Path: /foo
   /// IR endpoint id: 3
-  Future<int?> fooEndpoint() async {
-    // 1. Build the path string
+  AxiomQuery<int?>  fooEndpoint() {
+    final queryArgs = <String, dynamic>{
+    };
+    final queryKey = 'foo_endpoint:${jsonEncode(queryArgs)}';
+    final stream = AxiomQueryManager().watch<int?>(queryKey, () {
     var path = '/foo';
-
-    // 2. Build the request body (if any)
     final requestBytes = Uint8List(0);
-
-    // 3. Call the runtime
-    final responseBytes = await _runtime.call(endpointId: 3, method: "GET", path: path, requestBytes: requestBytes);
-    if (responseBytes.isEmpty) {
-      return null;
-    }
-
-    final jsonObject = jsonDecode(utf8.decode(responseBytes));
-    return jsonObject as int?;
+    final rawStream = _runtime.callStream(endpointId: 3, method: "GET", path: path, requestBytes: requestBytes);
+    return rawStream.map((state) {
+       return state.map((bytes) {
+         final jsonObject = jsonDecode(utf8.decode(bytes));
+         return jsonObject as int?;
+       });
+    });
+    });
+    return AxiomQuery(queryKey, stream);
   }
+
 
 }
