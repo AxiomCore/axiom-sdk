@@ -301,12 +301,12 @@ class AxiomRuntime {
           errorDetails = utf8.decode(ptr.asTypedList(errorLen));
         }
         final errorName = FfiError.name(errorCodeValue);
-        controller.addError(
-          Exception('Axiom Error: $errorName\n$errorDetails'),
-        );
-        // We close on error
-        controller.close();
-        _controllers.remove(requestId);
+        final exception = Exception('Axiom Error: $errorName\n$errorDetails');
+        controller.add(AxiomState.error(exception));
+        if (errorCodeValue == FfiError.requestParsingFailed) {
+          controller.close();
+          _controllers.remove(requestId);
+        }
         freeBuffers();
         return;
       }

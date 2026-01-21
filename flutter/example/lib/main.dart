@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:axiom_flutter/axiom_flutter.dart';
 import 'generated/axiom_sdk.dart';
@@ -39,15 +41,60 @@ class _MyAppState extends State<MyApp> {
   }
 }
 
-class UserProfileScreen extends StatelessWidget {
+class UserProfileScreen extends StatefulWidget {
   const UserProfileScreen({super.key});
+
+  @override
+  State<UserProfileScreen> createState() => _UserProfileScreenState();
+}
+
+class _UserProfileScreenState extends State<UserProfileScreen> {
+  void createUser() {
+    final randomId = Random().nextInt(100);
+    final newUser = models.User(
+      id: randomId,
+      name: "Yash $randomId",
+      email: "wrong...",
+      role: "admin",
+    );
+
+    sdk.createUser(user: newUser).stream.listen((state) {
+      if (state.isLoading) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Creating user..."),
+            duration: Duration(milliseconds: 700),
+          ),
+        );
+      } else if (state.hasError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error: ${state.error}"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      } else if (state.data != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Success: ${state.data!.message}"),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final userQuery = sdk.getUser(userId: 1);
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Axiom Profile")),
+      appBar: AppBar(
+        title: const Text("Axiom Profile"),
+        actions: [
+          IconButton(onPressed: createUser, icon: const Icon(Icons.add)),
+        ],
+      ),
       body: const Column(children: [UserHeader(), Divider(), UserStats()]),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
