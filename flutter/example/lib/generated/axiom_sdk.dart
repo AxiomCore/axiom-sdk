@@ -16,7 +16,7 @@ class AxiomSdk {
   AxiomSdk._(this._runtime);
 
   /// Asynchronously creates and initializes the Axiom SDK.
-  static Future<AxiomSdk> create({required String baseUrl}) async {
+  static Future<AxiomSdk> create({required String baseUrl, String? dbPath}) async {
     // Ensure Flutter bindings are initialized for asset loading.
     WidgetsFlutterBinding.ensureInitialized();
 
@@ -28,7 +28,7 @@ class AxiomSdk {
     // Ensure the background isolate is running and ready.
     await runtime.init();
     // Start the runtime with the contract and base URL.
-    await runtime.startup(baseUrl: baseUrl, contractBytes: contractBytes);
+    await runtime.startup(baseUrl: baseUrl, contractBytes: contractBytes, dbPath: dbPath);
     // Return the fully initialized SDK.
     return AxiomSdk._(runtime);
   }

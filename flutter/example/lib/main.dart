@@ -2,12 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:axiom_flutter/axiom_flutter.dart';
 import 'generated/axiom_sdk.dart';
 import 'generated/models.dart' as models;
+import 'package:path_provider/path_provider.dart';
 
 late final AxiomSdk sdk;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  sdk = await AxiomSdk.create(baseUrl: "http://127.0.0.1:8000");
+  final dbDir = await getApplicationSupportDirectory();
+  print(dbDir.path);
+  sdk = await AxiomSdk.create(
+    baseUrl: "http://127.0.0.1:8000",
+    dbPath: dbDir.path,
+  );
   runApp(const MyApp());
 }
 
@@ -66,7 +72,7 @@ class UserHeader extends StatelessWidget {
         selector: (user) => [user.name, user.email],
         loading: (_) => const Center(child: CircularProgressIndicator()),
         builder: (context, state, user) {
-          print("Building UserHeader... ${user.toJson()}");
+          print("Building UserHeader(${state.source})... ${user.toJson()}");
           return Row(
             children: [
               const CircleAvatar(radius: 30, child: Icon(Icons.person)),
@@ -113,7 +119,7 @@ class UserStats extends StatelessWidget {
         selector: (statusString) => statusString,
         loading: (_) => const LinearProgressIndicator(),
         builder: (context, state, result) {
-          print("Building UserStats...");
+          print("Building UserStats(${state.source})...");
           String statusString =
               "ID: ${result.$1} | Role: ${result.$2 ?? 'Guest'}";
           return Row(

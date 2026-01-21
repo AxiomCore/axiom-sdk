@@ -158,9 +158,11 @@ Future<void> _generateSdk({
   buffer.writeln();
   buffer.writeln('  /// Asynchronously creates and initializes the Axiom SDK.');
   buffer.writeln(
-    '  static Future<AxiomSdk> create({required String baseUrl}) async {',
+    '  static Future<AxiomSdk> create({required String baseUrl, String? dbPath}) async {',
   );
-  buffer.writeln('    // Ensure Flutter bindings are initialized for asset loading.');
+  buffer.writeln(
+    '    // Ensure Flutter bindings are initialized for asset loading.',
+  );
   buffer.writeln('    WidgetsFlutterBinding.ensureInitialized();');
   buffer.writeln();
   buffer.writeln(
@@ -175,7 +177,9 @@ Future<void> _generateSdk({
   buffer.writeln('    // Ensure the background isolate is running and ready.');
   buffer.writeln('    await runtime.init();');
   buffer.writeln('    // Start the runtime with the contract and base URL.');
-  buffer.writeln('    await runtime.startup(baseUrl: baseUrl, contractBytes: contractBytes);');
+  buffer.writeln(
+    '    await runtime.startup(baseUrl: baseUrl, contractBytes: contractBytes, dbPath: dbPath);',
+  );
   buffer.writeln('    // Return the fully initialized SDK.');
   buffer.writeln('    return AxiomSdk._(runtime);');
   buffer.writeln('  }');
@@ -458,27 +462,33 @@ void _writeEndpointMethod(
   // We use a Map literal of the arguments to create a stable key
   buffer.writeln('    final queryArgs = <String, dynamic>{');
   for (final p in paramInfos) {
-    // If it's a model, we need it to be json-encodable or use toString() 
+    // If it's a model, we need it to be json-encodable or use toString()
     // Ideally models implement toJson() or toString() stably.
     // For simplicity here, we rely on standard string interpolation/jsonEncode in the manager.
     final name = p['camelName'];
     if (p['typeRef']['kind'] == 'named') {
-         buffer.writeln("      '${p['origName']}': $name.toJson(),"); // Models must have toJson
+      buffer.writeln(
+        "      '${p['origName']}': $name.toJson(),",
+      ); // Models must have toJson
     } else {
-         buffer.writeln("      '${p['origName']}': $name,");
+      buffer.writeln("      '${p['origName']}': $name,");
     }
   }
   buffer.writeln('    };');
   buffer.writeln("    final queryKey = '$rawName:\${jsonEncode(queryArgs)}';");
 
   // 2. Define the Create Function (The closure that calls Rust)
-  buffer.writeln('    final stream = AxiomQueryManager().watch<$dartReturnType>(queryKey, () {');
-  
+  buffer.writeln(
+    '    final stream = AxiomQueryManager().watch<$dartReturnType>(queryKey, () {',
+  );
+
   buffer.writeln("    var path = '$pathTemplate';");
   for (final p in paramInfos) {
     if (p['source'] == 'path') {
       final camelName = p['camelName'];
-      buffer.writeln("    path = path.replaceAll('{${p['origName']}}', $camelName.toString());");
+      buffer.writeln(
+        "    path = path.replaceAll('{${p['origName']}}', $camelName.toString());",
+      );
     }
   }
 
@@ -486,53 +496,63 @@ void _writeEndpointMethod(
   List<String> bodyEntries = [];
   for (final p in paramInfos) {
     if (p['source'] == 'body') {
-       hasBody = true;
-       bodyEntries.add(p['camelName']); 
+      hasBody = true;
+      bodyEntries.add(p['camelName']);
     }
   }
 
   if (bodyEntries.isNotEmpty) {
-      buffer.writeln("    final requestBytes = Uint8List.fromList(utf8.encode(jsonEncode(${bodyEntries.first})));");
+    buffer.writeln(
+      "    final requestBytes = Uint8List.fromList(utf8.encode(jsonEncode(${bodyEntries.first})));",
+    );
   } else {
-      buffer.writeln("    final requestBytes = Uint8List(0);"); 
+    buffer.writeln("    final requestBytes = Uint8List(0);");
   }
 
-  buffer.writeln("    final rawStream = _runtime.callStream(endpointId: $epId, method: \"$method\", path: path, requestBytes: requestBytes);");
-  
+  buffer.writeln(
+    "    final rawStream = _runtime.callStream(endpointId: $epId, method: \"$method\", path: path, requestBytes: requestBytes);",
+  );
+
   buffer.writeln("    return rawStream.map((state) {");
-  
+
   // Use state.map() helper
   buffer.writeln("       return state.map((bytes) {");
-  
+
   if (responseShape.kind == _ResponseKind.voidType) {
-      buffer.writeln("         return null;");
+    buffer.writeln("         return null;");
   } else {
-      buffer.writeln("         final jsonObject = jsonDecode(utf8.decode(bytes));");
-      
-      switch (responseShape.kind) {
-        case _ResponseKind.model:
-          final modelName = _pascalCase(responseShape.modelName!);
-          buffer.writeln('         return models.$modelName.fromJson(jsonObject);');
-          break;
-        case _ResponseKind.modelVec:
-          final modelName = _pascalCase(responseShape.modelName!);
-          buffer.writeln('         return (jsonObject as List<dynamic>).map((e) => models.$modelName.fromJson(e)).toList();');
-          break;
-        case _ResponseKind.primitiveString:
-        case _ResponseKind.primitiveInt:
-        case _ResponseKind.primitiveFloat:
-        case _ResponseKind.primitiveBool:
-          buffer.writeln('         return jsonObject as $dartReturnType;');
-          break;
-        case _ResponseKind.primitiveBytes:
-          buffer.writeln('         return base64Decode(jsonObject as String);');
-          break;
-        default:
-          buffer.writeln('         return jsonObject;');
-      }
+    buffer.writeln(
+      "         final jsonObject = jsonDecode(utf8.decode(bytes));",
+    );
+
+    switch (responseShape.kind) {
+      case _ResponseKind.model:
+        final modelName = _pascalCase(responseShape.modelName!);
+        buffer.writeln(
+          '         return models.$modelName.fromJson(jsonObject);',
+        );
+        break;
+      case _ResponseKind.modelVec:
+        final modelName = _pascalCase(responseShape.modelName!);
+        buffer.writeln(
+          '         return (jsonObject as List<dynamic>).map((e) => models.$modelName.fromJson(e)).toList();',
+        );
+        break;
+      case _ResponseKind.primitiveString:
+      case _ResponseKind.primitiveInt:
+      case _ResponseKind.primitiveFloat:
+      case _ResponseKind.primitiveBool:
+        buffer.writeln('         return jsonObject as $dartReturnType;');
+        break;
+      case _ResponseKind.primitiveBytes:
+        buffer.writeln('         return base64Decode(jsonObject as String);');
+        break;
+      default:
+        buffer.writeln('         return jsonObject;');
+    }
   }
   buffer.writeln("       });"); // Close map callback
-  buffer.writeln("    });");    // Close stream map
+  buffer.writeln("    });"); // Close stream map
   buffer.writeln('    });');
   buffer.writeln("    return AxiomQuery(queryKey, stream);");
   buffer.writeln('  }'); // --- FIX: Close Stream Method ---
@@ -685,8 +705,11 @@ void _writeModelsFile(
 
       if (kind == 'named') {
         buffer.writeln("      '$origName': $camelName?.toJson(),");
-      } else if (kind == 'list' && (typeRef['value'] as Map)['kind'] == 'named') {
-        buffer.writeln("      '$origName': $camelName?.map((e) => e.toJson()).toList(),");
+      } else if (kind == 'list' &&
+          (typeRef['value'] as Map)['kind'] == 'named') {
+        buffer.writeln(
+          "      '$origName': $camelName?.map((e) => e.toJson()).toList(),",
+        );
       } else {
         buffer.writeln("      '$origName': $camelName,");
       }

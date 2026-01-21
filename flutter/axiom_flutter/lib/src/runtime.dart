@@ -30,7 +30,8 @@ class EventType {
   static const int complete = 0;
   static const int networkSuccess = 1;
   static const int cacheHit = 2;
-  static const int error = 3;
+  static const int cacheHitAndFetching = 3;
+  static const int error = 4;
 }
 
 class FfiError {
@@ -48,26 +49,41 @@ class FfiError {
 
   static String name(int code) {
     switch (code) {
-      case success: return 'success';
-      case unknownError: return 'unknownError';
-      case requestParsingFailed: return 'requestParsingFailed';
-      case networkError: return 'networkError';
-      case responseDeserializationFailed: return 'responseDeserializationFailed';
-      case unknownEndpoint: return 'unknownEndpoint';
-      case invalidContract: return 'invalidContract';
-      case runtimeTooOld: return 'runtimeTooOld';
-      case contractNotLoaded: return 'contractNotLoaded';
-      case initializationFailed: return 'initializationFailed';
-      case internalError: return 'internalError';
-      default: return 'unrecognizedErrorCode';
+      case success:
+        return 'success';
+      case unknownError:
+        return 'unknownError';
+      case requestParsingFailed:
+        return 'requestParsingFailed';
+      case networkError:
+        return 'networkError';
+      case responseDeserializationFailed:
+        return 'responseDeserializationFailed';
+      case unknownEndpoint:
+        return 'unknownEndpoint';
+      case invalidContract:
+        return 'invalidContract';
+      case runtimeTooOld:
+        return 'runtimeTooOld';
+      case contractNotLoaded:
+        return 'contractNotLoaded';
+      case initializationFailed:
+        return 'initializationFailed';
+      case internalError:
+        return 'internalError';
+      default:
+        return 'unrecognizedErrorCode';
     }
   }
 }
 
 base class AxiomResponseBuffer extends Struct {
-  @Uint64() external int requestId;
-  @Int32() external int eventType;
-  @Int32() external int errorCode;
+  @Uint64()
+  external int requestId;
+  @Int32()
+  external int eventType;
+  @Int32()
+  external int errorCode;
   external AxiomBuffer data;
   external AxiomBuffer errorMessage;
 }
@@ -81,11 +97,15 @@ typedef _AxiomInitialize = int Function(AxiomString, AxiomString);
 typedef _AxiomLoadContractNative = Int32 Function(AxiomBuffer);
 typedef _AxiomLoadContract = int Function(AxiomBuffer);
 
-typedef _AxiomRegisterCallbackNative = Void Function(Pointer<NativeFunction<AxiomCallback>>);
-typedef _AxiomRegisterCallback = void Function(Pointer<NativeFunction<AxiomCallback>>);
+typedef _AxiomRegisterCallbackNative =
+    Void Function(Pointer<NativeFunction<AxiomCallback>>);
+typedef _AxiomRegisterCallback =
+    void Function(Pointer<NativeFunction<AxiomCallback>>);
 
-typedef _AxiomCallNative = Void Function(Uint64, Uint32, AxiomString, AxiomString, AxiomBuffer);
-typedef _AxiomCall = void Function(int, int, AxiomString, AxiomString, AxiomBuffer);
+typedef _AxiomCallNative =
+    Void Function(Uint64, Uint32, AxiomString, AxiomString, AxiomBuffer);
+typedef _AxiomCall =
+    void Function(int, int, AxiomString, AxiomString, AxiomBuffer);
 
 typedef _AxiomFreeBufferNative = Void Function(AxiomBuffer);
 typedef _AxiomFreeBuffer = void Function(AxiomBuffer);
@@ -93,9 +113,9 @@ typedef _AxiomFreeBuffer = void Function(AxiomBuffer);
 typedef _AxiomProcessResponsesNative = Void Function();
 typedef _AxiomProcessResponses = void Function();
 
-typedef _AxiomFreeResponseBufferNative = Void Function(Pointer<AxiomResponseBuffer>);
+typedef _AxiomFreeResponseBufferNative =
+    Void Function(Pointer<AxiomResponseBuffer>);
 typedef _AxiomFreeResponseBuffer = void Function(Pointer<AxiomResponseBuffer>);
-
 
 // --- Global state for managing async callbacks ---
 final _controllers = HashMap<int, StreamController<AxiomState<Uint8List>>>();
@@ -110,7 +130,7 @@ _AxiomFreeResponseBuffer? _freeResponseFfiBackground;
 @pragma('vm:entry-point')
 void _axiomCallbackHandler(Pointer<AxiomResponseBuffer> responsePtr) {
   if (responsePtr == nullptr) return;
-  
+
   final response = responsePtr.ref;
   _dataPort?.send([
     response.requestId,
@@ -132,16 +152,25 @@ void _runRustEventLoop(List<Object> args) {
   final shutdownPort = ReceivePort();
   mainIsolateDataPort.send(shutdownPort.sendPort);
   _dataPort = mainIsolateDataPort;
-  
-  final lib = AxiomRuntime._openPlatformLibrary();
-  
-  // The background isolate needs its own lookup for the function it will call.
-  _freeResponseFfiBackground = lib.lookupFunction<_AxiomFreeResponseBufferNative, _AxiomFreeResponseBuffer>('axiom_free_response_buffer');
 
-  final registerCallback = lib.lookupFunction<_AxiomRegisterCallbackNative, _AxiomRegisterCallback>('axiom_register_callback');
+  final lib = AxiomRuntime._openPlatformLibrary();
+
+  // The background isolate needs its own lookup for the function it will call.
+  _freeResponseFfiBackground = lib
+      .lookupFunction<_AxiomFreeResponseBufferNative, _AxiomFreeResponseBuffer>(
+        'axiom_free_response_buffer',
+      );
+
+  final registerCallback = lib
+      .lookupFunction<_AxiomRegisterCallbackNative, _AxiomRegisterCallback>(
+        'axiom_register_callback',
+      );
   registerCallback(Pointer.fromFunction(_axiomCallbackHandler));
-  
-  final processResponses = lib.lookupFunction<_AxiomProcessResponsesNative, _AxiomProcessResponses>('axiom_process_responses');
+
+  final processResponses = lib
+      .lookupFunction<_AxiomProcessResponsesNative, _AxiomProcessResponses>(
+        'axiom_process_responses',
+      );
 
   shutdownPort.listen((msg) {
     if (msg == 'shutdown') {
@@ -169,20 +198,26 @@ class AxiomRuntime {
     if (_instance != null) {
       final completer = Completer<void>();
       // Access the old instance's port to listen for its closure.
-      _instance!._mainIsolatePort?.listen(null, onDone: () {
-        if (!completer.isCompleted) completer.complete();
-      });
+      _instance!._mainIsolatePort?.listen(
+        null,
+        onDone: () {
+          if (!completer.isCompleted) completer.complete();
+        },
+      );
 
       _commandPort?.send('shutdown');
       _instance!._mainIsolatePort?.close();
-      
+
       _controllers.clear();
       _instance = null;
       _commandPort = null;
       _initCompleter = null;
       _freeResponseFfiBackground = null;
-      
-      await completer.future.timeout(const Duration(milliseconds: 200), onTimeout: () {});
+
+      await completer.future.timeout(
+        const Duration(milliseconds: 200),
+        onTimeout: () {},
+      );
     }
   }
 
@@ -194,10 +229,17 @@ class AxiomRuntime {
 
   AxiomRuntime._internal() {
     _lib = _openPlatformLibrary();
-    _initFfi = _lib.lookupFunction<_AxiomInitializeNative, _AxiomInitialize>('axiom_initialize');
-    _loadContractFfi = _lib.lookupFunction<_AxiomLoadContractNative, _AxiomLoadContract>('axiom_load_contract');
+    _initFfi = _lib.lookupFunction<_AxiomInitializeNative, _AxiomInitialize>(
+      'axiom_initialize',
+    );
+    _loadContractFfi = _lib
+        .lookupFunction<_AxiomLoadContractNative, _AxiomLoadContract>(
+          'axiom_load_contract',
+        );
     _callFfi = _lib.lookupFunction<_AxiomCallNative, _AxiomCall>('axiom_call');
-    _freeFfi = _lib.lookupFunction<_AxiomFreeBufferNative, _AxiomFreeBuffer>('axiom_free_buffer');
+    _freeFfi = _lib.lookupFunction<_AxiomFreeBufferNative, _AxiomFreeBuffer>(
+      'axiom_free_buffer',
+    );
   }
 
   Future<void> init() async {
@@ -211,7 +253,7 @@ class AxiomRuntime {
         if (!_initCompleter!.isCompleted) _initCompleter!.complete();
         return;
       }
-      
+
       final int requestId = message[0];
       final int eventTypeValue = message[1];
       final int errorCodeValue = message[2];
@@ -221,7 +263,7 @@ class AxiomRuntime {
       final int errorLen = message[6];
 
       final controller = _controllers[requestId];
-      
+
       // Helper to clean up raw buffers from Rust
       void freeBuffers() {
         if (dataPtr != 0) {
@@ -246,21 +288,21 @@ class AxiomRuntime {
       }
 
       if (eventTypeValue == EventType.complete) {
-         controller.close();
-         _controllers.remove(requestId);
-         freeBuffers();
-         return;
+        controller.close();
+        _controllers.remove(requestId);
+        freeBuffers();
+        return;
       }
 
       if (eventTypeValue == EventType.error) {
         String errorDetails = "Unknown error";
         if (errorPtr != 0 && errorLen > 0) {
-           final ptr = Pointer<Uint8>.fromAddress(errorPtr);
-           errorDetails = utf8.decode(ptr.asTypedList(errorLen));
+          final ptr = Pointer<Uint8>.fromAddress(errorPtr);
+          errorDetails = utf8.decode(ptr.asTypedList(errorLen));
         }
         final errorName = FfiError.name(errorCodeValue);
         controller.addError(
-             Exception('Axiom Error: $errorName\n$errorDetails')
+          Exception('Axiom Error: $errorName\n$errorDetails'),
         );
         // We close on error
         controller.close();
@@ -273,26 +315,40 @@ class AxiomRuntime {
       if (dataPtr != 0) {
         final ptr = Pointer<Uint8>.fromAddress(dataPtr);
         final data = Uint8List.fromList(ptr.asTypedList(dataLen));
-        
-        final source = (eventTypeValue == EventType.cacheHit) ? AxiomSource.cache : AxiomSource.network;
-        final isFetching = (eventTypeValue == EventType.cacheHit); // If cache hit, we might still be fetching
-        
-        controller.add(AxiomState.success(data, source, isFetching: isFetching));
+
+        final source =
+            (eventTypeValue == EventType.cacheHit ||
+                eventTypeValue == EventType.cacheHitAndFetching)
+            ? AxiomSource.cache
+            : AxiomSource.network;
+        final isFetching = eventTypeValue == EventType.cacheHitAndFetching;
+
+        controller.add(
+          AxiomState.success(data, source, isFetching: isFetching),
+        );
       }
-      
+
       freeBuffers();
     });
 
     await Isolate.spawn(_runRustEventLoop, [_mainIsolatePort!.sendPort]);
     return _initCompleter!.future;
   }
-  
+
   static DynamicLibrary _openPlatformLibrary() {
-    if (Platform.isIOS) { return DynamicLibrary.process(); }
-    throw UnsupportedError('AxiomRuntime is only available on iOS in this build');
+    if (Platform.isIOS) {
+      return DynamicLibrary.process();
+    }
+    throw UnsupportedError(
+      'AxiomRuntime is only available on iOS in this build',
+    );
   }
 
- Future<void> startup({required String baseUrl, required Uint8List contractBytes, String? dbPath}) async {
+  Future<void> startup({
+    required String baseUrl,
+    required Uint8List contractBytes,
+    String? dbPath,
+  }) async {
     // 1. Determine DB path. Use app documents directory if not provided.
     final String resolvedDbPath;
     if (dbPath != null) {
@@ -307,23 +363,29 @@ class AxiomRuntime {
     final urlPtr = calloc<Uint8>(urlUnits.length);
     urlPtr.asTypedList(urlUnits.length).setAll(0, urlUnits);
     final urlStr = calloc<AxiomString>();
-    urlStr.ref..ptr = urlPtr..len = urlUnits.length;
-    
+    urlStr.ref
+      ..ptr = urlPtr
+      ..len = urlUnits.length;
+
     final dbUnits = utf8.encode(resolvedDbPath);
     final dbPtr = calloc<Uint8>(dbUnits.length);
     dbPtr.asTypedList(dbUnits.length).setAll(0, dbUnits);
     final dbStr = calloc<AxiomString>();
-    dbStr.ref..ptr = dbPtr..len = dbUnits.length;
+    dbStr.ref
+      ..ptr = dbPtr
+      ..len = dbUnits.length;
 
     final result = _initFfi(urlStr.ref, dbStr.ref);
-    
-    calloc.free(urlPtr); calloc.free(urlStr);
-    calloc.free(dbPtr); calloc.free(dbStr);
+
+    calloc.free(urlPtr);
+    calloc.free(urlStr);
+    calloc.free(dbPtr);
+    calloc.free(dbStr);
 
     if (result != FfiError.success) {
       throw Exception('Failed to initialize runtime. Error code: $result');
     }
-    
+
     // 3. Load the contract.
     loadContract(contractBytes);
   }
@@ -332,11 +394,16 @@ class AxiomRuntime {
     final ptr = calloc<Uint8>(contractBytes.length);
     ptr.asTypedList(contractBytes.length).setAll(0, contractBytes);
     final axBuf = calloc<AxiomBuffer>();
-    axBuf.ref..ptr = ptr..len = contractBytes.length;
+    axBuf.ref
+      ..ptr = ptr
+      ..len = contractBytes.length;
     final result = _loadContractFfi(axBuf.ref);
-    calloc.free(ptr); calloc.free(axBuf);
+    calloc.free(ptr);
+    calloc.free(axBuf);
     if (result != FfiError.success) {
-      throw Exception('Failed to load Axiom contract. Error: ${FfiError.name(result)}');
+      throw Exception(
+        'Failed to load Axiom contract. Error: ${FfiError.name(result)}',
+      );
     }
   }
 
@@ -371,11 +438,14 @@ class AxiomRuntime {
     methodStr.ref.len = methodUnits.length;
 
     void cleanup() {
-      calloc.free(pathPtr); calloc.free(pathStr);
-      calloc.free(bodyPtr); calloc.free(bodyBuf);
-      calloc.free(methodPtr); calloc.free(methodStr);
+      calloc.free(pathPtr);
+      calloc.free(pathStr);
+      calloc.free(bodyPtr);
+      calloc.free(bodyBuf);
+      calloc.free(methodPtr);
+      calloc.free(methodStr);
     }
-    
+
     // Add initial loading state
     controller.add(AxiomState.loading());
 
@@ -386,13 +456,13 @@ class AxiomRuntime {
       controller.addError(e);
       controller.close();
     }
-    
+
     // Ensure memory is freed after call returns (async/safe)
     Timer.run(cleanup);
 
     controller.onCancel = () {
-        // TODO: Send cancel signal to Rust
-        _controllers.remove(requestId);
+      // TODO: Send cancel signal to Rust
+      _controllers.remove(requestId);
     };
 
     return controller.stream;
