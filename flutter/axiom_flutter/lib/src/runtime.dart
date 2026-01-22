@@ -315,6 +315,7 @@ class AxiomRuntime {
       if (dataPtr != 0) {
         final ptr = Pointer<Uint8>.fromAddress(dataPtr);
         final data = Uint8List.fromList(ptr.asTypedList(dataLen));
+        print("eventTypeValue:: $eventTypeValue");
 
         final source =
             (eventTypeValue == EventType.cacheHit ||
