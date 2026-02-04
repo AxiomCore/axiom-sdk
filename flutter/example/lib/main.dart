@@ -19,25 +19,15 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatefulWidget {
+class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
-  State<MyApp> createState() => _MyAppState();
-}
-
-class _MyAppState extends State<MyApp> {
-  @override
-  void initState() {
-    sdk.fooEndpoint().stream.listen((data) {
-      print(data);
-    });
-    super.initState();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return const MaterialApp(home: UserProfileScreen());
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: UserProfileScreen(),
+    );
   }
 }
 
@@ -49,29 +39,77 @@ class UserProfileScreen extends StatefulWidget {
 }
 
 class _UserProfileScreenState extends State<UserProfileScreen> {
+  // This demonstrates handling errors from an action (like a button press).
   void createUser() {
     final randomId = Random().nextInt(100);
     final newUser = models.User(
       id: randomId,
       name: "Yash $randomId",
-      email: "wrong...",
-      role: "admin",
+      email: "yash@genie.ai", // This will cause a validation error in Rust
+      role: "admsdfdsin",
     );
 
-    sdk.createUser(user: newUser).stream.listen((state) {
-      if (state.isLoading) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Creating user..."),
-            duration: Duration(milliseconds: 700),
-          ),
-        );
-      } else if (state.hasError) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Error: ${state.error}"),
-            backgroundColor: Colors.red,
-          ),
+    // We only listen once for the result of this action.
+    sdk.createUser(user: newUser).stream.firstWhere((s) => !s.isLoading).then((
+      state,
+    ) {
+      if (state.hasError) {
+        final error = state.error!;
+
+        // 1. Log the full, rich error to the console for debugging.
+        print('--- AXIOM ERROR CAUGHT ---');
+        print('Message: ${error.message}');
+        print('Stage: ${error.stage.name}');
+        print('Category: ${error.category.name}');
+        print('Code: ${error.code}');
+        print('Details: ${error.details}');
+        print('Retryable: ${error.retryable}');
+        print('--------------------------');
+
+        // 2. Show a user-friendly dialog based on the typed error.
+        showDialog(
+          context: context,
+          builder: (ctx) {
+            // Use a switch expression for type-safe error message handling
+            final (title, content) = switch (error.code) {
+              ValidationError() => (
+                "Invalid Input",
+                "Please check your form. Details:\n\n${error.details}",
+              ),
+              HttpStatus(code: 404) => (
+                "Not Found",
+                "The server could not find the requested resource.",
+              ),
+              HttpStatus(code: >= 500) => (
+                "Server Error",
+                "Our servers are having trouble. Please try again later.",
+              ),
+              NetworkTimeout() || NetworkConnectionFailed() => (
+                "Network Error",
+                "Could not connect to the server. Please check your internet connection.",
+              ),
+              _ => ("An Error Occurred", error.message),
+            };
+
+            return AlertDialog(
+              title: Text(title),
+              content: Text(content),
+              actions: [
+                if (error.retryable)
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      // You could call createUser() again here
+                    },
+                    child: const Text("Retry"),
+                  ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text("OK"),
+                ),
+              ],
+            );
+          },
         );
       } else if (state.data != null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -92,14 +130,16 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       appBar: AppBar(
         title: const Text("Axiom Profile"),
         actions: [
-          IconButton(onPressed: createUser, icon: const Icon(Icons.add)),
+          IconButton(
+            onPressed: createUser,
+            icon: const Icon(Icons.add),
+            tooltip: 'Create User (will fail validation)',
+          ),
         ],
       ),
       body: const Column(children: [UserHeader(), Divider(), UserStats()]),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          userQuery.refresh();
-        },
+        onPressed: () => userQuery.refresh(),
         label: const Text("Refresh All"),
         icon: const Icon(Icons.refresh),
       ),
@@ -118,8 +158,18 @@ class UserHeader extends StatelessWidget {
         query: sdk.getUser(userId: 1),
         selector: (user) => [user.name, user.email],
         loading: (_) => const Center(child: CircularProgressIndicator()),
+        error: (context, error) {
+          print("UserHeader caught error: $error");
+          return ListTile(
+            leading: const Icon(Icons.error_outline, color: Colors.red),
+            title: const Text('Could not load user profile'),
+            subtitle: Text(error.message),
+          );
+        },
         builder: (context, state, user) {
-          print("Building UserHeader(${state.source})... ${user.toJson()}");
+          print(
+            "Building UserHeader(${state.source.name})... ${user.toJson()}",
+          );
           return Row(
             children: [
               const CircleAvatar(radius: 30, child: Icon(Icons.person)),
@@ -135,12 +185,13 @@ class UserHeader extends StatelessWidget {
                     user.email,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
-
-                  // Show if we are fetching in the background
                   if (state.isFetching)
-                    const Text(
-                      "Updating...",
-                      style: TextStyle(fontSize: 10, color: Colors.grey),
+                    const Padding(
+                      padding: EdgeInsets.only(top: 4.0),
+                      child: Text(
+                        "Updating...",
+                        style: TextStyle(fontSize: 10, color: Colors.grey),
+                      ),
                     ),
                 ],
               ),
@@ -163,10 +214,19 @@ class UserStats extends StatelessWidget {
       child: AxiomBuilder(
         query: sdk.getUser(userId: 1),
         transform: (user) => (user.id, user.role),
-        selector: (statusString) => statusString,
+        selector: (status) => status,
         loading: (_) => const LinearProgressIndicator(),
+        error: (context, error) {
+          print("UserStats caught error: $error");
+          return Center(
+            child: Text(
+              'Could not load user stats: ${error.message}',
+              style: TextStyle(color: Colors.red.shade800),
+            ),
+          );
+        },
         builder: (context, state, result) {
-          print("Building UserStats(${state.source})...");
+          print("Building UserStats(${state.source.name})...");
           String statusString =
               "ID: ${result.$1} | Role: ${result.$2 ?? 'Guest'}";
           return Row(
@@ -179,8 +239,8 @@ class UserStats extends StatelessWidget {
               Chip(
                 label: Text(statusString),
                 backgroundColor: state.source == AxiomSource.cache
-                    ? Colors.orange[100]
-                    : Colors.green[100],
+                    ? Colors.orange.shade100
+                    : Colors.green.shade100,
               ),
             ],
           );

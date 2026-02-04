@@ -41,6 +41,10 @@ class FfiError {
   static const int networkError = 3;
   static const int responseDeserializationFailed = 4;
   static const int unknownEndpoint = 5;
+  static const int timeout = 6;
+  static const int requestFailed = 7;
+  static const int authError = 8;
+  static const int serverError = 9;
   static const int invalidContract = 10;
   static const int runtimeTooOld = 11;
   static const int contractNotLoaded = 12;
@@ -48,32 +52,24 @@ class FfiError {
   static const int internalError = 14;
 
   static String name(int code) {
-    switch (code) {
-      case success:
-        return 'success';
-      case unknownError:
-        return 'unknownError';
-      case requestParsingFailed:
-        return 'requestParsingFailed';
-      case networkError:
-        return 'networkError';
-      case responseDeserializationFailed:
-        return 'responseDeserializationFailed';
-      case unknownEndpoint:
-        return 'unknownEndpoint';
-      case invalidContract:
-        return 'invalidContract';
-      case runtimeTooOld:
-        return 'runtimeTooOld';
-      case contractNotLoaded:
-        return 'contractNotLoaded';
-      case initializationFailed:
-        return 'initializationFailed';
-      case internalError:
-        return 'internalError';
-      default:
-        return 'unrecognizedErrorCode';
-    }
+    return switch (code) {
+      success => 'Success',
+      unknownError => 'UnknownError',
+      requestParsingFailed => 'RequestParsingFailed',
+      networkError => 'NetworkError',
+      responseDeserializationFailed => 'ResponseDeserializationFailed',
+      unknownEndpoint => 'UnknownEndpoint',
+      timeout => 'Timeout',
+      requestFailed => 'RequestFailed',
+      authError => 'AuthError',
+      serverError => 'ServerError',
+      invalidContract => 'InvalidContract',
+      runtimeTooOld => 'RuntimeTooOld',
+      contractNotLoaded => 'ContractNotLoaded',
+      initializationFailed => 'InitializationFailed',
+      internalError => 'InternalError',
+      _ => 'UnrecognizedErrorCode',
+    };
   }
 }
 
@@ -124,7 +120,6 @@ SendPort? _commandPort;
 Completer<void>? _initCompleter;
 SendPort? _dataPort;
 
-// This holds the `free` function pointer for the background isolate to use.
 _AxiomFreeResponseBuffer? _freeResponseFfiBackground;
 
 @pragma('vm:entry-point')
@@ -142,7 +137,6 @@ void _axiomCallbackHandler(Pointer<AxiomResponseBuffer> responsePtr) {
     response.errorMessage.len,
   ]);
 
-  // The background isolate calls the free function it looked up.
   _freeResponseFfiBackground?.call(responsePtr);
 }
 
@@ -155,7 +149,6 @@ void _runRustEventLoop(List<Object> args) {
 
   final lib = AxiomRuntime._openPlatformLibrary();
 
-  // The background isolate needs its own lookup for the function it will call.
   _freeResponseFfiBackground = lib
       .lookupFunction<_AxiomFreeResponseBufferNative, _AxiomFreeResponseBuffer>(
         'axiom_free_response_buffer',
@@ -181,6 +174,9 @@ void _runRustEventLoop(List<Object> args) {
 
   while (true) {
     processResponses();
+    // A small sleep can prevent the isolate from pegging a CPU core at 100%
+    // if there are no events to process. Adjust duration as needed.
+    sleep(const Duration(milliseconds: 5));
   }
 }
 
@@ -191,13 +187,11 @@ class AxiomRuntime {
     return _instance!;
   }
 
-  // The port is now an INSTANCE variable to allow for clean re-creation on hot restart.
   ReceivePort? _mainIsolatePort;
 
   static Future<void> dispose() async {
     if (_instance != null) {
       final completer = Completer<void>();
-      // Access the old instance's port to listen for its closure.
       _instance!._mainIsolatePort?.listen(
         null,
         onDone: () {
@@ -264,7 +258,6 @@ class AxiomRuntime {
 
       final controller = _controllers[requestId];
 
-      // Helper to clean up raw buffers from Rust
       void freeBuffers() {
         if (dataPtr != 0) {
           final buf = calloc<AxiomBuffer>();
@@ -294,16 +287,46 @@ class AxiomRuntime {
         return;
       }
 
+      print("eventTypeValue::$eventTypeValue");
+
+      // UPDATED: New rich error handling logic
       if (eventTypeValue == EventType.error) {
-        String errorDetails = "Unknown error";
+        AxiomError richError;
         if (errorPtr != 0 && errorLen > 0) {
-          final ptr = Pointer<Uint8>.fromAddress(errorPtr);
-          errorDetails = utf8.decode(ptr.asTypedList(errorLen));
+          try {
+            final ptr = Pointer<Uint8>.fromAddress(errorPtr);
+            final jsonStr = utf8.decode(ptr.asTypedList(errorLen));
+            final Map<String, dynamic> jsonMap = jsonDecode(jsonStr);
+            richError = AxiomError.fromJson(jsonMap);
+          } catch (e) {
+            // Fallback if JSON parsing fails
+            richError = AxiomError(
+              stage: ErrorStage.ffiBoundary,
+              category: ErrorCategory.runtime,
+              code: const UnknownCode("JsonParseFailure"),
+              message: "Failed to parse rich error from Rust: $e",
+              retryable: false,
+            );
+          }
+        } else {
+          // Fallback for catastrophic errors where Rust couldn't even form a JSON string
+          richError = AxiomError(
+            stage: ErrorStage.runtime,
+            category: ErrorCategory.unknown,
+            code: UnknownCode(FfiError.name(errorCodeValue)),
+            message: "An unknown internal error occurred in Rust",
+            retryable: false,
+          );
         }
-        final errorName = FfiError.name(errorCodeValue);
-        final exception = Exception('Axiom Error: $errorName\n$errorDetails');
-        controller.add(AxiomState.error(exception));
-        if (errorCodeValue == FfiError.requestParsingFailed) {
+        controller.add(AxiomState.error(richError));
+
+        // Close stream on non-recoverable configuration errors
+        const nonRecoverableErrors = [
+          FfiError.unknownEndpoint,
+          FfiError.invalidContract,
+          FfiError.contractNotLoaded,
+        ];
+        if (nonRecoverableErrors.contains(errorCodeValue)) {
           controller.close();
           _controllers.remove(requestId);
         }
@@ -315,7 +338,6 @@ class AxiomRuntime {
       if (dataPtr != 0) {
         final ptr = Pointer<Uint8>.fromAddress(dataPtr);
         final data = Uint8List.fromList(ptr.asTypedList(dataLen));
-        print("eventTypeValue:: $eventTypeValue");
 
         final source =
             (eventTypeValue == EventType.cacheHit ||
@@ -337,12 +359,19 @@ class AxiomRuntime {
   }
 
   static DynamicLibrary _openPlatformLibrary() {
-    if (Platform.isIOS) {
+    if (Platform.isAndroid) {
+      return DynamicLibrary.open('libaxiom_runtime.so');
+    }
+    if (Platform.isIOS || Platform.isMacOS) {
       return DynamicLibrary.process();
     }
-    throw UnsupportedError(
-      'AxiomRuntime is only available on iOS in this build',
-    );
+    if (Platform.isLinux) {
+      return DynamicLibrary.open('libaxiom_runtime.so');
+    }
+    if (Platform.isWindows) {
+      return DynamicLibrary.open('axiom_runtime.dll');
+    }
+    throw UnsupportedError('Unsupported platform');
   }
 
   Future<void> startup({
@@ -350,7 +379,6 @@ class AxiomRuntime {
     required Uint8List contractBytes,
     String? dbPath,
   }) async {
-    // 1. Determine DB path. Use app documents directory if not provided.
     final String resolvedDbPath;
     if (dbPath != null) {
       resolvedDbPath = dbPath;
@@ -359,7 +387,6 @@ class AxiomRuntime {
       resolvedDbPath = appDocsDir.path;
     }
 
-    // 2. Initialize Rust with both paths.
     final urlUnits = utf8.encode(baseUrl);
     final urlPtr = calloc<Uint8>(urlUnits.length);
     urlPtr.asTypedList(urlUnits.length).setAll(0, urlUnits);
@@ -387,7 +414,6 @@ class AxiomRuntime {
       throw Exception('Failed to initialize runtime. Error code: $result');
     }
 
-    // 3. Load the contract.
     loadContract(contractBytes);
   }
 
@@ -418,51 +444,49 @@ class AxiomRuntime {
     final controller = StreamController<AxiomState<Uint8List>>();
     _controllers[requestId] = controller;
 
+    controller.add(AxiomState.loading());
+
+    // Allocate all strings and buffers
     final pathUnits = utf8.encode(path);
     final pathPtr = calloc<Uint8>(pathUnits.length);
     pathPtr.asTypedList(pathUnits.length).setAll(0, pathUnits);
-    final pathStr = calloc<AxiomString>();
-    pathStr.ref.ptr = pathPtr;
-    pathStr.ref.len = pathUnits.length;
+    final pathStr = calloc<AxiomString>()
+      ..ref.ptr = pathPtr
+      ..ref.len = pathUnits.length;
 
     final bodyPtr = calloc<Uint8>(requestBytes.length);
     bodyPtr.asTypedList(requestBytes.length).setAll(0, requestBytes);
-    final bodyBuf = calloc<AxiomBuffer>();
-    bodyBuf.ref.ptr = bodyPtr;
-    bodyBuf.ref.len = requestBytes.length;
+    final bodyBuf = calloc<AxiomBuffer>()
+      ..ref.ptr = bodyPtr
+      ..ref.len = requestBytes.length;
 
     final methodUnits = utf8.encode(method);
     final methodPtr = calloc<Uint8>(methodUnits.length);
     methodPtr.asTypedList(methodUnits.length).setAll(0, methodUnits);
-    final methodStr = calloc<AxiomString>();
-    methodStr.ref.ptr = methodPtr;
-    methodStr.ref.len = methodUnits.length;
-
-    void cleanup() {
-      calloc.free(pathPtr);
-      calloc.free(pathStr);
-      calloc.free(bodyPtr);
-      calloc.free(bodyBuf);
-      calloc.free(methodPtr);
-      calloc.free(methodStr);
-    }
-
-    // Add initial loading state
-    controller.add(AxiomState.loading());
+    final methodStr = calloc<AxiomString>()
+      ..ref.ptr = methodPtr
+      ..ref.len = methodUnits.length;
 
     try {
       _callFfi(requestId, endpointId, methodStr.ref, pathStr.ref, bodyBuf.ref);
-    } catch (e) {
+    } catch (e, st) {
       _controllers.remove(requestId);
-      controller.addError(e);
+      controller.addError(e, st);
       controller.close();
+    } finally {
+      // IMPORTANT: Defer freeing until the next microtask.
+      // Rust may still be reading these buffers after _callFfi returns.
+      Future.microtask(() {
+        calloc.free(pathPtr);
+        calloc.free(pathStr);
+        calloc.free(bodyPtr);
+        calloc.free(bodyBuf);
+        calloc.free(methodPtr);
+        calloc.free(methodStr);
+      });
     }
 
-    // Ensure memory is freed after call returns (async/safe)
-    Timer.run(cleanup);
-
     controller.onCancel = () {
-      // TODO: Send cancel signal to Rust
       _controllers.remove(requestId);
     };
 

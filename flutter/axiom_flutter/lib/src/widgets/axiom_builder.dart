@@ -3,20 +3,13 @@ import 'package:flutter/widgets.dart';
 import '../state.dart';
 import '../query.dart';
 
-typedef AxiomDataWidgetBuilder<R> = Widget Function(
-  BuildContext context,
-  AxiomState<R> state,
-  R data,
-);
+typedef AxiomDataWidgetBuilder<R> =
+    Widget Function(BuildContext context, AxiomState<R> state, R data);
 
-typedef AxiomErrorWidgetBuilder = Widget Function(
-  BuildContext context,
-  Object error,
-);
+typedef AxiomErrorWidgetBuilder =
+    Widget Function(BuildContext context, AxiomError error);
 
-typedef AxiomLoadingWidgetBuilder = Widget Function(
-  BuildContext context,
-);
+typedef AxiomLoadingWidgetBuilder = Widget Function(BuildContext context);
 
 /// A powerful builder that handles Axiom query state, data transformation, and build optimization.
 ///
@@ -99,7 +92,8 @@ class _AxiomBuilderState<T, R> extends State<AxiomBuilder<T, R>> {
       } else if (rawState.hasError) {
         newState = AxiomState.error(
           rawState.error!,
-          previousData: _currentState?.data, // Keep showing stale data if available
+          previousData:
+              _currentState?.data, // Keep showing stale data if available
           previousSource: _currentState?.source,
         );
       } else {
@@ -117,7 +111,9 @@ class _AxiomBuilderState<T, R> extends State<AxiomBuilder<T, R>> {
           // However, we MUST still rebuild if `isFetching` status changed,
           // otherwise loading indicators won't update.
           if (_currentState?.isFetching == newState.isFetching) {
-             return; // Skip rebuild
+            _currentState =
+                newState; // Update state internally but don't rebuild
+            return;
           }
         }
         _previousSelection = newSelection;
