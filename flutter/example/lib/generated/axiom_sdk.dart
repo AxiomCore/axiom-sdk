@@ -1,5 +1,5 @@
 // GENERATED CODE – DO NOT EDIT.
-// Axiom SDK for 
+// Axiom SDK for app
 
 import 'dart:convert';
 import 'dart:typed_data';
@@ -20,7 +20,7 @@ class AxiomSdk {
     // Ensure Flutter bindings are initialized for asset loading.
     WidgetsFlutterBinding.ensureInitialized();
 
-    final contractData = await rootBundle.load('python-example_mobile_0.1.0.axiom');
+    final contractData = await rootBundle.load('.axiom');
     final contractBytes = contractData.buffer.asUint8List();
 
     // Get the singleton instance of the runtime.
@@ -28,7 +28,9 @@ class AxiomSdk {
     // Ensure the background isolate is running and ready.
     await runtime.init();
     // Start the runtime with the contract and base URL.
-    await runtime.startup(baseUrl: baseUrl, contractBytes: contractBytes, dbPath: dbPath);
+    const String? _signature = null;
+    const String? _publicKey = null;
+    await runtime.startup(baseUrl: baseUrl, contractBytes: contractBytes, dbPath: dbPath, signature: _signature, publicKey: _publicKey);
     // Return the fully initialized SDK.
     return AxiomSdk._(runtime);
   }
@@ -60,7 +62,7 @@ class AxiomSdk {
   /// Endpoint "list_users" (Stream)
   /// Path: /users
   /// IR endpoint id: 1
-  AxiomQuery<List<models.User>>  listUsers({required int limit}) {
+  AxiomQuery<List<models.User>>  listUsers({int? limit}) {
     final queryArgs = <String, dynamic>{
       'limit': limit,
     };
@@ -118,6 +120,27 @@ class AxiomSdk {
        return state.map((bytes) {
          final jsonObject = jsonDecode(utf8.decode(bytes));
          return jsonObject as int?;
+       });
+    });
+    });
+    return AxiomQuery(queryKey, stream);
+  }
+
+
+  /// Endpoint "internal_route" (Stream)
+  /// Path: /_internal
+  /// IR endpoint id: 4
+  AxiomQuery<void>  internalRoute() {
+    final queryArgs = <String, dynamic>{
+    };
+    final queryKey = 'internal_route:${jsonEncode(queryArgs)}';
+    final stream = AxiomQueryManager().watch<void>(queryKey, () {
+    var path = '/_internal';
+    final requestBytes = Uint8List(0);
+    final rawStream = _runtime.callStream(endpointId: 4, method: "GET", path: path, requestBytes: requestBytes);
+    return rawStream.map((state) {
+       return state.map((bytes) {
+         return null;
        });
     });
     });

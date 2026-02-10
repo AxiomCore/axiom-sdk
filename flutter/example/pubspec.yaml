@@ -60,6 +60,8 @@ dev_dependencies:
 # The following section is specific to Flutter packages.
 flutter:
   assets:
+    - .axiom
+    - e3454f79-59ce-41ad-b0d6-621876d64855.axiom
     - python-example_mobile_0.1.0.axiom
 
   # The following line ensures that the Material Icons font is

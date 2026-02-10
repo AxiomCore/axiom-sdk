@@ -3,6 +3,24 @@
 
 import 'package:example/generated/schema_axiom_generated.dart' as schema;
 
+enum UserRole {
+  admin,
+  user;
+
+  String toJson() => name;
+
+  static UserRole fromJson(dynamic value) {
+    if (value is String) {
+      return UserRole.values.firstWhere(
+        (e) => e.name == value,
+        orElse: () => throw Exception('Unknown UserRole value: $value'),
+      );
+    }
+    throw Exception('Expected String for UserRole, got $value');
+  }
+
+}
+
 class Message {
   final String message;
 
@@ -30,7 +48,7 @@ class Message {
 class User {
   final int id;
   final String name;
-  final String? role;
+  final UserRole? role;
   final String email;
 
   const User({
@@ -44,7 +62,7 @@ class User {
     return User(
       id: schemaModel.id!,
       name: schemaModel.name!,
-      role: schemaModel.role,
+      role: schemaModel.role != null ? UserRole.fromJson(schemaModel.role!) : null,
       email: schemaModel.email!,
     );
   }
@@ -52,7 +70,7 @@ class User {
     return User(
       id: json['id'],
       name: json['name'],
-      role: json['role'],
+      role: json['role'] != null ? UserRole.fromJson(json['role']) : null,
       email: json['email'],
     );
   }
@@ -60,7 +78,7 @@ class User {
     return {
       'id': id,
       'name': name,
-      'role': role,
+      'role': role?.toJson(),
       'email': email,
     };
   }

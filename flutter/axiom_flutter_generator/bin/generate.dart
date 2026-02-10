@@ -115,6 +115,24 @@ Future<void> _generateSdk({
   // Extract the filename to be used in the generated code
   final axiomFilename = axiomPath.split(Platform.pathSeparator).last;
 
+  // --- Read .trust-axiom.json ---
+  String? signature;
+  String? publicKey;
+  final trustFile = File('$projectRoot/.trust-axiom.json');
+  if (trustFile.existsSync()) {
+    try {
+      final content = trustFile.readAsStringSync();
+      final trustJson = jsonDecode(content) as Map<String, dynamic>;
+      signature = trustJson['signature'] as String?;
+      publicKey = trustJson['public_key'] as String?;
+      if (signature != null) {
+        stdout.writeln('🔐 Found signature in .trust-axiom.json');
+      }
+    } catch (e) {
+      stderr.writeln('⚠️ Warning: Failed to read .trust-axiom.json: $e');
+    }
+  }
+
   // --- Generate models.dart ---
   final modelsFile = File('${libOutDir.path}/models.dart');
   final modelsBuffer = StringBuffer();
@@ -177,8 +195,21 @@ Future<void> _generateSdk({
   buffer.writeln('    // Ensure the background isolate is running and ready.');
   buffer.writeln('    await runtime.init();');
   buffer.writeln('    // Start the runtime with the contract and base URL.');
+
+  if (signature != null) {
+    buffer.writeln("    const String? _signature = '$signature';");
+  } else {
+    buffer.writeln("    const String? _signature = null;");
+  }
+
+  if (publicKey != null) {
+    buffer.writeln("    const String? _publicKey = '$publicKey';");
+  } else {
+    buffer.writeln("    const String? _publicKey = null;");
+  }
+
   buffer.writeln(
-    '    await runtime.startup(baseUrl: baseUrl, contractBytes: contractBytes, dbPath: dbPath);',
+    '    await runtime.startup(baseUrl: baseUrl, contractBytes: contractBytes, dbPath: dbPath, signature: _signature, publicKey: _publicKey);',
   );
   buffer.writeln('    // Return the fully initialized SDK.');
   buffer.writeln('    return AxiomSdk._(runtime);');
@@ -189,12 +220,7 @@ Future<void> _generateSdk({
   final endpoints = (ir['endpoints'] as List?) ?? const [];
   for (final ep in endpoints) {
     if (ep is Map<String, dynamic>) {
-      _writeEndpointMethod(
-        buffer,
-        ep,
-        ir,
-        (ir['models'] as Map).cast<String, dynamic>(),
-      );
+      _writeEndpointMethod(buffer, ep, ir);
       buffer.writeln();
     }
   }
@@ -209,65 +235,23 @@ Future<void> _generateSdk({
 /// -------------------------------
 /// .axiom decoding helpers
 /// -------------------------------
-const _obfuscationKey = 'AxiomCoreSecretKey2025!';
-
-Uint8List _xorCipher(Uint8List data) {
-  final key = utf8.encode(_obfuscationKey);
-  final result = Uint8List(data.length);
-  for (var i = 0; i < data.length; i++) {
-    result[i] = data[i] ^ key[i % key.length];
-  }
-  return result;
-}
-
 Future<Map<String, dynamic>> _loadIrFromAxiom(String axiomPath) async {
   final file = File(axiomPath);
   if (!file.existsSync()) {
     throw Exception('Axiom file not found: $axiomPath');
   }
 
-  // 1. Read File Bytes
-  final fileBytes = await file.readAsBytes();
+  // 1. Read File Content
+  final content = await file.readAsString();
 
-  // 2. Decrypt Outer Layer (XOR)
-  final envelopeBytes = _xorCipher(fileBytes);
-
-  // 3. Parse JSON Envelope
-  final envelopeJsonStr = utf8
-      .decode(envelopeBytes, allowMalformed: true)
-      .trim();
-
-  Map<String, dynamic> envelope;
-  try {
-    envelope = jsonDecode(envelopeJsonStr);
-  } catch (e) {
-    // Fallback: try to find the JSON object boundaries if there is garbage
-    final start = envelopeJsonStr.indexOf('{');
-    final end = envelopeJsonStr.lastIndexOf('}');
-    if (start != -1 && end != -1) {
-      envelope = jsonDecode(envelopeJsonStr.substring(start, end + 1));
-    } else {
-      throw e;
-    }
-  }
-
-  final payloadBase64 = envelope['payload'] as String;
-
-  // 4. Decode Base64 (Inner Layer)
-  final innerObfuscated = base64Decode(payloadBase64);
-
-  // 5. De-obfuscate Inner Payload (XOR)
-  final plainBytes = _xorCipher(innerObfuscated);
-
-  // 6. Parse the Actual Contract
-  final plainJsonStr = utf8.decode(plainBytes);
-  final axiomFile = jsonDecode(plainJsonStr);
+  // 2. Parse the Actual Contract
+  final axiomFile = jsonDecode(content);
 
   if (axiomFile is! Map<String, dynamic>) {
-    throw Exception('Decrypted payload did not decode to a valid JSON object');
+    throw Exception('Axiom file did not decode to a valid JSON object');
   }
 
-  // 7. Extract IR
+  // 3. Extract IR
   final ir = axiomFile['ir'];
   if (ir is! Map<String, dynamic>) {
     throw Exception('IR object not found or invalid within the .axiom file');
@@ -378,9 +362,7 @@ void _writeEndpointMethod(
   StringBuffer buffer,
   Map<String, dynamic> ep,
   Map<String, dynamic> ir,
-  Map<String, dynamic> allModels,
 ) {
-  // ... (setup code unchanged) ...
   final rawName = ep['name'] as String? ?? 'endpoint';
   final fnName = _camelCase(rawName);
   final epId = ep['id'] ?? 0;
@@ -400,7 +382,9 @@ void _writeEndpointMethod(
     final name = param['name'] as String? ?? 'arg';
     final camelName = _camelCase(name);
     final typeRef = (param['typeRef'] as Map).cast<String, dynamic>();
-    final dartType = _dartModelTypeForTypeRef(typeRef, allModels);
+
+    // In SDK endpoints, we use scoped types (models.Type)
+    final dartType = _dartModelTypeForTypeRef(typeRef, scoped: true);
     final isOptional = param['isOptional'] as bool? ?? false;
 
     paramDecls.add(
@@ -452,24 +436,21 @@ void _writeEndpointMethod(
 
   final paramsString = paramDecls.isEmpty ? '' : '{${paramDecls.join(', ')}}';
 
-  // --- 1. Generate Stream Method ---
   buffer.writeln('  /// Endpoint "$rawName" (Stream)');
   buffer.writeln('  /// Path: $pathTemplate');
   buffer.writeln('  /// IR endpoint id: $epId');
   buffer.writeln('  AxiomQuery<$dartReturnType>  $fnName($paramsString) {');
 
-  // 1. Generate the Unique Key
-  // We use a Map literal of the arguments to create a stable key
   buffer.writeln('    final queryArgs = <String, dynamic>{');
   for (final p in paramInfos) {
-    // If it's a model, we need it to be json-encodable or use toString()
-    // Ideally models implement toJson() or toString() stably.
-    // For simplicity here, we rely on standard string interpolation/jsonEncode in the manager.
     final name = p['camelName'];
     if (p['typeRef']['kind'] == 'named') {
-      buffer.writeln(
-        "      '${p['origName']}': $name.toJson(),",
-      ); // Models must have toJson
+      // Models and Enums must have toJson
+      if (p['isOptional']) {
+        buffer.writeln("      '${p['origName']}': $name?.toJson(),");
+      } else {
+        buffer.writeln("      '${p['origName']}': $name.toJson(),");
+      }
     } else {
       buffer.writeln("      '${p['origName']}': $name,");
     }
@@ -477,7 +458,6 @@ void _writeEndpointMethod(
   buffer.writeln('    };');
   buffer.writeln("    final queryKey = '$rawName:\${jsonEncode(queryArgs)}';");
 
-  // 2. Define the Create Function (The closure that calls Rust)
   buffer.writeln(
     '    final stream = AxiomQueryManager().watch<$dartReturnType>(queryKey, () {',
   );
@@ -502,8 +482,9 @@ void _writeEndpointMethod(
   }
 
   if (bodyEntries.isNotEmpty) {
+    final bodyVar = bodyEntries.first;
     buffer.writeln(
-      "    final requestBytes = Uint8List.fromList(utf8.encode(jsonEncode(${bodyEntries.first})));",
+      "    final requestBytes = Uint8List.fromList(utf8.encode(jsonEncode($bodyVar)));",
     );
   } else {
     buffer.writeln("    final requestBytes = Uint8List(0);");
@@ -514,8 +495,6 @@ void _writeEndpointMethod(
   );
 
   buffer.writeln("    return rawStream.map((state) {");
-
-  // Use state.map() helper
   buffer.writeln("       return state.map((bytes) {");
 
   if (responseShape.kind == _ResponseKind.voidType) {
@@ -551,11 +530,11 @@ void _writeEndpointMethod(
         buffer.writeln('         return jsonObject;');
     }
   }
-  buffer.writeln("       });"); // Close map callback
-  buffer.writeln("    });"); // Close stream map
+  buffer.writeln("       });");
+  buffer.writeln("    });");
   buffer.writeln('    });');
   buffer.writeln("    return AxiomQuery(queryKey, stream);");
-  buffer.writeln('  }'); // --- FIX: Close Stream Method ---
+  buffer.writeln('  }');
   buffer.writeln();
 }
 
@@ -575,8 +554,52 @@ void _writeModelsFile(
   buffer.writeln("import 'package:$packageName/$schemaImportPath' as schema;");
   buffer.writeln();
 
+  final enums = (ir['enums'] as Map?)?.cast<String, dynamic>() ?? {};
   final models = (ir['models'] as Map?)?.cast<String, dynamic>() ?? {};
 
+  // ---------------------------------------------------------
+  // 1. Generate Enums
+  // ---------------------------------------------------------
+  for (final enumDef in enums.values) {
+    if (enumDef is! Map<String, dynamic>) continue;
+    final enumName = _pascalCase(enumDef['name']);
+    final values = (enumDef['values'] as List?)?.cast<String>() ?? [];
+
+    buffer.writeln('enum $enumName {');
+    for (var i = 0; i < values.length; i++) {
+      final val = values[i];
+      final isLast = i == values.length - 1;
+      buffer.writeln('  $val${isLast ? ';' : ','}');
+    }
+    buffer.writeln();
+
+    // toJson
+    buffer.writeln('  String toJson() => name;');
+    buffer.writeln();
+
+    // fromJson
+    buffer.writeln('  static $enumName fromJson(dynamic value) {');
+    buffer.writeln('    if (value is String) {');
+    buffer.writeln('      return $enumName.values.firstWhere(');
+    buffer.writeln('        (e) => e.name == value,');
+    buffer.writeln(
+      '        orElse: () => throw Exception(\'Unknown $enumName value: \$value\'),',
+    );
+    buffer.writeln('      );');
+    buffer.writeln('    }');
+    buffer.writeln(
+      '    throw Exception(\'Expected String for $enumName, got \$value\');',
+    );
+    buffer.writeln('  }');
+    buffer.writeln();
+
+    buffer.writeln('}');
+    buffer.writeln();
+  }
+
+  // ---------------------------------------------------------
+  // 2. Generate Models
+  // ---------------------------------------------------------
   for (final modelDef in models.values) {
     if (modelDef is! Map<String, dynamic>) continue;
 
@@ -585,28 +608,26 @@ void _writeModelsFile(
 
     final fields = (modelDef['fields'] as List?) ?? [];
 
-    // Generate final properties
+    // Properties
     for (final field in fields) {
       if (field is! Map<String, dynamic>) continue;
       final fieldName = _camelCase(field['name']);
       final typeRef = (field['typeRef'] as Map).cast<String, dynamic>();
-      final isOptional = field['isOptional'] as bool? ?? true;
-      String dartType = _dartModelTypeForTypeRef(
-        typeRef,
-        models,
-      ); // Use a new type mapper
+      final isOptional = field['isOptional'] as bool? ?? false;
+
+      String dartType = _dartModelTypeForTypeRef(typeRef, scoped: false);
       if (isOptional) dartType += '?';
 
       buffer.writeln('  final $dartType $fieldName;');
     }
     buffer.writeln();
 
-    // Generate the constructor
+    // Constructor
     buffer.writeln('  const $modelName({');
     for (final field in fields) {
       if (field is! Map<String, dynamic>) continue;
       final fieldName = _camelCase(field['name']);
-      final isOptional = field['isOptional'] as bool? ?? true;
+      final isOptional = field['isOptional'] as bool? ?? false;
       if (!isOptional) {
         buffer.writeln('    required this.$fieldName,');
       } else {
@@ -616,7 +637,7 @@ void _writeModelsFile(
     buffer.writeln('  });');
     buffer.writeln();
 
-    // Generate a `fromSchema` factory constructor
+    // fromSchema
     buffer.writeln(
       '  factory $modelName.fromSchema(schema.$modelName schemaModel) {',
     );
@@ -630,28 +651,46 @@ void _writeModelsFile(
       final isOptional = field['isOptional'] as bool? ?? false;
       final bang = isOptional ? '' : '!';
 
-      // Handle nested models and lists of models
       if (kind == 'named') {
-        final nestedModelName = _pascalCase(typeRef['value']);
-        if (isOptional) {
-          buffer.writeln(
-            '      $camelName: schemaModel.$camelName != null ? models.$nestedModelName.fromSchema(schemaModel.$camelName!) : null,',
-          );
+        final rawTypeName = typeRef['value'] as String;
+        final typeName = _pascalCase(rawTypeName);
+        final isEnum = enums.containsKey(rawTypeName);
+
+        if (isEnum) {
+          if (isOptional) {
+            buffer.writeln(
+              '      $camelName: schemaModel.$camelName != null ? $typeName.fromJson(schemaModel.$camelName!) : null,',
+            );
+          } else {
+            buffer.writeln(
+              '      $camelName: $typeName.fromJson(schemaModel.$camelName!),',
+            );
+          }
         } else {
-          buffer.writeln(
-            '      $camelName: models.$nestedModelName.fromSchema(schemaModel.$camelName!),',
-          );
+          if (isOptional) {
+            buffer.writeln(
+              '      $camelName: schemaModel.$camelName != null ? $typeName.fromSchema(schemaModel.$camelName!) : null,',
+            );
+          } else {
+            buffer.writeln(
+              '      $camelName: $typeName.fromSchema(schemaModel.$camelName!),',
+            );
+          }
         }
       } else if (kind == 'list' &&
           (typeRef['value'] as Map)['kind'] == 'named') {
-        final innerModelName = _pascalCase((typeRef['value'] as Map)['value']);
+        final rawInnerType = (typeRef['value'] as Map)['value'] as String;
+        final innerType = _pascalCase(rawInnerType);
+        final isEnum = enums.containsKey(rawInnerType);
+        final method = isEnum ? 'fromJson' : 'fromSchema';
+
         if (isOptional) {
           buffer.writeln(
-            '      $camelName: schemaModel.$camelName?.map((e) => models.$innerModelName.fromSchema(e)).toList(),',
+            '      $camelName: schemaModel.$camelName?.map((e) => $innerType.$method(e)).toList(),',
           );
         } else {
           buffer.writeln(
-            '      $camelName: schemaModel.$camelName!.map((e) => models.$innerModelName.fromSchema(e)).toList(),',
+            '      $camelName: schemaModel.$camelName!.map((e) => $innerType.$method(e)).toList(),',
           );
         }
       } else {
@@ -661,31 +700,44 @@ void _writeModelsFile(
     buffer.writeln('    );');
     buffer.writeln('  }');
 
-    // --- `fromJson` factory ---
+    // fromJson
     buffer.writeln(
       '  factory $modelName.fromJson(Map<String, dynamic> json) {',
     );
     buffer.writeln('    return $modelName(');
     for (final field in fields) {
       if (field is! Map<String, dynamic>) continue;
-      final origName = field['name'] as String; // The key in the JSON
-      final camelName = _camelCase(
-        origName,
-      ); // The property name in the Dart class
+      final origName = field['name'] as String;
+      final camelName = _camelCase(origName);
       final typeRef = (field['typeRef'] as Map).cast<String, dynamic>();
       final kind = typeRef['kind'] as String;
+      final isOptional = field['isOptional'] as bool? ?? false;
 
       String parsingLogic;
       if (kind == 'named') {
-        final nestedModelName = _pascalCase(typeRef['value']);
-        parsingLogic =
-            'json[\'$origName\'] != null ? models.$nestedModelName.fromJson(json[\'$origName\']) : null';
+        final nestedType = _pascalCase(typeRef['value']);
+
+        if (isOptional) {
+          parsingLogic =
+              'json[\'$origName\'] != null ? $nestedType.fromJson(json[\'$origName\']) : null';
+        } else {
+          // Required field: Do not return null.
+          parsingLogic = '$nestedType.fromJson(json[\'$origName\'])';
+        }
       } else if (kind == 'list' &&
           (typeRef['value'] as Map)['kind'] == 'named') {
-        final innerModelName = _pascalCase((typeRef['value'] as Map)['value']);
-        parsingLogic =
-            '(json[\'$origName\'] as List<dynamic>?)?.map((e) => models.$innerModelName.fromJson(e)).toList()';
+        final innerType = _pascalCase((typeRef['value'] as Map)['value']);
+
+        if (isOptional) {
+          parsingLogic =
+              '(json[\'$origName\'] as List<dynamic>?)?.map((e) => $innerType.fromJson(e)).toList()';
+        } else {
+          // Required List
+          parsingLogic =
+              '(json[\'$origName\'] as List<dynamic>).map((e) => $innerType.fromJson(e)).toList()';
+        }
       } else {
+        // Primitive
         parsingLogic = 'json[\'$origName\']';
       }
       buffer.writeln('      $camelName: $parsingLogic,');
@@ -693,7 +745,7 @@ void _writeModelsFile(
     buffer.writeln('    );');
     buffer.writeln('  }');
 
-    // --- `toJson` method ---
+    // toJson
     buffer.writeln('  Map<String, dynamic> toJson() {');
     buffer.writeln('    return {');
     for (final field in fields) {
@@ -722,11 +774,11 @@ void _writeModelsFile(
   }
 }
 
-// Add this new type mapper for the model layer
+// Updated type mapper
 String _dartModelTypeForTypeRef(
-  Map<String, dynamic> t,
-  Map<String, dynamic> allModels,
-) {
+  Map<String, dynamic> t, {
+  required bool scoped, // true = models.Type, false = Type
+}) {
   final kind = t['kind'] as String;
   switch (kind) {
     case 'int32':
@@ -743,16 +795,14 @@ String _dartModelTypeForTypeRef(
     case 'bytes':
       return 'Uint8List';
     case 'named':
-      // This is the key change: prefix with 'models.'
-      return 'models.${_pascalCase(t['value'] as String)}';
+      final name = _pascalCase(t['value'] as String);
+      return scoped ? 'models.$name' : name;
     case 'list':
       final innerType = (t['value'] as Map).cast<String, dynamic>();
-      // Recursively call to handle nested types like List<models.User>
-      return 'List<${_dartModelTypeForTypeRef(innerType, allModels)}>';
+      return 'List<${_dartModelTypeForTypeRef(innerType, scoped: scoped)}>';
     case 'json':
       return 'Map<String, dynamic>';
     case 'map':
-      // Simplified for now, as complex map keys/values are often handled as JSON.
       return 'Map<String, dynamic>';
     case 'void':
       return 'void';

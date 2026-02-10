@@ -46,7 +46,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       id: randomId,
       name: "Yash $randomId",
       email: "yash@genie.ai", // This will cause a validation error in Rust
-      role: "admsdfdsin",
+      role: models.UserRole.admin,
     );
 
     // We only listen once for the result of this action.

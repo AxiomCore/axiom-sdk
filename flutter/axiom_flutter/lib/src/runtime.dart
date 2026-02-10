@@ -90,8 +90,10 @@ typedef AxiomCallback = Void Function(Pointer<AxiomResponseBuffer> response);
 typedef _AxiomInitializeNative = Int32 Function(AxiomString, AxiomString);
 typedef _AxiomInitialize = int Function(AxiomString, AxiomString);
 
-typedef _AxiomLoadContractNative = Int32 Function(AxiomBuffer);
-typedef _AxiomLoadContract = int Function(AxiomBuffer);
+typedef _AxiomLoadContractNative =
+    Int32 Function(AxiomBuffer, AxiomString, AxiomString);
+typedef _AxiomLoadContract =
+    int Function(AxiomBuffer, AxiomString, AxiomString);
 
 typedef _AxiomRegisterCallbackNative =
     Void Function(Pointer<NativeFunction<AxiomCallback>>);
@@ -378,6 +380,8 @@ class AxiomRuntime {
     required String baseUrl,
     required Uint8List contractBytes,
     String? dbPath,
+    String? signature,
+    String? publicKey,
   }) async {
     final String resolvedDbPath;
     if (dbPath != null) {
@@ -414,19 +418,65 @@ class AxiomRuntime {
       throw Exception('Failed to initialize runtime. Error code: $result');
     }
 
-    loadContract(contractBytes);
+    loadContract(contractBytes, signature, publicKey);
   }
 
-  void loadContract(Uint8List contractBytes) {
+  void loadContract(
+    Uint8List contractBytes,
+    String? signature,
+    String? publicKey,
+  ) {
     final ptr = calloc<Uint8>(contractBytes.length);
     ptr.asTypedList(contractBytes.length).setAll(0, contractBytes);
     final axBuf = calloc<AxiomBuffer>();
     axBuf.ref
       ..ptr = ptr
       ..len = contractBytes.length;
-    final result = _loadContractFfi(axBuf.ref);
+
+    // Prepare Signature
+    final Pointer<AxiomString> sigStr = calloc<AxiomString>();
+    Pointer<Uint8> sigPtr = nullptr;
+    if (signature != null) {
+      final units = utf8.encode(signature);
+      sigPtr = calloc<Uint8>(units.length);
+      sigPtr.asTypedList(units.length).setAll(0, units);
+      sigStr.ref
+        ..ptr = sigPtr
+        ..len = units.length;
+    } else {
+      sigStr.ref
+        ..ptr = nullptr
+        ..len = 0;
+    }
+
+    // Prepare Public Key
+    final Pointer<AxiomString> pkStr = calloc<AxiomString>();
+    Pointer<Uint8> pkPtr = nullptr;
+    if (publicKey != null) {
+      final units = utf8.encode(publicKey);
+      pkPtr = calloc<Uint8>(units.length);
+      pkPtr.asTypedList(units.length).setAll(0, units);
+      pkStr.ref
+        ..ptr = pkPtr
+        ..len = units.length;
+    } else {
+      pkStr.ref
+        ..ptr = nullptr
+        ..len = 0;
+    }
+
+    final result = _loadContractFfi(axBuf.ref, sigStr.ref, pkStr.ref);
+
+    // Free memory
     calloc.free(ptr);
     calloc.free(axBuf);
+
+    if (sigPtr != nullptr) calloc.free(sigPtr);
+    calloc.free(sigStr);
+
+    if (pkPtr != nullptr) calloc.free(pkPtr);
+    calloc.free(pkStr);
+
     if (result != FfiError.success) {
       throw Exception(
         'Failed to load Axiom contract. Error: ${FfiError.name(result)}',
