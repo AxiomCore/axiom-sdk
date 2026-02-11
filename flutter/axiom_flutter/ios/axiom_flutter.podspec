@@ -10,14 +10,25 @@ Pod::Spec.new do |s|
   s.dependency 'Flutter'
   s.platform = :ios, '13.0'
 
+  s.frameworks = 'SystemConfiguration', 'Security'
+  s.libraries = 'bz2', 'z'
+
   s.vendored_frameworks = 'Frameworks/AxiomRuntime.xcframework'
 
+  # Settings for the Plugin itself
   s.pod_target_xcconfig = { 
     'DEFINES_MODULE' => 'YES',
-    # --- ADD THIS LINE ---
-    # This ensures all symbols in the static library are exported 
-    # so Dart FFI can find them.
+    'STRIP_STYLE' => 'non-global',
+    'DEAD_CODE_STRIPPING' => 'NO',
     'OTHER_LDFLAGS' => '-all_load'
   }
+
+  # --- AUTOMATION STEP ---
+  # These settings propagate to the developer's "Runner" target automatically
+  s.user_target_xcconfig = { 
+    'STRIP_STYLE' => 'non-global',
+    'DEAD_CODE_STRIPPING' => 'NO'
+  }
+
   s.swift_version = '5.0'
 end
