@@ -1,11 +1,13 @@
 // GENERATED CODE – DO NOT EDIT.
-// User-facing data models.
+// ignore_for_file: unused_import
+// ignore_for_file: invalid_null_aware_operator
 
-import 'package:example/generated/schema_axiom_generated.dart' as schema;
+import 'dart:typed_data';
 
 enum UserRole {
   admin,
-  user;
+  user,
+  ;
 
   String toJson() => name;
 
@@ -18,7 +20,6 @@ enum UserRole {
     }
     throw Exception('Expected String for UserRole, got $value');
   }
-
 }
 
 class Message {
@@ -28,16 +29,12 @@ class Message {
     required this.message,
   });
 
-  factory Message.fromSchema(schema.Message schemaModel) {
-    return Message(
-      message: schemaModel.message!,
-    );
-  }
   factory Message.fromJson(Map<String, dynamic> json) {
     return Message(
       message: json['message'],
     );
   }
+
   Map<String, dynamic> toJson() {
     return {
       'message': message,
@@ -58,22 +55,15 @@ class User {
     required this.email,
   });
 
-  factory User.fromSchema(schema.User schemaModel) {
-    return User(
-      id: schemaModel.id!,
-      name: schemaModel.name!,
-      role: schemaModel.role != null ? UserRole.fromJson(schemaModel.role!) : null,
-      email: schemaModel.email!,
-    );
-  }
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
       id: json['id'],
       name: json['name'],
-      role: json['role'] != null ? UserRole.fromJson(json['role']) : null,
+      role: (json['role'] == null ? null : UserRole.fromJson(json['role'])),
       email: json['email'],
     );
   }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

@@ -10,6 +10,11 @@ import 'package:ffi/ffi.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'state.dart';
+import 'query.dart';
+import 'query_manager.dart';
+import 'internal/axiom_codec.dart';
+import 'internal/query_key.dart';
+
 export 'state.dart';
 
 // --- FFI Structs (must match Rust) ---
@@ -289,9 +294,6 @@ class AxiomRuntime {
         return;
       }
 
-      print("eventTypeValue::$eventTypeValue");
-
-      // UPDATED: New rich error handling logic
       if (eventTypeValue == EventType.error) {
         AxiomError richError;
         if (errorPtr != 0 && errorLen > 0) {
@@ -301,7 +303,6 @@ class AxiomRuntime {
             final Map<String, dynamic> jsonMap = jsonDecode(jsonStr);
             richError = AxiomError.fromJson(jsonMap);
           } catch (e) {
-            // Fallback if JSON parsing fails
             richError = AxiomError(
               stage: ErrorStage.ffiBoundary,
               category: ErrorCategory.runtime,
@@ -311,7 +312,6 @@ class AxiomRuntime {
             );
           }
         } else {
-          // Fallback for catastrophic errors where Rust couldn't even form a JSON string
           richError = AxiomError(
             stage: ErrorStage.runtime,
             category: ErrorCategory.unknown,
@@ -482,6 +482,82 @@ class AxiomRuntime {
         'Failed to load Axiom contract. Error: ${FfiError.name(result)}',
       );
     }
+  }
+
+  /// High-level API to perform a query or mutation.
+  ///
+  /// This abstracts the complexities of URL construction, serialization,
+  /// and caching away from the generated code.
+  AxiomQuery<T> send<T>({
+    required int endpointId,
+    required String method,
+    required String path,
+    Map<String, dynamic> args = const {},
+    Map<String, dynamic>? pathParams,
+    Map<String, dynamic>? queryParams,
+    Object? body,
+    required T Function(dynamic json) decoder,
+  }) {
+    final endpointKey = 'endpoint_$endpointId';
+    final queryKey = AxiomQueryKey.build(endpoint: endpointKey, args: args);
+
+    final stream = AxiomQueryManager().watch<T>(queryKey, () {
+      var finalPath = path;
+      if (pathParams != null) {
+        pathParams.forEach((key, value) {
+          finalPath = finalPath.replaceAll('{$key}', value.toString());
+        });
+      }
+
+      if (queryParams != null && queryParams.isNotEmpty) {
+        final uri = Uri(
+          queryParameters: queryParams.map((k, v) => MapEntry(k, v.toString())),
+        );
+        final separator = finalPath.contains('?') ? '&' : '?';
+        finalPath += '$separator${uri.query}';
+      }
+
+      final requestBytes = AxiomCodec.encodeBody(body);
+
+      return callStream(
+        endpointId: endpointId,
+        method: method,
+        path: finalPath,
+        requestBytes: requestBytes,
+      ).map((state) {
+        // If the state is already an error from Rust, just pass it through
+        if (state.hasError) return state.map((_) => null as T);
+
+        // If we have data, try to decode it
+        if (state.data != null) {
+          try {
+            final decodedData = AxiomCodec.decode(state.data!, decoder);
+            return AxiomState.success(
+              decodedData,
+              state.source,
+              isFetching: state.isFetching,
+            );
+          } catch (e) {
+            // 3.1 Standardize Errors: Handle casting/format errors during deserialize
+            return AxiomState.error(
+              AxiomError(
+                stage: ErrorStage.deserialize,
+                category: ErrorCategory.serialization,
+                code: const CodecError(),
+                message: "Failed to decode response: $e",
+                retryable: false,
+                details: e.toString(),
+              ),
+              previousData: null,
+            );
+          }
+        }
+
+        return state.map((_) => null as T);
+      });
+    });
+
+    return AxiomQuery(queryKey, stream);
   }
 
   Stream<AxiomState<Uint8List>> callStream({
