@@ -6,6 +6,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:ansicolor/ansicolor.dart';
 import 'package:ffi/ffi.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -16,8 +17,6 @@ import 'internal/axiom_codec.dart';
 import 'internal/query_key.dart';
 
 export 'state.dart';
-
-// --- FFI Structs (must match Rust) ---
 
 base class AxiomString extends Struct {
   external Pointer<Uint8> ptr;
@@ -40,6 +39,7 @@ class EventType {
 }
 
 class FfiError {
+  static const int successUnverified = -1;
   static const int success = 0;
   static const int unknownError = 1;
   static const int requestParsingFailed = 2;
@@ -58,6 +58,7 @@ class FfiError {
 
   static String name(int code) {
     return switch (code) {
+      successUnverified => 'SuccessUnverified',
       success => 'Success',
       unknownError => 'UnknownError',
       requestParsingFailed => 'RequestParsingFailed',
@@ -477,6 +478,11 @@ class AxiomRuntime {
     if (pkPtr != nullptr) calloc.free(pkPtr);
     calloc.free(pkStr);
 
+    if (result == FfiError.successUnverified) {
+      _printSecurityWarning();
+      return;
+    }
+
     if (result != FfiError.success) {
       throw Exception(
         'Failed to load Axiom contract. Error: ${FfiError.name(result)}',
@@ -617,5 +623,62 @@ class AxiomRuntime {
     };
 
     return controller.stream;
+  }
+
+  void _printSecurityWarning() {
+    final warningPen = AnsiPen()..yellow();
+
+    print('');
+    print(
+      warningPen(
+        '┌────────────────────────────────────────────────────────────┐',
+      ),
+    );
+    print(
+      warningPen(
+        '│ ⚠️  AXIOM SECURITY WARNING                                  │',
+      ),
+    );
+    print(
+      warningPen(
+        '├────────────────────────────────────────────────────────────┤',
+      ),
+    );
+    print(
+      warningPen(
+        '│ You are loading an UNVERIFIED contract.                    │',
+      ),
+    );
+    print(
+      warningPen(
+        '│ Unsigned contracts skip cryptographic integrity checks     │',
+      ),
+    );
+    print(
+      warningPen(
+        '│ and could potentially execute malicious logic.             │',
+      ),
+    );
+    print(
+      warningPen(
+        '│                                                            │',
+      ),
+    );
+    print(
+      warningPen(
+        '│ Learn more about the risks and how to sign contracts:      │',
+      ),
+    );
+    print(
+      warningPen(
+        '│ https://axiomcore.dev/docs/security/unsigned-contracts     │',
+      ),
+    );
+    print(
+      warningPen(
+        '└────────────────────────────────────────────────────────────┘',
+      ),
+    );
+    print('');
   }
 }
