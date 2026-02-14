@@ -90,7 +90,6 @@ base class AxiomResponseBuffer extends Struct {
   external AxiomBuffer errorMessage;
 }
 
-// --- FFI Function Signatures ---
 typedef AxiomCallback = Void Function(Pointer<AxiomResponseBuffer> response);
 
 typedef _AxiomInitializeNative = Int32 Function(AxiomString, AxiomString);
@@ -183,7 +182,7 @@ void _runRustEventLoop(List<Object> args) {
   while (true) {
     processResponses();
     // A small sleep can prevent the isolate from pegging a CPU core at 100%
-    // if there are no events to process. Adjust duration as needed.
+    // if there are no events to process.
     sleep(const Duration(milliseconds: 5));
   }
 }
@@ -323,7 +322,6 @@ class AxiomRuntime {
         }
         controller.add(AxiomState.error(richError));
 
-        // Close stream on non-recoverable configuration errors
         const nonRecoverableErrors = [
           FfiError.unknownEndpoint,
           FfiError.invalidContract,
@@ -434,7 +432,6 @@ class AxiomRuntime {
       ..ptr = ptr
       ..len = contractBytes.length;
 
-    // Prepare Signature
     final Pointer<AxiomString> sigStr = calloc<AxiomString>();
     Pointer<Uint8> sigPtr = nullptr;
     if (signature != null) {
@@ -531,10 +528,8 @@ class AxiomRuntime {
         path: finalPath,
         requestBytes: requestBytes,
       ).map((state) {
-        // If the state is already an error from Rust, just pass it through
         if (state.hasError) return state.map((_) => null as T);
 
-        // If we have data, try to decode it
         if (state.data != null) {
           try {
             final decodedData = AxiomCodec.decode(state.data!, decoder);
@@ -544,7 +539,6 @@ class AxiomRuntime {
               isFetching: state.isFetching,
             );
           } catch (e) {
-            // 3.1 Standardize Errors: Handle casting/format errors during deserialize
             return AxiomState.error(
               AxiomError(
                 stage: ErrorStage.deserialize,
@@ -578,7 +572,6 @@ class AxiomRuntime {
 
     controller.add(AxiomState.loading());
 
-    // Allocate all strings and buffers
     final pathUnits = utf8.encode(path);
     final pathPtr = calloc<Uint8>(pathUnits.length);
     pathPtr.asTypedList(pathUnits.length).setAll(0, pathUnits);
@@ -606,8 +599,6 @@ class AxiomRuntime {
       controller.addError(e, st);
       controller.close();
     } finally {
-      // IMPORTANT: Defer freeing until the next microtask.
-      // Rust may still be reading these buffers after _callFfi returns.
       Future.microtask(() {
         calloc.free(pathPtr);
         calloc.free(pathStr);

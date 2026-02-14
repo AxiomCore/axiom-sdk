@@ -61,7 +61,6 @@ class _AxiomBuilderState<T, R> extends State<AxiomBuilder<T, R>> {
   @override
   void didUpdateWidget(covariant AxiomBuilder<T, R> oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // If the query key changes (different params or endpoint), re-subscribe.
     if (oldWidget.query.key != widget.query.key) {
       _unsubscribe();
       _subscribe();
@@ -70,7 +69,6 @@ class _AxiomBuilderState<T, R> extends State<AxiomBuilder<T, R>> {
 
   void _subscribe() {
     _subscription = widget.query.stream.listen((rawState) {
-      // 1. Transform Step: Convert AxiomState<T> -> AxiomState<R>
       final AxiomState<R> newState;
 
       if (rawState.data != null) {
@@ -82,7 +80,6 @@ class _AxiomBuilderState<T, R> extends State<AxiomBuilder<T, R>> {
             isFetching: rawState.isFetching,
           );
         } else {
-          // If no transform is provided, we assume T == R
           newState = AxiomState.success(
             rawState.data as R,
             rawState.source,
@@ -92,34 +89,26 @@ class _AxiomBuilderState<T, R> extends State<AxiomBuilder<T, R>> {
       } else if (rawState.hasError) {
         newState = AxiomState.error(
           rawState.error!,
-          previousData:
-              _currentState?.data, // Keep showing stale data if available
+          previousData: _currentState?.data,
           previousSource: _currentState?.source,
         );
       } else {
         newState = AxiomState.loading();
       }
 
-      // 2. Selector Step (Optimization)
       if (widget.selector != null && newState.data != null) {
         final newSelection = widget.selector!(newState.data as R);
 
-        // If we have previous data, check if selection changed
         if (_currentState?.data != null &&
             _deepEquals(_previousSelection, newSelection)) {
-          // Data changed, but the selected fields did NOT.
-          // However, we MUST still rebuild if `isFetching` status changed,
-          // otherwise loading indicators won't update.
           if (_currentState?.isFetching == newState.isFetching) {
-            _currentState =
-                newState; // Update state internally but don't rebuild
+            _currentState = newState;
             return;
           }
         }
         _previousSelection = newSelection;
       }
 
-      // 3. Update UI
       if (mounted) {
         setState(() {
           _currentState = newState;
@@ -132,7 +121,6 @@ class _AxiomBuilderState<T, R> extends State<AxiomBuilder<T, R>> {
     _subscription?.cancel();
     _subscription = null;
     _previousSelection = null;
-    // We don't clear _currentState so we don't flash loading if swapping similar queries
   }
 
   @override
@@ -145,25 +133,20 @@ class _AxiomBuilderState<T, R> extends State<AxiomBuilder<T, R>> {
   Widget build(BuildContext context) {
     final state = _currentState;
 
-    // 1. Initial Loading (No data yet)
     if (state == null || (state.isLoading && state.data == null)) {
       return widget.loading?.call(context) ?? const SizedBox.shrink();
     }
 
-    // 2. Error (Blocking - no previous data to show)
     if (state.hasError && state.data == null) {
       if (widget.error != null) {
         return widget.error!(context, state.error!);
       }
-      // Default error view if none provided
       return Center(child: Text('Error: ${state.error}'));
     }
 
-    // 3. Data (Success, or Error with Stale Data)
     return widget.builder(context, state, state.data as R);
   }
 
-  /// Deep equality check for Lists (used for selector: [a, b])
   bool _deepEquals(Object? a, Object? b) {
     if (identical(a, b)) return true;
     if (a is List && b is List) {

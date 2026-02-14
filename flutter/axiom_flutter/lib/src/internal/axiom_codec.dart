@@ -7,9 +7,9 @@ class AxiomCodec {
     if (body is Uint8List) return body;
     if (body is String) return Uint8List.fromList(utf8.encode(body));
 
-    // DateTime is a special case at the root level (though rare as a body)
-    if (body is DateTime)
+    if (body is DateTime) {
       return Uint8List.fromList(utf8.encode('"${body.toIso8601String()}"'));
+    }
 
     return Uint8List.fromList(utf8.encode(jsonEncode(body)));
   }

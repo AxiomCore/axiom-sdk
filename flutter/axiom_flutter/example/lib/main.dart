@@ -22,26 +22,17 @@ class _MyAppState extends State<MyApp> {
 
     try {
       final runtime = AxiomRuntime();
-
-      // 1. Initialize the FFI Isolate
       await runtime.init();
-
-      // 2. Try to call a Rust function via FFI
-      // We use dummy data just to see if the call reaches Rust
-      // Note: This will likely return an error code from Rust because
-      // the contract is empty, but THAT IS GOOD—it means Rust responded!
       await runtime.startup(
-        baseUrl: "https://api.test.com",
-        contractBytes: Uint8List.fromList([0, 1, 2, 3]), // Dummy bytes
+        baseUrl: "",
+        contractBytes: Uint8List.fromList([0]),
       );
 
       setState(() {
         _isSuccess = true;
         _status = '✅ Connection Successful!\nRust is responding via FFI.';
       });
-    } catch (e, s) {
-      print(e);
-      print(s);
+    } catch (e) {
       setState(() {
         _isSuccess = false;
         _status = '❌ Connection Failed!\n$e';

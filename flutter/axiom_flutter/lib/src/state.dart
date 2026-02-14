@@ -1,4 +1,3 @@
-/// Mirrors Rust's ErrorStage
 enum ErrorStage {
   configuration,
   contractLoad,
@@ -19,7 +18,6 @@ enum ErrorStage {
   );
 }
 
-/// Mirrors Rust's ErrorCategory
 enum ErrorCategory {
   contract,
   validation,
@@ -39,7 +37,6 @@ enum ErrorCategory {
       );
 }
 
-/// Typed Error Codes using Dart 3 Sealed Classes
 sealed class AxiomErrorCode {
   const AxiomErrorCode();
 
@@ -150,8 +147,6 @@ class AxiomError {
   }
 }
 
-// --- Main State Class ---
-
 enum AxiomStatus { loading, success, error }
 
 enum AxiomSource { none, cache, network }
@@ -159,7 +154,7 @@ enum AxiomSource { none, cache, network }
 class AxiomState<T> {
   final AxiomStatus status;
   final T? data;
-  final AxiomError? error; // UPDATED: Changed from Object? to AxiomError?
+  final AxiomError? error;
   final AxiomSource source;
   final bool isFetching;
 
@@ -181,11 +176,9 @@ class AxiomState<T> {
     );
   }
 
-  /// Initial loading state
   factory AxiomState.loading() =>
       const AxiomState._(status: AxiomStatus.loading, isFetching: true);
 
-  /// Success state (from cache or network)
   factory AxiomState.success(
     T data,
     AxiomSource source, {
@@ -197,8 +190,6 @@ class AxiomState<T> {
     isFetching: isFetching,
   );
 
-  /// Error state
-  // UPDATED: Factory now requires a typed AxiomError
   factory AxiomState.error(
     AxiomError error, {
     T? previousData,
@@ -206,7 +197,7 @@ class AxiomState<T> {
   }) => AxiomState._(
     status: AxiomStatus.error,
     error: error,
-    data: previousData, // Keep showing old data if available
+    data: previousData,
     source: previousSource ?? AxiomSource.none,
     isFetching: false,
   );

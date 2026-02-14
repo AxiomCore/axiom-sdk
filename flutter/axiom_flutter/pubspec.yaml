@@ -1,7 +1,9 @@
 name: axiom_flutter
-description: "A new Flutter package project."
+description: "Axiom Flutter SDK"
 version: 0.0.1
-homepage:
+homepage: https://github.com/AxiomCore/axiom-sdk
+repository: https://github.com/AxiomCore/axiom-sdk
+issue_tracker: https://github.com/AxiomCore/axiom-sdk/issues
 
 environment:
   sdk: ^3.8.0
@@ -11,8 +13,8 @@ dependencies:
   flutter:
     sdk: flutter
   ffi: ^2.1.4
-  path_provider:
-  ansicolor:
+  path_provider: ^2.1.5
+  ansicolor: ^2.0.3
 
 dev_dependencies:
   flutter_test:
