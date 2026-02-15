@@ -55,7 +55,11 @@ Add `axiom_flutter` to your `pubspec.yaml`. You will also need the compiled Rust
 
 ```yaml
 dependencies:
-  axiom_flutter: ^0.0.1
+  axiom_flutter:
+    git:
+      url: https://github.com/AxiomCore/axiom-sdk.git
+      ref: main
+      path: flutter/axiom_flutter
   path_provider: ^2.0.0
 ```
 
