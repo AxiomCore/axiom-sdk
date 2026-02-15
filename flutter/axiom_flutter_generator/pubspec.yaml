@@ -1,8 +1,9 @@
 name: axiom_flutter_generator
-description: A starting point for Dart libraries or applications.
-version: 1.0.0
-publish_to: none
-# repository: https://github.com/my_org/my_repo
+description: AxiomCore Flutter Generator
+version: 0.0.2
+homepage: https://github.com/AxiomCore/axiom-sdk
+repository: https://github.com/AxiomCore/axiom-sdk
+issue_tracker: https://github.com/AxiomCore/axiom-sdk/issues
 
 environment:
   sdk: ^3.8.0

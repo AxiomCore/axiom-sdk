@@ -161,26 +161,32 @@ class ModelWriter {
         return wrap('$typeName.fromJson($access)');
 
       case 'dateTime':
-        return wrap('DateTime.parse($access)');
+        return wrap('DateTime.parse($access as String)');
 
       case 'bytes':
-        // Assuming bytes come as Base64 string or list of ints.
-        // For simplicity assuming list of ints if not base64 encoded by codec.
-        // Actually, internal Codec handles root types, but nested fields usually JSON.
-        // Let's assume standard JSON list of ints for bytes in a model.
         return wrap('Uint8List.fromList(($access as List).cast<int>())');
 
       case 'list':
         final innerType = typeRef['value'] as Map<String, dynamic>;
-        final innerParse = _generateParseLogic(
-          innerType,
-          'e',
-          false,
-        ); // Inner is not optional in the list map
+        // We use 'e' as the parameter name inside the .map() closure
+        final innerParse = _generateParseLogic(innerType, 'e', false);
         return wrap('($access as List).map((e) => $innerParse).toList()');
 
+      case 'float':
+      case 'double':
+      case 'float32':
+      case 'float64':
+        return wrap('($access as num).toDouble()');
+
+      case 'int':
+      case 'int32':
+      case 'int64':
+      case 'bool':
+      case 'string':
+        final dartType = GeneratorUtils.dartTypeFromIr(typeRef, scoped: false);
+        return wrap('$access as $dartType');
+
       default:
-        // Primitives (int, string, bool, double)
         return access;
     }
   }
@@ -203,7 +209,6 @@ class ModelWriter {
         return wrap('toIso8601String()');
       case 'list':
         final innerType = typeRef['value'] as Map<String, dynamic>;
-        // Special case for list serialization
         if (isOptional) {
           return '$varName?.map((e) => ${_generateSerializeLogic(innerType, 'e', false)}).toList()';
         }
