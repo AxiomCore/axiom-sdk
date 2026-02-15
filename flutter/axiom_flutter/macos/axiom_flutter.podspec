@@ -1,10 +1,10 @@
 Pod::Spec.new do |s|
   s.name             = 'axiom_flutter'
-  s.version          = '0.1.0'
+  s.version          = '0.0.2'
   s.summary          = 'Axiom Runtime macOS'
-  s.homepage         = 'http://axiom.xyz'
+  s.homepage         = 'https://axiomcore.dev'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'Axiom' => 'contact@axiom.xyz' }
+  s.author           = { 'Axiom' => 'contact@yashmakan.com' }
 
   s.source           = { :http => 'https://binary.axiomcore.dev/macos/AxiomRuntime.xcframework.zip' }
   s.source_files     = 'Classes/**/*'

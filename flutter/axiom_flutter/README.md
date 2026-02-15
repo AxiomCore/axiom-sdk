@@ -2,7 +2,7 @@
 
 **The Flutter bindings for AxiomCore.**
 
-`axiom_flutter` provides a robust, Rust-powered runtime for managing **Server State** in Flutter applications. It connects your UI directly to [AxiomCore](https://github.com/axiom-core), allowing you to execute API contracts with cryptographic safety, automatic caching, and request deduplication.
+`axiom_flutter` provides a robust, Rust-powered runtime for managing **Server State** in Flutter applications. It connects your UI directly to [AxiomCore](https://github.com/AxiomCore), allowing you to execute API contracts with cryptographic safety, automatic caching, and request deduplication.
 
 ---
 

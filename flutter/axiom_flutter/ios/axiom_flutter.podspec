@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'axiom_flutter'
-  s.version          = '0.0.1'
+  s.version          = '0.0.2'
   s.summary          = 'Axiom Runtime'
   s.homepage         = 'https://axiomcore.dev'
   s.license          = { :file => '../LICENSE' }
