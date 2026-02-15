@@ -1,19 +1,21 @@
 Pod::Spec.new do |s|
   s.name             = 'axiom_flutter'
-  s.version          = '0.1.0'
+  s.version          = '0.0.1'
   s.summary          = 'Axiom Runtime'
-  s.homepage         = 'http://axiom.xyz'
+  s.homepage         = 'https://axiomcore.dev'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'Axiom' => 'contact@axiom.xyz' }
-  s.source           = { :path => '.' }
-  s.source_files = 'Classes/**/*'
-  s.dependency 'Flutter'
-  s.platform = :ios, '13.0'
+  s.author           = { 'Axiom' => 'contact@yashmakan.com' }
 
-  s.frameworks = 'SystemConfiguration', 'Security'
-  s.libraries = 'bz2', 'z'
+  s.source           = { :http => 'https://binary.axiomcore.dev/ios/AxiomRuntime.xcframework.zip' }
 
-  s.vendored_frameworks = 'Frameworks/AxiomRuntime.xcframework'
+  s.source_files     = 'Classes/**/*'
+  s.dependency       'Flutter'
+  s.platform         = :ios, '13.0'
+
+  s.frameworks       = 'SystemConfiguration', 'Security'
+  s.libraries        = 'bz2', 'z'
+
+  s.vendored_frameworks = 'AxiomRuntime.xcframework'
 
   # Settings for the Plugin itself
   s.pod_target_xcconfig = { 

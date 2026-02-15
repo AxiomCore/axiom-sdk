@@ -5,11 +5,18 @@ Pod::Spec.new do |s|
   s.homepage         = 'http://axiom.xyz'
   s.license          = { :file => '../LICENSE' }
   s.author           = { 'Axiom' => 'contact@axiom.xyz' }
-  s.source           = { :path => '.' }
-  s.source_files = 'Classes/**/*'
-  s.dependency 'FlutterMacOS'
 
-  s.platform = :osx, '11.0'
+  s.source           = { :http => 'https://binary.axiomcore.dev/macos/AxiomRuntime.xcframework.zip' }
+  s.source_files     = 'Classes/**/*'
+  s.dependency       'FlutterMacOS'
+
+  s.platform         = :osx, '11.0'
+
+  s.frameworks       = 'SystemConfiguration', 'Security', 'CoreFoundation'
+  s.libraries        = 'bz2', 'z'
+
+  s.vendored_frameworks = 'AxiomRuntime.xcframework'
+
   s.pod_target_xcconfig = { 
     'DEFINES_MODULE' => 'YES',
     'STRIP_STYLE' => 'non-global',
@@ -22,9 +29,5 @@ Pod::Spec.new do |s|
     'DEAD_CODE_STRIPPING' => 'NO'
   }
 
-  s.frameworks = 'SystemConfiguration', 'Security', 'CoreFoundation'
-  s.libraries = 'bz2', 'z'
-
-  s.vendored_frameworks = 'Frameworks/AxiomRuntime.xcframework'
   s.swift_version = '5.0'
 end
