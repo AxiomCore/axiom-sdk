@@ -1,3 +1,16 @@
+
+## 0.0.7
+
+* Updated podspec files for iOS and macOS
+
+## 0.0.6
+
+* Updated podspec files for iOS and macOS
+
+## 0.0.5
+
+* Updated podspec files for iOS and macOS
+
 ## 0.0.4
 
 * Updated podspec files for iOS and macOS
