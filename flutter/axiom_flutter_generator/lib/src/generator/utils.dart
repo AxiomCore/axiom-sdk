@@ -57,9 +57,18 @@ class GeneratorUtils {
         final innerType = (typeRef['value'] as Map).cast<String, dynamic>();
         return 'List<${dartTypeFromIr(innerType, scoped: scoped)}>';
       case 'map':
-        // Assuming String keys for now
-        final valueType = (typeRef['value'] as Map).cast<String, dynamic>();
-        return 'Map<String, ${dartTypeFromIr(valueType, scoped: scoped)}>';
+        // 1. Cast the value to a List (as defined in your Python IR)
+        final mapArgs = typeRef['value'] as List;
+
+        // 2. Extract the Key and Value type references
+        final keyTypeRef = mapArgs[0] as Map<String, dynamic>;
+        final valueTypeRef = mapArgs[1] as Map<String, dynamic>;
+
+        // 3. Recursively resolve the Dart types for both
+        final keyType = dartTypeFromIr(keyTypeRef, scoped: scoped);
+        final valueType = dartTypeFromIr(valueTypeRef, scoped: scoped);
+
+        return 'Map<$keyType, $valueType>';
       case 'json':
         return 'dynamic'; // or Map<String, dynamic>
       default:

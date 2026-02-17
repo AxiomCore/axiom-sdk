@@ -1,3 +1,7 @@
+## 0.0.3
+
+- Fixed type inference issue in ModelWriter when mapping List values.
+
 ## 0.0.2
 
 - Fixed type inference issue in ModelWriter when mapping List values.
