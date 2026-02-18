@@ -1,4 +1,9 @@
 
+## 0.0.8
+
+* Runtime warning URL updated
+
+
 ## 0.0.7
 
 * Updated podspec files for iOS and macOS

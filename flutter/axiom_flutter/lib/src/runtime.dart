@@ -627,7 +627,7 @@ class AxiomRuntime {
     );
     print(
       warningPen(
-        '│ ⚠️  AXIOM SECURITY WARNING                                  │',
+        '│ ⚠️  AXIOM SECURITY WARNING                                 │',
       ),
     );
     print(
@@ -662,7 +662,7 @@ class AxiomRuntime {
     );
     print(
       warningPen(
-        '│ https://axiomcore.dev/docs/security/unsigned-contracts     │',
+        '│ https://docs.axiomcore.dev/cloud-security/signed-contracts │',
       ),
     );
     print(
