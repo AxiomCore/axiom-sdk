@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:axiom_flutter/axiom_flutter.dart';
 import 'generated/axiom_sdk.dart';
@@ -10,12 +11,13 @@ late final AxiomSdk sdk;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final dbDir = await getApplicationSupportDirectory();
-  print(dbDir.path);
-  sdk = await AxiomSdk.create(
-    baseUrl: "http://127.0.0.1:8000",
-    dbPath: dbDir.path,
-  );
+  String? path;
+  if (!kIsWeb) {
+    final dbDir = await getApplicationSupportDirectory();
+    path = dbDir.path;
+    print("Path: $path");
+  }
+  sdk = await AxiomSdk.create(baseUrl: "http://localhost:8000", dbPath: path);
   runApp(const MyApp());
 }
 

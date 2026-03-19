@@ -1,5 +1,5 @@
 PODS:
-  - axiom_flutter (0.1.0):
+  - axiom_flutter (0.0.7):
     - Flutter
   - Flutter (1.0.0)
   - path_provider_foundation (0.0.1):
@@ -20,7 +20,7 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/path_provider_foundation/darwin"
 
 SPEC CHECKSUMS:
-  axiom_flutter: 0acd23926f59f3652a5a5a5d37f6e2ea9794394d
+  axiom_flutter: a1c70ba4f25f993a119e5383f042d2c569b65375
   Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
   path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
 

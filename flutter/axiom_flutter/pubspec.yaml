@@ -15,6 +15,7 @@ dependencies:
   ffi: ^2.1.4
   path_provider: ^2.1.5
   ansicolor: ^2.0.3
+  web: ^1.1.0
 
 dev_dependencies:
   flutter_test:
@@ -32,3 +33,8 @@ flutter:
         pluginClass: AxiomFlutterPlugin
       macos:
         pluginClass: AxiomFlutterPlugin
+
+  # ADD THIS SECTION: Bundle Wasm files with the Web build
+  assets:
+    - lib/assets/wasm/axiom_runtime.js
+    - lib/assets/wasm/axiom_runtime_bg.wasm
