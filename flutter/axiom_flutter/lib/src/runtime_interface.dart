@@ -13,7 +13,7 @@ abstract class AxiomRuntime {
 
   bool debug = false; // NEW: Controls FFI logging
 
-  Future<void> init();
+  Future<void> init([String? dbPath]);
 
   Future<void> startup({
     required String baseUrl,
@@ -23,13 +23,16 @@ abstract class AxiomRuntime {
     String? publicKey,
   });
 
-  void loadContract(
-    Uint8List contractBytes,
+  void loadContract({
+    required String namespace,
+    required String baseUrl,
+    required Uint8List contractBytes,
     String? signature,
     String? publicKey,
-  );
+  });
 
   AxiomQuery<T> send<T>({
+    required String namespace,
     required int endpointId,
     required String method,
     required String path,
@@ -41,6 +44,7 @@ abstract class AxiomRuntime {
   });
 
   Stream<AxiomState<Uint8List>> callStream({
+    required String namespace,
     required int endpointId,
     required String method,
     required String path,

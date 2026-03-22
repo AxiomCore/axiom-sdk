@@ -21,26 +21,20 @@ class AxiomSdk {
     WidgetsFlutterBinding.ensureInitialized();
     final runtime = AxiomRuntime();
     runtime.debug = config.debug;
-    await runtime.init();
+    await runtime.init(config.dbPath);
 
-    bool isFirst = true;
     for (final entry in config.contracts.entries) {
       final c = entry.value;
       final contractData = await rootBundle.load(c.assetPath);
       final contractBytes = contractData.buffer.asUint8List();
 
-      if (isFirst) {
-        await runtime.startup(
-          baseUrl: c.baseUrl,
-          contractBytes: contractBytes,
-          dbPath: config.dbPath,
-          signature: null,
-          publicKey: null,
-        );
-        isFirst = false;
-      } else {
-        runtime.loadContract(contractBytes, null, null);
-      }
+      runtime.loadContract(
+        namespace: entry.key,
+        baseUrl: c.baseUrl,
+        contractBytes: contractBytes,
+        signature: null,
+        publicKey: null,
+      );
     }
     return AxiomSdk._(runtime);
   }
@@ -60,6 +54,7 @@ class UsersModule {
         'user_id': userId,
       };
       return _runtime.send<models.User>(
+        namespace: 'users',
         endpointId: 0,
         method: 'GET',
         path: '/users/{user_id}',
@@ -75,6 +70,7 @@ class UsersModule {
         'user': args.user?.toJson(),
       };
       return _runtime.send<models.User>(
+        namespace: 'users',
         endpointId: 1,
         method: 'POST',
         path: '/users',

@@ -1,4 +1,4 @@
-// FILE: lib/src/generator/sdk_writer.dart
+// GENERATED CODE – DO NOT EDIT.
 import 'utils.dart';
 
 class SdkWriter {
@@ -19,9 +19,9 @@ class SdkWriter {
     this.publicKey,
   }) : serviceName = _determineServiceName(ir);
 
+  /// Standardizes the service name for the namespace module.
   static String _determineServiceName(Map<String, dynamic> ir) {
     String name = (ir['serviceName'] as String?) ?? 'users';
-    // Friendly override: FastAPI defaults to 'app', we rename it to 'users' to match the desired SDK DX.
     if (name == 'app') return 'users';
     return name;
   }
@@ -47,7 +47,7 @@ class SdkWriter {
     final moduleNamePascal = '${GeneratorUtils.pascalCase(serviceName)}Module';
     final moduleNameCamel = GeneratorUtils.camelCase(serviceName);
 
-    // 1. Write the main AxiomSdk class
+    // 1. Generate the Main SDK Entrypoint
     buffer.writeln('class AxiomSdk {');
     buffer.writeln('  final AxiomRuntime _runtime;');
     buffer.writeln('  late final $moduleNamePascal $moduleNameCamel;');
@@ -62,7 +62,7 @@ class SdkWriter {
     buffer.writeln('}');
     buffer.writeln();
 
-    // 2. Write the nested Module class
+    // 2. Generate the Namespaced Module
     buffer.writeln('class $moduleNamePascal {');
     buffer.writeln('  final AxiomRuntime _runtime;');
     buffer.writeln();
@@ -85,10 +85,12 @@ class SdkWriter {
     buffer.writeln('    WidgetsFlutterBinding.ensureInitialized();');
     buffer.writeln('    final runtime = AxiomRuntime();');
     buffer.writeln('    runtime.debug = config.debug;');
-    buffer.writeln('    await runtime.init();');
+    buffer.writeln('    await runtime.init(config.dbPath);');
     buffer.writeln();
 
-    buffer.writeln('    bool isFirst = true;');
+    final sig = signature != null ? "'$signature'" : "null";
+    final pk = publicKey != null ? "'$publicKey'" : "null";
+
     buffer.writeln('    for (final entry in config.contracts.entries) {');
     buffer.writeln('      final c = entry.value;');
     buffer.writeln(
@@ -98,22 +100,13 @@ class SdkWriter {
       '      final contractBytes = contractData.buffer.asUint8List();',
     );
     buffer.writeln();
-
-    final sig = signature != null ? "'$signature'" : "null";
-    final pk = publicKey != null ? "'$publicKey'" : "null";
-
-    buffer.writeln('      if (isFirst) {');
-    buffer.writeln('        await runtime.startup(');
-    buffer.writeln('          baseUrl: c.baseUrl,');
-    buffer.writeln('          contractBytes: contractBytes,');
-    buffer.writeln('          dbPath: config.dbPath,');
-    buffer.writeln('          signature: $sig,');
-    buffer.writeln('          publicKey: $pk,');
-    buffer.writeln('        );');
-    buffer.writeln('        isFirst = false;');
-    buffer.writeln('      } else {');
-    buffer.writeln('        runtime.loadContract(contractBytes, $sig, $pk);');
-    buffer.writeln('      }');
+    buffer.writeln('      runtime.loadContract(');
+    buffer.writeln('        namespace: entry.key,');
+    buffer.writeln('        baseUrl: c.baseUrl,');
+    buffer.writeln('        contractBytes: contractBytes,');
+    buffer.writeln('        signature: $sig,');
+    buffer.writeln('        publicKey: $pk,');
+    buffer.writeln('      );');
     buffer.writeln('    }');
     buffer.writeln('    return AxiomSdk._(runtime);');
     buffer.writeln('  }');
@@ -122,8 +115,7 @@ class SdkWriter {
 
   void _writeEndpoint(StringBuffer buffer, dynamic endpoint) {
     final ep = endpoint as Map<String, dynamic>;
-    final name = ep['name'] as String;
-    final methodName = GeneratorUtils.camelCase(name);
+    final methodName = GeneratorUtils.camelCase(ep['name'] as String);
     final id = ep['id'] as int;
     final path = ep['path'] as String;
     final httpMethod = (ep['method'] as String).toUpperCase();
@@ -139,11 +131,10 @@ class SdkWriter {
 
     final params =
         (ep['parameters'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final isMutation =
-        httpMethod == 'POST' || httpMethod == 'PUT' || httpMethod == 'DELETE';
+    final isMutation = httpMethod != 'GET'; // POST, PUT, DELETE are mutations
 
     if (isMutation) {
-      _writeMutationEndpoint(
+      _writeMutation(
         buffer,
         methodName,
         id,
@@ -154,7 +145,7 @@ class SdkWriter {
         params,
       );
     } else {
-      _writeQueryEndpoint(
+      _writeQuery(
         buffer,
         methodName,
         id,
@@ -167,8 +158,7 @@ class SdkWriter {
     }
   }
 
-  // --- WRITE MUTATION (Returns AxiomMutation with Dart 3 Records) ---
-  void _writeMutationEndpoint(
+  void _writeMutation(
     StringBuffer buffer,
     String methodName,
     int id,
@@ -198,8 +188,7 @@ class SdkWriter {
       '  AxiomMutation<$dartReturnType, $recordType> $methodName() {',
     );
     buffer.writeln('    return AxiomMutation((args) {');
-
-    _writeArgsAndExecution(
+    _writeExecutionBody(
       buffer,
       id,
       path,
@@ -209,14 +198,12 @@ class SdkWriter {
       params,
       true,
     );
-
     buffer.writeln('    });');
     buffer.writeln('  }');
     buffer.writeln();
   }
 
-  // --- WRITE QUERY (Returns AxiomQuery) ---
-  void _writeQueryEndpoint(
+  void _writeQuery(
     StringBuffer buffer,
     String methodName,
     int id,
@@ -238,8 +225,7 @@ class SdkWriter {
       buffer.write('}');
     }
     buffer.writeln(') {');
-
-    _writeArgsAndExecution(
+    _writeExecutionBody(
       buffer,
       id,
       path,
@@ -249,13 +235,11 @@ class SdkWriter {
       params,
       false,
     );
-
     buffer.writeln('  }');
     buffer.writeln();
   }
 
-  // --- SHARED EXECUTION LOGIC ---
-  void _writeArgsAndExecution(
+  void _writeExecutionBody(
     StringBuffer buffer,
     int id,
     String path,
@@ -265,12 +249,12 @@ class SdkWriter {
     List<Map<String, dynamic>> params,
     bool isMutation,
   ) {
-    String accessArg(String pName) => isMutation ? 'args.$pName' : pName;
+    String access(String pName) => isMutation ? 'args.$pName' : pName;
 
     buffer.writeln('      final argsMap = <String, dynamic>{');
     for (final p in params) {
       final pName = GeneratorUtils.camelCase(p['name']);
-      final argAcc = accessArg(pName);
+      final argAcc = access(pName);
       final isNamed = p['typeRef']['kind'] == 'named';
       buffer.writeln(
         "        '${p['name']}': ${isNamed ? '$argAcc?.toJson()' : argAcc},",
@@ -283,7 +267,7 @@ class SdkWriter {
       buffer.writeln('      final pathParams = <String, dynamic>{');
       for (final p in pathParams)
         buffer.writeln(
-          "        '${p['name']}': ${accessArg(GeneratorUtils.camelCase(p['name']))},",
+          "        '${p['name']}': ${access(GeneratorUtils.camelCase(p['name']))},",
         );
       buffer.writeln('      };');
     }
@@ -293,7 +277,7 @@ class SdkWriter {
       buffer.writeln('      final queryParams = <String, dynamic>{');
       for (final p in queryParams)
         buffer.writeln(
-          "        '${p['name']}': ${accessArg(GeneratorUtils.camelCase(p['name']))},",
+          "        '${p['name']}': ${access(GeneratorUtils.camelCase(p['name']))},",
         );
       buffer.writeln('      };');
     }
@@ -301,32 +285,34 @@ class SdkWriter {
     final bodyParams = params.where((p) => p['source'] == 'body').toList();
     String bodyArg = 'null';
     if (bodyParams.length == 1) {
-      bodyArg = accessArg(GeneratorUtils.camelCase(bodyParams.first['name']));
+      bodyArg = access(GeneratorUtils.camelCase(bodyParams.first['name']));
     } else if (bodyParams.length > 1) {
       buffer.writeln('      final body = {');
       for (final p in bodyParams)
         buffer.writeln(
-          "        '${p['name']}': ${accessArg(GeneratorUtils.camelCase(p['name']))},",
+          "        '${p['name']}': ${access(GeneratorUtils.camelCase(p['name']))},",
         );
       buffer.writeln('      };');
       bodyArg = 'body';
     }
 
-    final responseShape = GeneratorUtils.classifyResponse(returnTypeRef);
-    String decoderLambda;
-
-    if (responseShape.kind == ResponseKind.voidType)
-      decoderLambda = '(json) => null';
-    else if (responseShape.kind == ResponseKind.model)
-      decoderLambda =
-          '(json) => models.${GeneratorUtils.pascalCase(responseShape.modelName!)}.fromJson(json)';
-    else if (responseShape.kind == ResponseKind.modelVec)
-      decoderLambda =
-          '(json) => (json as List).map((e) => models.${GeneratorUtils.pascalCase(responseShape.modelName!)}.fromJson(e)).toList()';
+    final shape = GeneratorUtils.classifyResponse(returnTypeRef);
+    String decoder;
+    if (shape.kind == ResponseKind.voidType)
+      decoder = '(json) => null';
+    else if (shape.kind == ResponseKind.model)
+      decoder =
+          '(json) => models.${GeneratorUtils.pascalCase(shape.modelName!)}.fromJson(json)';
+    else if (shape.kind == ResponseKind.modelVec)
+      decoder =
+          '(json) => (json as List).map((e) => models.${GeneratorUtils.pascalCase(shape.modelName!)}.fromJson(e)).toList()';
     else
-      decoderLambda = '(json) => json as $dartReturnType';
+      decoder = '(json) => json as $dartReturnType';
 
     buffer.writeln('      return _runtime.send<$dartReturnType>(');
+    buffer.writeln(
+      "        namespace: '$serviceName',",
+    ); // Correctly routes to the loaded contract
     buffer.writeln('        endpointId: $id,');
     buffer.writeln("        method: '$httpMethod',");
     buffer.writeln("        path: '$path',");
@@ -336,7 +322,7 @@ class SdkWriter {
     if (queryParams.isNotEmpty)
       buffer.writeln('        queryParams: queryParams,');
     if (bodyArg != 'null') buffer.writeln('        body: $bodyArg,');
-    buffer.writeln('        decoder: $decoderLambda,');
+    buffer.writeln('        decoder: $decoder,');
     buffer.writeln('      );');
   }
 }

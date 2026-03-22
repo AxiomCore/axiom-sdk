@@ -25,14 +25,18 @@ class WasmExports {}
 
 extension WasmExportsExt on WasmExports {
   @JS('axiom_wasm_initialize')
-  external int axiomInitialize(int urlPtr, int urlLen, int dbPtr, int dbLen);
+  external int axiomInitialize(int dbPtr, int dbLen);
 
   @JS('axiom_wasm_load_contract')
   external int axiomLoadContract(
-    int contractPtr,
-    int contractLen,
-    int sigPtr,
-    int sigLen,
+    int nPtr,
+    int nLen,
+    int bPtr,
+    int bLen,
+    int cPtr,
+    int cLen,
+    int sPtr,
+    int sLen,
     int pkPtr,
     int pkLen,
   );
@@ -40,6 +44,8 @@ extension WasmExportsExt on WasmExports {
   @JS('axiom_wasm_call')
   external void axiomCall(
     JSNumber reqId,
+    int nPtr,
+    int nLen,
     int epId,
     int mPtr,
     int mLen,
@@ -83,7 +89,10 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   late final WasmExports _wasm;
 
   @override
-  Future<void> init() async {
+  bool debug = false;
+
+  @override
+  Future<void> init([String? dbPath]) async {
     if (globalContext.has('wasm_bindgen')) return;
 
     try {
@@ -109,6 +118,12 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       _pollTimer ??= Timer.periodic(const Duration(milliseconds: 16), (_) {
         _wasm.axiomProcessResponses();
       });
+
+      // Initialize the core engine once
+      final dbLen = <int>[0];
+      final dbPtr = _allocString(dbPath ?? "", dbLen);
+      _wasm.axiomInitialize(dbPtr, dbLen[0]);
+      _wasm.axiomFreeMemory(dbPtr, dbLen[0]);
     } catch (e) {
       throw Exception(
         'Axiom Web Runtime failed to initialize.\nInner error: $e',
@@ -116,18 +131,13 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     }
   }
 
-  @override
-  bool debug = false;
-
   void _logTransaction(String direction, int reqId, dynamic details) {
     if (!debug) return;
     final pen = AnsiPen()..white(bold: true);
-    if (direction == 'OUT') {
-      pen.xterm(063); // Purple-ish
-    } else {
-      pen.xterm(034); // Green-ish
-    }
-
+    if (direction == 'OUT')
+      pen.xterm(063);
+    else
+      pen.xterm(034);
     final prefix = direction == 'OUT' ? '➔ WASM CALL' : '← WASM RESP';
     print(pen('$prefix [#$reqId]'));
     print(details);
@@ -176,6 +186,22 @@ class AxiomRuntimeWeb implements AxiomRuntime {
                 _wasm.axiomFreeMemory(errorPtr, errorLen);
               }
 
+              final evtName = eventType == EventType.networkSuccess
+                  ? 'NetworkSuccess'
+                  : eventType == EventType.cacheHit
+                  ? 'CacheHit'
+                  : eventType == EventType.cacheHitAndFetching
+                  ? 'CacheHitAndFetching'
+                  : eventType == EventType.error
+                  ? 'Error'
+                  : 'Complete';
+
+              _logTransaction('IN', requestId, {
+                'eventType': evtName,
+                'hasData': dataBytes != null,
+                'hasError': errorJson != null,
+              });
+
               if (controller == null || controller.isClosed) return;
 
               if (eventType == EventType.complete) {
@@ -185,28 +211,15 @@ class AxiomRuntimeWeb implements AxiomRuntime {
               }
 
               if (eventType == EventType.error) {
-                AxiomError richError;
-                if (errorJson != null) {
-                  try {
-                    richError = AxiomError.fromJson(jsonDecode(errorJson));
-                  } catch (e) {
-                    richError = AxiomError(
-                      stage: ErrorStage.ffiBoundary,
-                      category: ErrorCategory.runtime,
-                      code: const UnknownCode("JsonParseFailure"),
-                      message: "Failed to parse: $e",
-                      retryable: false,
-                    );
-                  }
-                } else {
-                  richError = AxiomError(
-                    stage: ErrorStage.runtime,
-                    category: ErrorCategory.unknown,
-                    code: UnknownCode(FfiError.name(errorCode)),
-                    message: "Internal Wasm error",
-                    retryable: false,
-                  );
-                }
+                AxiomError richError = errorJson != null
+                    ? AxiomError.fromJson(jsonDecode(errorJson))
+                    : AxiomError(
+                        stage: ErrorStage.runtime,
+                        category: ErrorCategory.unknown,
+                        code: UnknownCode(FfiError.name(errorCode)),
+                        message: "Internal Wasm error",
+                        retryable: false,
+                      );
                 controller.add(AxiomState.error(richError));
                 return;
               }
@@ -257,102 +270,85 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   }
 
   @override
-  Future<void> startup({
+  void loadContract({
+    required String namespace,
     required String baseUrl,
     required Uint8List contractBytes,
-    String? dbPath,
     String? signature,
     String? publicKey,
-  }) async {
-    final urlLen = <int>[0];
-    final urlPtr = _allocString(baseUrl, urlLen);
-
-    final dbLen = <int>[0];
-    final dbPtr = _allocString(dbPath ?? "", dbLen);
-
-    final result = _wasm.axiomInitialize(urlPtr, urlLen[0], dbPtr, dbLen[0]);
-
-    // PREVENT MEMORY LEAK
-    _wasm.axiomFreeMemory(urlPtr, urlLen[0]);
-    _wasm.axiomFreeMemory(dbPtr, dbLen[0]);
-
-    if (result != FfiError.success) {
-      throw Exception('Failed to initialize runtime. Error code: $result');
-    }
-
-    loadContract(contractBytes, signature, publicKey);
-  }
-
-  @override
-  void loadContract(
-    Uint8List contractBytes,
-    String? signature,
-    String? publicKey,
-  ) {
-    final contractPtr = _allocBytes(contractBytes);
-
-    final sigLen = <int>[0];
-    final sigPtr = signature != null ? _allocString(signature, sigLen) : 0;
-
+  }) {
+    final nsLen = <int>[0];
+    final nsPtr = _allocString(namespace, nsLen);
+    final bLen = <int>[0];
+    final bPtr = _allocString(baseUrl, bLen);
+    final cPtr = _allocBytes(contractBytes);
+    final sLen = <int>[0];
+    final sPtr = signature != null ? _allocString(signature, sLen) : 0;
     final pkLen = <int>[0];
     final pkPtr = publicKey != null ? _allocString(publicKey, pkLen) : 0;
 
     final result = _wasm.axiomLoadContract(
-      contractPtr,
+      nsPtr,
+      nsLen[0],
+      bPtr,
+      bLen[0],
+      cPtr,
       contractBytes.length,
-      sigPtr,
-      sigLen[0],
+      sPtr,
+      sLen[0],
       pkPtr,
       pkLen[0],
     );
 
-    // PREVENT MEMORY LEAK
-    _wasm.axiomFreeMemory(contractPtr, contractBytes.length);
-    if (sigPtr != 0) _wasm.axiomFreeMemory(sigPtr, sigLen[0]);
+    _wasm.axiomFreeMemory(nsPtr, nsLen[0]);
+    _wasm.axiomFreeMemory(bPtr, bLen[0]);
+    _wasm.axiomFreeMemory(cPtr, contractBytes.length);
+    if (sPtr != 0) _wasm.axiomFreeMemory(sPtr, sLen[0]);
     if (pkPtr != 0) _wasm.axiomFreeMemory(pkPtr, pkLen[0]);
 
-    if (result == FfiError.successUnverified) {
+    if (result == FfiError.successUnverified)
       _printSecurityWarning();
-      return;
-    }
-
-    if (result != FfiError.success) {
+    else if (result != FfiError.success)
       throw Exception(
         'Failed to load Axiom contract. Error: ${FfiError.name(result)}',
       );
-    }
   }
 
   @override
   Stream<AxiomState<Uint8List>> callStream({
+    required String namespace,
     required int endpointId,
     required String method,
     required String path,
     required Uint8List requestBytes,
   }) {
     final requestId = _nextRequestId++;
-    final controller = StreamController<AxiomState<Uint8List>>();
-    _controllers[requestId] = controller;
 
+    // FIX: Must be a broadcast stream!
+    final controller = StreamController<AxiomState<Uint8List>>.broadcast();
+
+    _controllers[requestId] = controller;
     controller.add(AxiomState.loading());
 
+    final nsLen = <int>[0];
+    final nsPtr = _allocString(namespace, nsLen);
     final mLen = <int>[0];
     final mPtr = _allocString(method, mLen);
-
     final pLen = <int>[0];
     final pPtr = _allocString(path, pLen);
-
     final bPtr = _allocBytes(requestBytes);
 
     _logTransaction('OUT', requestId, {
+      'namespace': namespace,
       'endpointId': endpointId,
       'method': method,
       'path': path,
-      'payloadLength': requestBytes.length,
     });
 
     _wasm.axiomCall(
       requestId.toJS,
+      nsPtr,
+      nsLen[0],
       endpointId,
       mPtr,
       mLen[0],
@@ -362,20 +358,18 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       requestBytes.length,
     );
 
-    // PREVENT MEMORY LEAK
+    _wasm.axiomFreeMemory(nsPtr, nsLen[0]);
     _wasm.axiomFreeMemory(mPtr, mLen[0]);
     _wasm.axiomFreeMemory(pPtr, pLen[0]);
     _wasm.axiomFreeMemory(bPtr, requestBytes.length);
 
-    controller.onCancel = () {
-      _controllers.remove(requestId);
-    };
-
+    controller.onCancel = () => _controllers.remove(requestId);
     return controller.stream;
   }
 
   @override
   AxiomQuery<T> send<T>({
+    required String namespace,
     required int endpointId,
     required String method,
     required String path,
@@ -385,40 +379,32 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     Object? body,
     required T Function(dynamic json) decoder,
   }) {
-    // Exact same send implementation as before
-    final endpointKey = 'endpoint_$endpointId';
-    final queryKey = AxiomQueryKey.build(endpoint: endpointKey, args: args);
-
+    final queryKey = '$namespace:endpoint_$endpointId:${jsonEncode(args)}';
     final stream = AxiomQueryManager().watch<T>(queryKey, () {
       var finalPath = path;
-      if (pathParams != null) {
-        pathParams.forEach((key, value) {
-          finalPath = finalPath.replaceAll('{$key}', value.toString());
-        });
-      }
-
-      if (queryParams != null && queryParams.isNotEmpty) {
+      pathParams?.forEach(
+        (k, v) => finalPath = finalPath.replaceAll('{$k}', v.toString()),
+      );
+      if (queryParams?.isNotEmpty ?? false) {
         final uri = Uri(
-          queryParameters: queryParams.map((k, v) => MapEntry(k, v.toString())),
+          queryParameters: queryParams!.map(
+            (k, v) => MapEntry(k, v.toString()),
+          ),
         );
-        final separator = finalPath.contains('?') ? '&' : '?';
-        finalPath += '$separator${uri.query}';
+        finalPath += (finalPath.contains('?') ? '&' : '?') + uri.query;
       }
-
-      final requestBytes = AxiomCodec.encodeBody(body);
-
       return callStream(
+        namespace: namespace,
         endpointId: endpointId,
         method: method,
         path: finalPath,
-        requestBytes: requestBytes,
+        requestBytes: AxiomCodec.encodeBody(body),
       ).map((state) {
         if (state.hasError) return state.map((_) => null as T);
         if (state.data != null) {
           try {
-            final decodedData = AxiomCodec.decode(state.data!, decoder);
             return AxiomState.success(
-              decodedData,
+              AxiomCodec.decode(state.data!, decoder),
               state.source,
               isFetching: state.isFetching,
             );
@@ -428,18 +414,16 @@ class AxiomRuntimeWeb implements AxiomRuntime {
                 stage: ErrorStage.deserialize,
                 category: ErrorCategory.serialization,
                 code: const CodecError(),
-                message: "Failed to decode response: $e",
+                message: "Failed to decode: $e",
                 retryable: false,
                 details: e.toString(),
               ),
-              previousData: null,
             );
           }
         }
         return state.map((_) => null as T);
       });
     });
-
     return AxiomQuery(queryKey, stream);
   }
 
@@ -497,5 +481,24 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       ),
     );
     print('');
+  }
+
+  @override
+  Future<void> startup({
+    required String baseUrl,
+    required Uint8List contractBytes,
+    String? dbPath,
+    String? signature,
+    String? publicKey,
+  }) async {
+    // Legacy support: redirects to modern multi-contract load
+    await init(dbPath);
+    loadContract(
+      namespace: 'default',
+      baseUrl: baseUrl,
+      contractBytes: contractBytes,
+      signature: signature,
+      publicKey: publicKey,
+    );
   }
 }
