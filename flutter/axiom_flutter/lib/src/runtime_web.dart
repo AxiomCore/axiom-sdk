@@ -116,6 +116,23 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     }
   }
 
+  @override
+  bool debug = false;
+
+  void _logTransaction(String direction, int reqId, dynamic details) {
+    if (!debug) return;
+    final pen = AnsiPen()..white(bold: true);
+    if (direction == 'OUT') {
+      pen.xterm(063); // Purple-ish
+    } else {
+      pen.xterm(034); // Green-ish
+    }
+
+    final prefix = direction == 'OUT' ? '➔ WASM CALL' : '← WASM RESP';
+    print(pen('$prefix [#$reqId]'));
+    print(details);
+  }
+
   void _setupWebCallback() {
     globalContext['axiom_web_callback'] =
         ((
@@ -326,6 +343,13 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     final pPtr = _allocString(path, pLen);
 
     final bPtr = _allocBytes(requestBytes);
+
+    _logTransaction('OUT', requestId, {
+      'endpointId': endpointId,
+      'method': method,
+      'path': path,
+      'payloadLength': requestBytes.length,
+    });
 
     _wasm.axiomCall(
       requestId.toJS,

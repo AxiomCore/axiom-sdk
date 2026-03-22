@@ -1,3 +1,4 @@
+// FILE: lib/src/generator/sdk_writer.dart
 import 'utils.dart';
 
 class SdkWriter {
@@ -16,7 +17,14 @@ class SdkWriter {
     required this.axiomFilename,
     this.signature,
     this.publicKey,
-  }) : serviceName = (ir['serviceName'] as String?) ?? 'Axiom Service';
+  }) : serviceName = _determineServiceName(ir);
+
+  static String _determineServiceName(Map<String, dynamic> ir) {
+    String name = (ir['serviceName'] as String?) ?? 'users';
+    // Friendly override: FastAPI defaults to 'app', we rename it to 'users' to match the desired SDK DX.
+    if (name == 'app') return 'users';
+    return name;
+  }
 
   String write() {
     final buffer = StringBuffer();
@@ -36,13 +44,30 @@ class SdkWriter {
     );
     buffer.writeln();
 
+    final moduleNamePascal = '${GeneratorUtils.pascalCase(serviceName)}Module';
+    final moduleNameCamel = GeneratorUtils.camelCase(serviceName);
+
+    // 1. Write the main AxiomSdk class
     buffer.writeln('class AxiomSdk {');
     buffer.writeln('  final AxiomRuntime _runtime;');
+    buffer.writeln('  late final $moduleNamePascal $moduleNameCamel;');
     buffer.writeln();
-    buffer.writeln('  AxiomSdk._(this._runtime);');
+    buffer.writeln('  AxiomSdk._(this._runtime) {');
+    buffer.writeln('    $moduleNameCamel = $moduleNamePascal(_runtime);');
+    buffer.writeln('  }');
     buffer.writeln();
 
     _writeCreateMethod(buffer);
+
+    buffer.writeln('}');
+    buffer.writeln();
+
+    // 2. Write the nested Module class
+    buffer.writeln('class $moduleNamePascal {');
+    buffer.writeln('  final AxiomRuntime _runtime;');
+    buffer.writeln();
+    buffer.writeln('  $moduleNamePascal(this._runtime);');
+    buffer.writeln();
 
     final endpoints = (ir['endpoints'] as List?) ?? [];
     for (final ep in endpoints) {
@@ -55,28 +80,41 @@ class SdkWriter {
 
   void _writeCreateMethod(StringBuffer buffer) {
     buffer.writeln(
-      '  static Future<AxiomSdk> create({required String baseUrl, String? dbPath}) async {',
+      '  static Future<AxiomSdk> create(AxiomConfig config) async {',
     );
     buffer.writeln('    WidgetsFlutterBinding.ensureInitialized();');
-    buffer.writeln(
-      "    final contractData = await rootBundle.load('$axiomFilename');",
-    );
-    buffer.writeln(
-      '    final contractBytes = contractData.buffer.asUint8List();',
-    );
     buffer.writeln('    final runtime = AxiomRuntime();');
+    buffer.writeln('    runtime.debug = config.debug;');
     buffer.writeln('    await runtime.init();');
+    buffer.writeln();
+
+    buffer.writeln('    bool isFirst = true;');
+    buffer.writeln('    for (final entry in config.contracts.entries) {');
+    buffer.writeln('      final c = entry.value;');
+    buffer.writeln(
+      '      final contractData = await rootBundle.load(c.assetPath);',
+    );
+    buffer.writeln(
+      '      final contractBytes = contractData.buffer.asUint8List();',
+    );
+    buffer.writeln();
 
     final sig = signature != null ? "'$signature'" : "null";
     final pk = publicKey != null ? "'$publicKey'" : "null";
 
-    buffer.writeln('    await runtime.startup(');
-    buffer.writeln('      baseUrl: baseUrl,');
-    buffer.writeln('      contractBytes: contractBytes,');
-    buffer.writeln('      dbPath: dbPath,');
-    buffer.writeln('      signature: $sig,');
-    buffer.writeln('      publicKey: $pk,');
-    buffer.writeln('    );');
+    buffer.writeln('      if (isFirst) {');
+    buffer.writeln('        await runtime.startup(');
+    buffer.writeln('          baseUrl: c.baseUrl,');
+    buffer.writeln('          contractBytes: contractBytes,');
+    buffer.writeln('          dbPath: config.dbPath,');
+    buffer.writeln('          signature: $sig,');
+    buffer.writeln('          publicKey: $pk,');
+    buffer.writeln('        );');
+    buffer.writeln('        isFirst = false;');
+    buffer.writeln('      } else {');
+    buffer.writeln('        runtime.loadContract(contractBytes, $sig, $pk);');
+    buffer.writeln('      }');
+    buffer.writeln('    }');
     buffer.writeln('    return AxiomSdk._(runtime);');
     buffer.writeln('  }');
     buffer.writeln();
@@ -88,7 +126,7 @@ class SdkWriter {
     final methodName = GeneratorUtils.camelCase(name);
     final id = ep['id'] as int;
     final path = ep['path'] as String;
-    final httpMethod = ep['method'] as String;
+    final httpMethod = (ep['method'] as String).toUpperCase();
 
     final returnTypeRef = ep['returnType'] as Map<String, dynamic>;
     final returnIsOptional = ep['returnIsOptional'] as bool? ?? false;
@@ -99,11 +137,95 @@ class SdkWriter {
     );
     if (returnIsOptional && dartReturnType != 'void') dartReturnType += '?';
 
-    // Parameters
     final params =
         (ep['parameters'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final isMutation =
+        httpMethod == 'POST' || httpMethod == 'PUT' || httpMethod == 'DELETE';
 
-    // 1. Generate Signature
+    if (isMutation) {
+      _writeMutationEndpoint(
+        buffer,
+        methodName,
+        id,
+        path,
+        httpMethod,
+        dartReturnType,
+        returnTypeRef,
+        params,
+      );
+    } else {
+      _writeQueryEndpoint(
+        buffer,
+        methodName,
+        id,
+        path,
+        httpMethod,
+        dartReturnType,
+        returnTypeRef,
+        params,
+      );
+    }
+  }
+
+  // --- WRITE MUTATION (Returns AxiomMutation with Dart 3 Records) ---
+  void _writeMutationEndpoint(
+    StringBuffer buffer,
+    String methodName,
+    int id,
+    String path,
+    String httpMethod,
+    String dartReturnType,
+    Map<String, dynamic> returnTypeRef,
+    List<Map<String, dynamic>> params,
+  ) {
+    String recordType = 'void';
+    if (params.isNotEmpty) {
+      final fields = params
+          .map((p) {
+            final type = GeneratorUtils.dartTypeFromIr(
+              p['typeRef'],
+              scoped: true,
+            );
+            final name = GeneratorUtils.camelCase(p['name']);
+            final isOpt = p['isOptional'] as bool? ?? false;
+            return '$type${isOpt ? '?' : ''} $name';
+          })
+          .join(', ');
+      recordType = '({$fields})';
+    }
+
+    buffer.writeln(
+      '  AxiomMutation<$dartReturnType, $recordType> $methodName() {',
+    );
+    buffer.writeln('    return AxiomMutation((args) {');
+
+    _writeArgsAndExecution(
+      buffer,
+      id,
+      path,
+      httpMethod,
+      dartReturnType,
+      returnTypeRef,
+      params,
+      true,
+    );
+
+    buffer.writeln('    });');
+    buffer.writeln('  }');
+    buffer.writeln();
+  }
+
+  // --- WRITE QUERY (Returns AxiomQuery) ---
+  void _writeQueryEndpoint(
+    StringBuffer buffer,
+    String methodName,
+    int id,
+    String path,
+    String httpMethod,
+    String dartReturnType,
+    Map<String, dynamic> returnTypeRef,
+    List<Map<String, dynamic>> params,
+  ) {
     buffer.write('  AxiomQuery<$dartReturnType> $methodName(');
     if (params.isNotEmpty) {
       buffer.write('{');
@@ -111,125 +233,110 @@ class SdkWriter {
         final pName = GeneratorUtils.camelCase(p['name']);
         final pType = GeneratorUtils.dartTypeFromIr(p['typeRef'], scoped: true);
         final isOpt = p['isOptional'] as bool? ?? false;
-        if (isOpt) {
-          buffer.write('$pType? $pName, ');
-        } else {
-          buffer.write('required $pType $pName, ');
-        }
+        buffer.write(isOpt ? '$pType? $pName, ' : 'required $pType $pName, ');
       }
       buffer.write('}');
     }
     buffer.writeln(') {');
 
-    // 2. Classify params (Path, Query, Body)
-    // We also build a master 'args' map for the cache key
+    _writeArgsAndExecution(
+      buffer,
+      id,
+      path,
+      httpMethod,
+      dartReturnType,
+      returnTypeRef,
+      params,
+      false,
+    );
 
-    buffer.writeln('    final args = <String, dynamic>{');
+    buffer.writeln('  }');
+    buffer.writeln();
+  }
+
+  // --- SHARED EXECUTION LOGIC ---
+  void _writeArgsAndExecution(
+    StringBuffer buffer,
+    int id,
+    String path,
+    String httpMethod,
+    String dartReturnType,
+    Map<String, dynamic> returnTypeRef,
+    List<Map<String, dynamic>> params,
+    bool isMutation,
+  ) {
+    String accessArg(String pName) => isMutation ? 'args.$pName' : pName;
+
+    buffer.writeln('      final argsMap = <String, dynamic>{');
     for (final p in params) {
       final pName = GeneratorUtils.camelCase(p['name']);
-      // For cache key, we need serializable values.
-      // Models have toJson, but primitives are fine.
-      // We rely on the fact that models generated have toJson.
-      final pTypeKind = p['typeRef']['kind'] as String;
-      if (pTypeKind == 'named') {
-        buffer.writeln("      '${p['name']}': $pName?.toJson(),");
-      } else {
-        buffer.writeln("      '${p['name']}': $pName,");
-      }
+      final argAcc = accessArg(pName);
+      final isNamed = p['typeRef']['kind'] == 'named';
+      buffer.writeln(
+        "        '${p['name']}': ${isNamed ? '$argAcc?.toJson()' : argAcc},",
+      );
     }
-    buffer.writeln('    };');
+    buffer.writeln('      };');
 
-    // Build sub-maps
-    // Path Params
     final pathParams = params.where((p) => p['source'] == 'path').toList();
     if (pathParams.isNotEmpty) {
-      buffer.writeln('    final pathParams = <String, dynamic>{');
-      for (final p in pathParams) {
-        final pName = GeneratorUtils.camelCase(p['name']);
-        buffer.writeln("      '${p['name']}': $pName,");
-      }
-      buffer.writeln('    };');
+      buffer.writeln('      final pathParams = <String, dynamic>{');
+      for (final p in pathParams)
+        buffer.writeln(
+          "        '${p['name']}': ${accessArg(GeneratorUtils.camelCase(p['name']))},",
+        );
+      buffer.writeln('      };');
     }
 
-    // Query Params
     final queryParams = params.where((p) => p['source'] == 'query').toList();
     if (queryParams.isNotEmpty) {
-      buffer.writeln('    final queryParams = <String, dynamic>{');
-      for (final p in queryParams) {
-        final pName = GeneratorUtils.camelCase(p['name']);
-        buffer.writeln("      '${p['name']}': $pName,");
-      }
-      buffer.writeln('    };');
+      buffer.writeln('      final queryParams = <String, dynamic>{');
+      for (final p in queryParams)
+        buffer.writeln(
+          "        '${p['name']}': ${accessArg(GeneratorUtils.camelCase(p['name']))},",
+        );
+      buffer.writeln('      };');
     }
 
-    // Body Param(s)
     final bodyParams = params.where((p) => p['source'] == 'body').toList();
     String bodyArg = 'null';
     if (bodyParams.length == 1) {
-      // Single body arg -> pass the object directly
-      bodyArg = GeneratorUtils.camelCase(bodyParams.first['name']);
+      bodyArg = accessArg(GeneratorUtils.camelCase(bodyParams.first['name']));
     } else if (bodyParams.length > 1) {
-      // Multiple body args -> pass as map
-      // Note: This logic depends on how Rust expects it.
-      // Usually if multiple, it's a JSON object.
-      buffer.writeln('    final body = {');
-      for (final p in bodyParams) {
-        final pName = GeneratorUtils.camelCase(p['name']);
-        buffer.writeln("      '${p['name']}': $pName,");
-      }
-      buffer.writeln('    };');
+      buffer.writeln('      final body = {');
+      for (final p in bodyParams)
+        buffer.writeln(
+          "        '${p['name']}': ${accessArg(GeneratorUtils.camelCase(p['name']))},",
+        );
+      buffer.writeln('      };');
       bodyArg = 'body';
     }
 
-    // Decoder
     final responseShape = GeneratorUtils.classifyResponse(returnTypeRef);
     String decoderLambda;
 
-    if (responseShape.kind == ResponseKind.voidType) {
+    if (responseShape.kind == ResponseKind.voidType)
       decoderLambda = '(json) => null';
-    } else {
-      switch (responseShape.kind) {
-        case ResponseKind.model:
-          final mName = GeneratorUtils.pascalCase(responseShape.modelName!);
-          decoderLambda = '(json) => models.$mName.fromJson(json)';
-          break;
-        case ResponseKind.modelVec:
-          final mName = GeneratorUtils.pascalCase(responseShape.modelName!);
-          decoderLambda =
-              '(json) => (json as List).map((e) => models.$mName.fromJson(e)).toList()';
-          break;
-        case ResponseKind.dateTime:
-          decoderLambda = '(json) => DateTime.parse(json as String)';
-          break;
-        case ResponseKind.primitiveInt:
-        case ResponseKind.primitiveFloat:
-        case ResponseKind.primitiveString:
-        case ResponseKind.primitiveBool:
-          // Casting handles nullable if needed inside runtime or here
-          decoderLambda = '(json) => json as $dartReturnType';
-          break;
-        case ResponseKind.primitiveBytes:
-          // Assuming base64 string from JSON if it went through JSON decode
-          decoderLambda = '(json) => base64Decode(json as String)';
-          break;
-        default:
-          decoderLambda = '(json) => json';
-      }
-    }
+    else if (responseShape.kind == ResponseKind.model)
+      decoderLambda =
+          '(json) => models.${GeneratorUtils.pascalCase(responseShape.modelName!)}.fromJson(json)';
+    else if (responseShape.kind == ResponseKind.modelVec)
+      decoderLambda =
+          '(json) => (json as List).map((e) => models.${GeneratorUtils.pascalCase(responseShape.modelName!)}.fromJson(e)).toList()';
+    else
+      decoderLambda = '(json) => json as $dartReturnType';
 
-    // 3. Call _runtime.send
-    buffer.writeln('    return _runtime.send<$dartReturnType>(');
-    buffer.writeln('      endpointId: $id,');
-    buffer.writeln("      method: '$httpMethod',");
-    buffer.writeln("      path: '$path',");
-    buffer.writeln('      args: args,');
-    if (pathParams.isNotEmpty) buffer.writeln('      pathParams: pathParams,');
+    buffer.writeln('      return _runtime.send<$dartReturnType>(');
+    buffer.writeln('        endpointId: $id,');
+    buffer.writeln("        method: '$httpMethod',");
+    buffer.writeln("        path: '$path',");
+    buffer.writeln('        args: argsMap,');
+    if (pathParams.isNotEmpty)
+      buffer.writeln('        pathParams: pathParams,');
     if (queryParams.isNotEmpty)
-      buffer.writeln('      queryParams: queryParams,');
-    if (bodyArg != 'null') buffer.writeln('      body: $bodyArg,');
-    buffer.writeln('      decoder: $decoderLambda,');
-    buffer.writeln('    );');
-    buffer.writeln('  }');
-    buffer.writeln();
+      buffer.writeln('        queryParams: queryParams,');
+    if (bodyArg != 'null') buffer.writeln('        body: $bodyArg,');
+    buffer.writeln('        decoder: $decoderLambda,');
+    buffer.writeln('      );');
   }
 }

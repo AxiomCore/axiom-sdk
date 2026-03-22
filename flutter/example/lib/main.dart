@@ -1,23 +1,37 @@
-import 'dart:math';
-
+// FILE: example/lib/main.dart
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:axiom_flutter/axiom_flutter.dart';
-import 'generated/axiom_sdk.dart';
-import 'generated/models.dart' as models;
 import 'package:path_provider/path_provider.dart';
+
+import 'axiom_generated/axiom_sdk.dart';
+import 'axiom_generated/models.dart' as models;
 
 late final AxiomSdk sdk;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   String? path;
   if (!kIsWeb) {
     final dbDir = await getApplicationSupportDirectory();
     path = dbDir.path;
-    print("Path: $path");
   }
-  sdk = await AxiomSdk.create(baseUrl: "http://localhost:8000", dbPath: path);
+
+  // 1. Initialize the Runtime with Multi-Contract & Debug configurations
+  final config = AxiomConfig(
+    debug: true, // 🕵️‍♂️ Enables beautiful FFI Console Logs
+    dbPath: path,
+    contracts: {
+      'users': const AxiomContractConfig(
+        baseUrl: "http://localhost:8000",
+        assetPath: ".axiom",
+      ),
+    },
+  );
+
+  sdk = await AxiomSdk.create(config);
+
   runApp(const MyApp());
 }
 
@@ -26,176 +40,112 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: UserProfileScreen(),
+      theme: ThemeData(
+        scaffoldBackgroundColor: const Color(0xFFF8FAFC),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2563EB)),
+        fontFamily: 'Inter', // Matches Tailwind default look
+      ),
+      home: const AxiomDashboard(),
     );
   }
 }
 
-class UserProfileScreen extends StatefulWidget {
-  const UserProfileScreen({super.key});
-
-  @override
-  State<UserProfileScreen> createState() => _UserProfileScreenState();
-}
-
-class _UserProfileScreenState extends State<UserProfileScreen> {
-  // This demonstrates handling errors from an action (like a button press).
-  void createUser() {
-    final randomId = Random().nextInt(100);
-    final newUser = models.User(
-      id: randomId,
-      name: "Yash $randomId",
-      email: "yash@genie.ai", // This will cause a validation error in Rust
-      role: models.UserRole.admin,
-    );
-
-    // We only listen once for the result of this action.
-    sdk.createUser(user: newUser).stream.firstWhere((s) => !s.isLoading).then((
-      state,
-    ) {
-      if (state.hasError) {
-        final error = state.error!;
-
-        // 1. Log the full, rich error to the console for debugging.
-        print('--- AXIOM ERROR CAUGHT ---');
-        print('Message: ${error.message}');
-        print('Stage: ${error.stage.name}');
-        print('Category: ${error.category.name}');
-        print('Code: ${error.code}');
-        print('Details: ${error.details}');
-        print('Retryable: ${error.retryable}');
-        print('--------------------------');
-
-        // 2. Show a user-friendly dialog based on the typed error.
-        showDialog(
-          context: context,
-          builder: (ctx) {
-            // Use a switch expression for type-safe error message handling
-            final (title, content) = switch (error.code) {
-              ValidationError() => (
-                "Invalid Input",
-                "Please check your form. Details:\n\n${error.details}",
-              ),
-              HttpStatus(code: 404) => (
-                "Not Found",
-                "The server could not find the requested resource.",
-              ),
-              HttpStatus(code: >= 500) => (
-                "Server Error",
-                "Our servers are having trouble. Please try again later.",
-              ),
-              NetworkTimeout() || NetworkConnectionFailed() => (
-                "Network Error",
-                "Could not connect to the server. Please check your internet connection.",
-              ),
-              _ => ("An Error Occurred", error.message),
-            };
-
-            return AlertDialog(
-              title: Text(title),
-              content: Text(content),
-              actions: [
-                if (error.retryable)
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      // You could call createUser() again here
-                    },
-                    child: const Text("Retry"),
-                  ),
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text("OK"),
-                ),
-              ],
-            );
-          },
-        );
-      } else if (state.data != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Success: ${state.data!.message}"),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    });
-  }
+class AxiomDashboard extends StatelessWidget {
+  const AxiomDashboard({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final userQuery = sdk.getUser(userId: 1);
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Axiom Profile"),
-        actions: [
-          IconButton(
-            onPressed: createUser,
-            icon: const Icon(Icons.add),
-            tooltip: 'Create User (will fail validation)',
-          ),
-        ],
+        backgroundColor: Colors.white,
+        elevation: 0.5,
+        title: const Text(
+          "ATMX Flutter",
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900),
+        ),
+        actions: const [AuthNavbarBadge()],
       ),
-      body: const Column(children: [UserHeader(), Divider(), UserStats()]),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => userQuery.refresh(),
-        label: const Text("Refresh All"),
-        icon: const Icon(Icons.refresh),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Responsive layout: Row on Web/Desktop, Column on Mobile
+            if (constraints.maxWidth > 800) {
+              return const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: ProfileCard()),
+                  SizedBox(width: 32),
+                  Expanded(child: CreateUserForm()),
+                ],
+              );
+            }
+            return const Column(
+              children: [ProfileCard(), SizedBox(height: 32), CreateUserForm()],
+            );
+          },
+        ),
       ),
     );
   }
 }
 
-class UserHeader extends StatelessWidget {
-  const UserHeader({super.key});
+// ==========================================
+// COMPONENT 1: Navbar Badge (Stale-While-Revalidate Sync)
+// ==========================================
+class AuthNavbarBadge extends StatelessWidget {
+  const AuthNavbarBadge({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // Both AuthNavbarBadge and ProfileCard call getUser(1).
+    // Rust deduplicates this into a single network call!
     return Padding(
-      padding: const EdgeInsets.all(20.0),
+      padding: const EdgeInsets.only(right: 24.0),
       child: AxiomBuilder<models.User, models.User>(
-        query: sdk.getUser(userId: 1),
-        selector: (user) => [user.name, user.email],
-        loading: (_) => const Center(child: CircularProgressIndicator()),
-        error: (context, error) {
-          print("UserHeader caught error: $error");
-          return ListTile(
-            leading: const Icon(Icons.error_outline, color: Colors.red),
-            title: const Text('Could not load user profile'),
-            subtitle: Text(error.message),
-          );
-        },
+        query: sdk.users.getUser(userId: 1),
+        loading: (_) =>
+            const Text("Connecting...", style: TextStyle(color: Colors.grey)),
         builder: (context, state, user) {
-          print(
-            "Building UserHeader(${state.source.name})... ${user.toJson()}",
-          );
           return Row(
             children: [
-              const CircleAvatar(radius: 30, child: Icon(Icons.person)),
-              const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    user.name,
-                    style: Theme.of(context).textTheme.headlineSmall,
+              if (state.isFetching)
+                const Padding(
+                  padding: EdgeInsets.only(right: 8.0),
+                  child: SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(strokeWidth: 2),
                   ),
-                  Text(
-                    user.email,
-                    style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              if (state.source == AxiomSource.cache)
+                Container(
+                  margin: const EdgeInsets.only(right: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
                   ),
-                  if (state.isFetching)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 4.0),
-                      child: Text(
-                        "Updating...",
-                        style: TextStyle(fontSize: 10, color: Colors.grey),
-                      ),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade100,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    "⚡ CACHED",
+                    style: TextStyle(
+                      color: Colors.amber.shade900,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
                     ),
-                ],
+                  ),
+                ),
+              Text(
+                "Welcome, ${user.name}",
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           );
@@ -205,45 +155,221 @@ class UserHeader extends StatelessWidget {
   }
 }
 
-class UserStats extends StatelessWidget {
-  const UserStats({super.key});
+// ==========================================
+// COMPONENT 2: Profile Card (Cache Testing)
+// ==========================================
+class ProfileCard extends StatelessWidget {
+  const ProfileCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final query = sdk.users.getUser(userId: 1);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                "1. Stale-While-Revalidate",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              AxiomBuilder<models.User, models.User>(
+                query: query,
+                builder: (context, state, _) {
+                  return TextButton.icon(
+                    onPressed: state.isFetching ? null : () => query.refresh(),
+                    icon: Icon(
+                      state.isFetching ? Icons.sync : Icons.refresh,
+                      size: 16,
+                    ),
+                    label: Text(state.isFetching ? "Syncing..." : "Refresh"),
+                  );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          AxiomBuilder<models.User, models.User>(
+            query: query,
+            loading: (_) => const CircularProgressIndicator(),
+            builder: (context, state, user) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "NAME",
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  Text(
+                    user.name,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    "EMAIL",
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  Text(user.email, style: const TextStyle(fontSize: 16)),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==========================================
+// COMPONENT 3: Form (Zero-Dart Validation)
+// ==========================================
+class CreateUserForm extends StatefulWidget {
+  const CreateUserForm({super.key});
+  @override
+  State<CreateUserForm> createState() => _CreateUserFormState();
+}
+
+class _CreateUserFormState extends State<CreateUserForm> {
+  String name = "Yash Makan";
+  String email = "yash@genie.ai"; // Will trigger Rust validator
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
-      color: Colors.grey[100],
-      child: AxiomBuilder(
-        query: sdk.getUser(userId: 1),
-        transform: (user) => (user.id, user.role),
-        selector: (status) => status,
-        loading: (_) => const LinearProgressIndicator(),
-        error: (context, error) {
-          print("UserStats caught error: $error");
-          return Center(
-            child: Text(
-              'Could not load user stats: ${error.message}',
-              style: TextStyle(color: Colors.red.shade800),
-            ),
-          );
-        },
-        builder: (context, state, result) {
-          print("Building UserStats(${state.source.name})...");
-          String statusString =
-              "ID: ${result.$1} | Role: ${result.$2 ?? 'Guest'}";
-          return Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      padding: const EdgeInsets.all(24),
+      child: AxiomMutationBuilder<models.User, ({models.User user})>(
+        mutation: sdk.users.createUser(), // The generated mutation!
+        builder: (context, state, execute) {
+          final isMutating = state.isMutating;
+
+          // MAGIC: Extract the specific field error directly from the Rust AxiomError object!
+          final emailError = state.error?.getFieldError('email');
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                "User Statistics",
-                style: TextStyle(fontWeight: FontWeight.bold),
+                "2. Zero-Dart Validation",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-              Chip(
-                label: Text(statusString),
-                backgroundColor: state.source == AxiomSource.cache
-                    ? Colors.orange.shade100
-                    : Colors.green.shade100,
+              const SizedBox(height: 4),
+              const Text(
+                "Submitting this form triggers the Rust rod-rs validator.",
+                style: TextStyle(color: Colors.grey),
               ),
+              const SizedBox(height: 24),
+
+              const Text(
+                "FULL NAME",
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey,
+                ),
+              ),
+              TextField(
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                controller: TextEditingController(text: name)
+                  ..selection = TextSelection.collapsed(offset: name.length),
+                onChanged: (v) => name = v,
+              ),
+              const SizedBox(height: 16),
+
+              const Text(
+                "EMAIL (WILL FAIL SCHEMA)",
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey,
+                ),
+              ),
+              TextField(
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                  // Show red border if emailError exists
+                  errorText: emailError != null ? "⚠️ $emailError" : null,
+                ),
+                controller: TextEditingController(text: email)
+                  ..selection = TextSelection.collapsed(offset: email.length),
+                onChanged: (v) => email = v,
+              ),
+              const SizedBox(height: 24),
+
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  onPressed: isMutating
+                      ? null
+                      : () {
+                          // Dart 3 Record syntax!
+                          execute((
+                            user: models.User(
+                              id: 99,
+                              name: name,
+                              email: email,
+                              role: models.UserRole.admin,
+                            ),
+                          ));
+                        },
+                  child: Text(
+                    isMutating
+                        ? "Validating via Rust..."
+                        : state.hasData
+                        ? "✅ Created Successfully!"
+                        : "Submit Payload",
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+
+              if (state.hasError && emailError == null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16.0),
+                  child: Text(
+                    "Global Error: ${state.error!.message}",
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ),
             ],
           );
         },

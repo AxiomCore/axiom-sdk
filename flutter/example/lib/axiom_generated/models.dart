@@ -22,26 +22,6 @@ enum UserRole {
   }
 }
 
-class Message {
-  final String message;
-
-  const Message({
-    required this.message,
-  });
-
-  factory Message.fromJson(Map<String, dynamic> json) {
-    return Message(
-      message: json['message'],
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'message': message,
-    };
-  }
-}
-
 class User {
   final int id;
   final String name;
@@ -57,10 +37,10 @@ class User {
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
-      id: json['id'],
-      name: json['name'],
+      id: json['id'] as int,
+      name: json['name'] as String,
       role: (json['role'] == null ? null : UserRole.fromJson(json['role'])),
-      email: json['email'],
+      email: json['email'] as String,
     );
   }
 

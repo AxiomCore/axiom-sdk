@@ -11,6 +11,8 @@ import 'runtime_stub.dart'
 abstract class AxiomRuntime {
   factory AxiomRuntime() => getRuntime();
 
+  bool debug = false; // NEW: Controls FFI logging
+
   Future<void> init();
 
   Future<void> startup({

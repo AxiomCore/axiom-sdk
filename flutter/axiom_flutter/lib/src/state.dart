@@ -113,6 +113,8 @@ class UnknownCode extends AxiomErrorCode {
 }
 
 /// The main rich error object that is deserialized from Rust.
+// FILE: lib/src/state.dart (Partial Replacement)
+
 class AxiomError {
   final ErrorStage stage;
   final ErrorCategory category;
@@ -141,13 +143,26 @@ class AxiomError {
     );
   }
 
-  @override
-  String toString() {
-    return '[$stage::$category] $message (Code: $code)';
+  /// NEW: The Magic Zero-Dart Validation Parser
+  /// Extracts field-specific errors from the Rust rod-rs schema validator.
+  String? getFieldError(String fieldName) {
+    if (code is! ValidationError || details == null) return null;
+
+    // Rust rod-rs formats errors as: "path.to.field: Error message\nanother.field: Error message"
+    final lines = details!.split('\n');
+    for (final line in lines) {
+      if (line.startsWith('$fieldName:')) {
+        return line.substring(fieldName.length + 1).trim();
+      }
+    }
+    return null;
   }
+
+  @override
+  String toString() => '[$stage::$category] $message (Code: $code)';
 }
 
-enum AxiomStatus { loading, success, error }
+enum AxiomStatus { idle, loading, success, error } // Added 'idle'
 
 enum AxiomSource { none, cache, network }
 
@@ -157,33 +172,41 @@ class AxiomState<T> {
   final AxiomError? error;
   final AxiomSource source;
   final bool isFetching;
+  final bool isMutating; // NEW: Differentiates Forms from Background Syncs
 
-  const AxiomState._({
+  const AxiomState({
     required this.status,
     this.data,
     this.error,
     this.source = AxiomSource.none,
     this.isFetching = false,
+    this.isMutating = false,
   });
 
   AxiomState<R> map<R>(R Function(T data) mapper) {
-    return AxiomState._(
+    return AxiomState<R>(
       status: status,
       data: data != null ? mapper(data!) : null,
       error: error,
       source: source,
       isFetching: isFetching,
+      isMutating: isMutating,
     );
   }
 
+  factory AxiomState.idle() => const AxiomState(status: AxiomStatus.idle);
+
   factory AxiomState.loading() =>
-      const AxiomState._(status: AxiomStatus.loading, isFetching: true);
+      const AxiomState(status: AxiomStatus.loading, isFetching: true);
+
+  factory AxiomState.mutating() =>
+      const AxiomState(status: AxiomStatus.loading, isMutating: true);
 
   factory AxiomState.success(
     T data,
     AxiomSource source, {
     bool isFetching = false,
-  }) => AxiomState._(
+  }) => AxiomState(
     status: AxiomStatus.success,
     data: data,
     source: source,
@@ -194,20 +217,15 @@ class AxiomState<T> {
     AxiomError error, {
     T? previousData,
     AxiomSource? previousSource,
-  }) => AxiomState._(
+  }) => AxiomState(
     status: AxiomStatus.error,
     error: error,
     data: previousData,
     source: previousSource ?? AxiomSource.none,
-    isFetching: false,
   );
 
+  bool get isIdle => status == AxiomStatus.idle;
   bool get isLoading => status == AxiomStatus.loading;
   bool get hasError => status == AxiomStatus.error;
   bool get hasData => data != null;
-
-  @override
-  String toString() {
-    return 'AxiomState<$T>(status: ${status.name}, source: ${source.name}, isFetching: $isFetching, hasData: ${data != null}, hasError: ${error != null})';
-  }
 }

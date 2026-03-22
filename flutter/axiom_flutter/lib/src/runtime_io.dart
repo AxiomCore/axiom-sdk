@@ -194,6 +194,23 @@ class AxiomRuntimeIo implements AxiomRuntime {
   }
 
   @override
+  bool debug = false;
+
+  void _logTransaction(String direction, int reqId, dynamic details) {
+    if (!debug) return;
+    final pen = AnsiPen()..white(bold: true);
+    if (direction == 'OUT') {
+      pen.xterm(063); // Purple-ish
+    } else {
+      pen.xterm(034); // Green-ish
+    }
+
+    final prefix = direction == 'OUT' ? '➔ WASM CALL' : '← WASM RESP';
+    print(pen('$prefix [#$reqId]'));
+    print(details);
+  }
+
+  @override
   Future<void> init() async {
     if (_initCompleter != null) return _initCompleter!.future;
     _initCompleter = Completer<void>();
@@ -521,6 +538,12 @@ class AxiomRuntimeIo implements AxiomRuntime {
       ..ref.len = methodUnits.length;
 
     try {
+      _logTransaction('OUT', requestId, {
+        'endpointId': endpointId,
+        'method': method,
+        'path': path,
+        'payloadLength': requestBytes.length,
+      });
       _callFfi(requestId, endpointId, methodStr.ref, pathStr.ref, bodyBuf.ref);
     } catch (e, st) {
       _controllers.remove(requestId);
