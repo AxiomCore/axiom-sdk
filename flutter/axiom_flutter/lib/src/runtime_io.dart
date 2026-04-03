@@ -16,6 +16,7 @@ import 'query.dart';
 import 'query_manager.dart';
 import 'internal/axiom_codec.dart';
 import 'internal/query_key.dart';
+import 'internal/tracing.dart';
 
 AxiomRuntime getRuntime() => AxiomRuntimeIo();
 
@@ -76,10 +77,28 @@ typedef _AxiomCallNative =
       Uint32,
       AxiomString,
       AxiomString,
+      AxiomString,
       AxiomBuffer,
     );
+
 typedef _AxiomCall =
-    void Function(int, AxiomString, int, AxiomString, AxiomString, AxiomBuffer);
+    void Function(
+      int,
+      AxiomString,
+      int,
+      AxiomString,
+      AxiomString,
+      AxiomString,
+      AxiomBuffer,
+    );
+
+typedef _AxiomSetAuthTokenNative =
+    Void Function(AxiomString, AxiomString, AxiomString);
+typedef _AxiomSetAuthToken =
+    void Function(AxiomString, AxiomString, AxiomString);
+
+typedef _AxiomClearAuthTokenNative = Void Function(AxiomString, AxiomString);
+typedef _AxiomClearAuthToken = void Function(AxiomString, AxiomString);
 
 typedef _AxiomFreeBufferNative = Void Function(AxiomBuffer);
 typedef _AxiomFreeBuffer = void Function(AxiomBuffer);
@@ -159,6 +178,8 @@ class AxiomRuntimeIo implements AxiomRuntime {
   late final _AxiomLoadContract _loadContractFfi;
   late final _AxiomCall _callFfi;
   static late final _AxiomFreeBuffer _freeFfi;
+  late final _AxiomSetAuthToken _setAuthFfi;
+  late final _AxiomClearAuthToken _clearAuthFfi;
 
   AxiomRuntimeIo._internal() {
     _lib = _openPlatformLibrary();
@@ -173,6 +194,14 @@ class AxiomRuntimeIo implements AxiomRuntime {
     _freeFfi = _lib.lookupFunction<_AxiomFreeBufferNative, _AxiomFreeBuffer>(
       'axiom_free_buffer',
     );
+    _setAuthFfi = _lib
+        .lookupFunction<_AxiomSetAuthTokenNative, _AxiomSetAuthToken>(
+          'axiom_set_auth_token',
+        );
+    _clearAuthFfi = _lib
+        .lookupFunction<_AxiomClearAuthTokenNative, _AxiomClearAuthToken>(
+          'axiom_clear_auth_token',
+        );
   }
 
   @override
@@ -189,6 +218,31 @@ class AxiomRuntimeIo implements AxiomRuntime {
       pen('${direction == 'OUT' ? '➔ WASM CALL' : '← WASM RESP'} [#$reqId]'),
     );
     print(details);
+  }
+
+  @override
+  void setAuthToken({
+    required String namespace,
+    required String methodName,
+    required String token,
+  }) {
+    using((Arena arena) {
+      _setAuthFfi(
+        _toAxiomString(namespace, arena),
+        _toAxiomString(methodName, arena),
+        _toAxiomString(token, arena),
+      );
+    });
+  }
+
+  @override
+  void clearAuthToken({required String namespace, required String methodName}) {
+    using((Arena arena) {
+      _clearAuthFfi(
+        _toAxiomString(namespace, arena),
+        _toAxiomString(methodName, arena),
+      );
+    });
   }
 
   @override
@@ -330,6 +384,8 @@ class AxiomRuntimeIo implements AxiomRuntime {
     // FIX: Must be a broadcast stream so multiple widgets can listen to the same FFI call!
     final controller = StreamController<AxiomState<Uint8List>>.broadcast();
 
+    final traceparent = AxiomTracing.generateTraceparent();
+
     _controllers[requestId] = controller;
     controller.add(AxiomState.loading());
 
@@ -344,13 +400,15 @@ class AxiomRuntimeIo implements AxiomRuntime {
     final ns = _toAxiomString(namespace, arena);
     final m = _toAxiomString(method, arena);
     final p = _toAxiomString(path, arena);
+    final tp = _toAxiomString(traceparent, arena);
+
     final bPtr = arena<Uint8>(requestBytes.length);
     bPtr.asTypedList(requestBytes.length).setAll(0, requestBytes);
     final b = arena<AxiomBuffer>()
       ..ref.ptr = bPtr
       ..ref.len = requestBytes.length;
 
-    _callFfi(requestId, ns, endpointId, m, p, b.ref);
+    _callFfi(requestId, ns, endpointId, m, p, tp, b.ref);
     Future.microtask(() => arena.releaseAll());
 
     controller.onCancel = () {

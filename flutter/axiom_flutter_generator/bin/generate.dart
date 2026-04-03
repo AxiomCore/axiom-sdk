@@ -1,144 +1,75 @@
-import 'dart:convert';
 import 'dart:io';
-
+import 'dart:convert';
 import 'package:args/args.dart';
+import 'package:axiom_flutter_generator/src/generator/sdk_writer.dart';
+import 'package:axiom_flutter_generator/src/generator/model_writer.dart';
 import 'package:yaml/yaml.dart';
 
-import '../lib/src/generator/model_writer.dart';
-import '../lib/src/generator/sdk_writer.dart';
-
-Future<void> main(List<String> args) async {
+void main(List<String> arguments) {
   final parser = ArgParser()
-    ..addOption('axiom', help: 'Path to the .axiom file')
-    ..addOption(
-      'out',
-      help: 'Output path relative to lib/ where axiom_sdk.dart will be written',
-    )
-    ..addOption(
-      'project-root',
-      help: 'Path to the Flutter project root containing pubspec.yaml',
-    )
-    ..addFlag('help', negatable: false);
+    ..addOption('config')
+    ..addOption('out')
+    ..addOption('project-root');
 
-  final results = parser.parse(args);
+  final argResults = parser.parse(arguments);
+  final configPath = argResults['config'] as String;
+  final outDir = argResults['out'] as String;
+  final projectRoot = argResults['project-root'] as String;
 
-  if (results['help'] == true) {
-    print(parser.usage);
-    exit(0);
+  // 1. Read Pubspec to get Package Name
+  final pubspecFile = File('$projectRoot/pubspec.yaml');
+  final pubspec = loadYaml(pubspecFile.readAsStringSync());
+  final packageName = pubspec['name'] as String;
+
+  // 2. Read Codegen Manifest
+  final configStr = File(configPath).readAsStringSync();
+  final configJson = jsonDecode(configStr);
+
+  final isSingle = configJson['single'] == true;
+  final contractsNode = configJson['contracts'] as Map<String, dynamic>;
+
+  final Map<String, dynamic> contractsData = {};
+  final Map<String, String> baseUrls = {};
+  final Map<String, String> assetPaths = {};
+
+  for (final entry in contractsNode.entries) {
+    final ns = entry.key;
+    final file = entry.value['file'] as String;
+    final baseUrl = entry.value['baseUrl'] ?? 'http://localhost:8000';
+
+    final fileStr = File(file).readAsStringSync();
+    contractsData[ns] = jsonDecode(fileStr);
+    baseUrls[ns] = baseUrl;
+    assetPaths[ns] = file;
   }
 
-  final axiomPath = results['axiom'] as String?;
-  final outDir = results['out'] as String?;
-  final projectRoot = results['project-root'] as String?;
-
-  if (axiomPath == null || outDir == null || projectRoot == null) {
-    stderr.writeln(
-      '❌ Missing required arguments. You must provide --axiom, --out and --project-root.',
-    );
-    stderr.writeln(parser.usage);
-    exit(1);
-  }
-
-  try {
-    await _generateSdk(
-      axiomPath: axiomPath,
-      outDirRelToLib: outDir,
-      projectRoot: projectRoot,
-    );
-  } catch (e, st) {
-    stderr.writeln('❌ Failed to generate Axiom SDK: $e');
-    stderr.writeln(st);
-    exit(1);
-  }
-}
-
-Future<void> _generateSdk({
-  required String axiomPath,
-  required String outDirRelToLib,
-  required String projectRoot,
-}) async {
-  // 1. Decode IR
-  final ir = await _loadIrFromAxiom(axiomPath);
-
-  // 2. Setup Paths
-  final outDir = _normalizeOutDir(outDirRelToLib);
-  final libOutDir = Directory('$projectRoot/lib/$outDir');
-  if (!libOutDir.existsSync()) {
-    libOutDir.createSync(recursive: true);
-  }
-
-  final packageName = _readPubspecName(projectRoot);
-  final axiomFilename = axiomPath.split(Platform.pathSeparator).last;
-  final modelsImportPath = outDir.isEmpty
-      ? 'models.dart'
-      : '$outDir/models.dart';
-
-  // 3. Read .trust-axiom.json
-  String? signature;
-  String? publicKey;
-  final trustFile = File('$projectRoot/.trust-axiom.json');
-  if (trustFile.existsSync()) {
-    try {
-      final content = trustFile.readAsStringSync();
-      final trustJson = jsonDecode(content) as Map<String, dynamic>;
-      signature = trustJson['signature'] as String?;
-      publicKey = trustJson['public_key'] as String?;
-      stdout.writeln('🔐 Found signature in .trust-axiom.json');
-    } catch (e) {
-      stderr.writeln('⚠️ Warning: Failed to read .trust-axiom.json: $e');
-    }
-  }
-
-  // 4. Generate models.dart
-  final modelsFile = File('${libOutDir.path}/models.dart');
-  final modelWriter = ModelWriter(ir);
-  modelsFile.writeAsStringSync(modelWriter.write());
-  stdout.writeln('✅ Successfully wrote ${modelsFile.path}');
-
-  // 5. Generate axiom_sdk.dart
-  final sdkFile = File('${libOutDir.path}/axiom_sdk.dart');
+  // 3. Write SDK
   final sdkWriter = SdkWriter(
-    ir: ir,
+    contracts: contractsData,
+    baseUrls: baseUrls,
+    assetPaths: assetPaths,
+    isSingle: isSingle,
     packageName: packageName,
-    modelsImportPath: modelsImportPath,
-    axiomFilename: axiomFilename,
-    signature: signature,
-    publicKey: publicKey,
+    modelsImportPath: 'axiom_generated/models.dart',
   );
-  sdkFile.writeAsStringSync(sdkWriter.write());
-  stdout.writeln('✅ Successfully wrote ${sdkFile.path}');
-}
 
-Future<Map<String, dynamic>> _loadIrFromAxiom(String axiomPath) async {
-  final file = File(axiomPath);
-  if (!file.existsSync()) {
-    throw Exception('Axiom file not found: $axiomPath');
-  }
-  final content = await file.readAsString();
-  final axiomFile = jsonDecode(content);
-  if (axiomFile is! Map<String, dynamic>) {
-    throw Exception('Axiom file invalid JSON');
-  }
-  return axiomFile['ir'] as Map<String, dynamic>;
-}
+  File(
+    '$projectRoot/lib/$outDir/axiom_sdk.dart',
+  ).writeAsStringSync(sdkWriter.write());
 
-String _readPubspecName(String projectRoot) {
-  final pubspec = File('$projectRoot/pubspec.yaml');
-  if (!pubspec.existsSync()) {
-    throw Exception('pubspec.yaml not found at $projectRoot/pubspec.yaml');
+  // 4. Merge IRs & Write Models
+  final mergedIr = {
+    'models': <String, dynamic>{},
+    'enums': <String, dynamic>{},
+  };
+  for (final def in contractsData.values) {
+    final ir = def['ir'] ?? def;
+    if (ir['models'] != null) mergedIr['models']!.addAll(ir['models']);
+    if (ir['enums'] != null) mergedIr['enums']!.addAll(ir['enums']);
   }
-  final content = pubspec.readAsStringSync();
-  final doc = loadYaml(content);
-  final name = (doc as YamlMap?)?['name'];
-  return name.toString().trim();
-}
 
-String _normalizeOutDir(String outDir) {
-  var d = outDir.trim();
-  if (d.startsWith('lib/')) {
-    d = d.substring(4);
-  }
-  d = d.replaceAll(RegExp(r'^/+'), '');
-  d = d.replaceAll(RegExp(r'/+$'), '');
-  return d;
+  final modelWriter = ModelWriter(mergedIr);
+  File(
+    '$projectRoot/lib/$outDir/models.dart',
+  ).writeAsStringSync(modelWriter.write());
 }

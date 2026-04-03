@@ -50,6 +50,16 @@ abstract class AxiomRuntime {
     required String path,
     required Uint8List requestBytes,
   });
+
+  /// Sets an authentication token directly into the Rust secure storage.
+  void setAuthToken({
+    required String namespace,
+    required String methodName,
+    required String token,
+  });
+
+  /// Clears an authentication token from the Rust secure storage.
+  void clearAuthToken({required String namespace, required String methodName});
 }
 
 class EventType {

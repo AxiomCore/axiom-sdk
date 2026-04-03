@@ -13,6 +13,7 @@ import 'query.dart';
 import 'query_manager.dart';
 import 'internal/axiom_codec.dart';
 import 'internal/query_key.dart';
+import 'internal/tracing.dart';
 
 AxiomRuntime getRuntime() => AxiomRuntimeWeb();
 
@@ -24,6 +25,19 @@ external JSPromise _wasmBindgenInit(JSAny moduleOrPath);
 class WasmExports {}
 
 extension WasmExportsExt on WasmExports {
+  @JS('axiom_wasm_set_auth_token')
+  external void axiomSetAuthToken(
+    int nPtr,
+    int nLen,
+    int mPtr,
+    int mLen,
+    int tPtr,
+    int tLen,
+  );
+
+  @JS('axiom_wasm_clear_auth_token')
+  external void axiomClearAuthToken(int nPtr, int nLen, int mPtr, int mLen);
+
   @JS('axiom_wasm_initialize')
   external int axiomInitialize(int dbPtr, int dbLen);
 
@@ -51,6 +65,8 @@ extension WasmExportsExt on WasmExports {
     int mLen,
     int pPtr,
     int pLen,
+    int tpPtr,
+    int tpLen,
     int bPtr,
     int bLen,
   );
@@ -90,6 +106,39 @@ class AxiomRuntimeWeb implements AxiomRuntime {
 
   @override
   bool debug = false;
+
+  @override
+  void setAuthToken({
+    required String namespace,
+    required String methodName,
+    required String token,
+  }) {
+    final nLen = <int>[0];
+    final nPtr = _allocString(namespace, nLen);
+    final mLen = <int>[0];
+    final mPtr = _allocString(methodName, mLen);
+    final tLen = <int>[0];
+    final tPtr = _allocString(token, tLen);
+
+    _wasm.axiomSetAuthToken(nPtr, nLen[0], mPtr, mLen[0], tPtr, tLen[0]);
+
+    _wasm.axiomFreeMemory(nPtr, nLen[0]);
+    _wasm.axiomFreeMemory(mPtr, mLen[0]);
+    _wasm.axiomFreeMemory(tPtr, tLen[0]);
+  }
+
+  @override
+  void clearAuthToken({required String namespace, required String methodName}) {
+    final nLen = <int>[0];
+    final nPtr = _allocString(namespace, nLen);
+    final mLen = <int>[0];
+    final mPtr = _allocString(methodName, mLen);
+
+    _wasm.axiomClearAuthToken(nPtr, nLen[0], mPtr, mLen[0]);
+
+    _wasm.axiomFreeMemory(nPtr, nLen[0]);
+    _wasm.axiomFreeMemory(mPtr, mLen[0]);
+  }
 
   @override
   Future<void> init([String? dbPath]) async {
@@ -324,6 +373,8 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   }) {
     final requestId = _nextRequestId++;
 
+    final traceparent = AxiomTracing.generateTraceparent();
+
     // FIX: Must be a broadcast stream!
     final controller = StreamController<AxiomState<Uint8List>>.broadcast();
 
@@ -336,6 +387,8 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     final mPtr = _allocString(method, mLen);
     final pLen = <int>[0];
     final pPtr = _allocString(path, pLen);
+    final tpLen = <int>[0];
+    final tpPtr = _allocString(traceparent, tpLen);
     final bPtr = _allocBytes(requestBytes);
 
     _logTransaction('OUT', requestId, {
@@ -354,6 +407,8 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       mLen[0],
       pPtr,
       pLen[0],
+      tpPtr,
+      tpLen[0],
       bPtr,
       requestBytes.length,
     );
@@ -361,6 +416,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     _wasm.axiomFreeMemory(nsPtr, nsLen[0]);
     _wasm.axiomFreeMemory(mPtr, mLen[0]);
     _wasm.axiomFreeMemory(pPtr, pLen[0]);
+    _wasm.axiomFreeMemory(tpPtr, tpLen[0]);
     _wasm.axiomFreeMemory(bPtr, requestBytes.length);
 
     controller.onCancel = () => _controllers.remove(requestId);
