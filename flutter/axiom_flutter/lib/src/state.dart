@@ -172,7 +172,8 @@ class AxiomState<T> {
   final AxiomError? error;
   final AxiomSource source;
   final bool isFetching;
-  final bool isMutating; // NEW: Differentiates Forms from Background Syncs
+  final bool isMutating;
+  final bool isStreaming;
 
   const AxiomState({
     required this.status,
@@ -181,6 +182,7 @@ class AxiomState<T> {
     this.source = AxiomSource.none,
     this.isFetching = false,
     this.isMutating = false,
+    this.isStreaming = false,
   });
 
   AxiomState<R> map<R>(R Function(T data) mapper) {
@@ -191,6 +193,7 @@ class AxiomState<T> {
       source: source,
       isFetching: isFetching,
       isMutating: isMutating,
+      isStreaming: isStreaming,
     );
   }
 
@@ -206,11 +209,13 @@ class AxiomState<T> {
     T data,
     AxiomSource source, {
     bool isFetching = false,
+    bool isStreaming = false,
   }) => AxiomState(
     status: AxiomStatus.success,
     data: data,
     source: source,
     isFetching: isFetching,
+    isStreaming: isStreaming,
   );
 
   factory AxiomState.error(
@@ -226,6 +231,7 @@ class AxiomState<T> {
 
   bool get isIdle => status == AxiomStatus.idle;
   bool get isLoading => status == AxiomStatus.loading;
+  bool get isSuccess => status == AxiomStatus.success;
   bool get hasError => status == AxiomStatus.error;
   bool get hasData => data != null;
 }

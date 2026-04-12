@@ -184,20 +184,56 @@ class SdkWriter {
     final path = ep['path'] as String;
     final httpMethod = (ep['method'] as String).toUpperCase();
 
-    final returnTypeRef = ep['returnType'] as Map<String, dynamic>;
+    final returnTypeRef =
+        (ep['returnType'] as Map<String, dynamic>?) ?? {'kind': 'void'};
     final returnIsOptional = ep['returnIsOptional'] as bool? ?? false;
 
+    final params =
+        (ep['parameters'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+
+    // === NEW STREAMING LOGIC ===
+    final streaming = ep['streaming'] as Map<String, dynamic>?;
+    final isWs = streaming?['type'] == 'websocket';
+    final isStream = streaming != null && !isWs;
+    final isMutation = httpMethod != 'GET';
+
+    Map<String, dynamic> actualReturnTypeRef = returnTypeRef;
+    if (streaming != null &&
+        streaming.containsKey('responseType') &&
+        streaming['responseType'] != null) {
+      actualReturnTypeRef = streaming['responseType'] as Map<String, dynamic>;
+    }
+
     String dartReturnType = GeneratorUtils.dartTypeFromIr(
-      returnTypeRef,
+      actualReturnTypeRef,
       scoped: true,
     );
     if (returnIsOptional && dartReturnType != 'void') dartReturnType += '?';
 
-    final params =
-        (ep['parameters'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final isMutation = httpMethod != 'GET';
-
-    if (isMutation) {
+    if (isWs) {
+      _writeWebSocket(
+        buffer,
+        methodName,
+        id,
+        path,
+        dartReturnType,
+        actualReturnTypeRef,
+        params,
+        namespaceRef,
+      );
+    } else if (isStream) {
+      _writeStream(
+        buffer,
+        methodName,
+        id,
+        path,
+        httpMethod,
+        dartReturnType,
+        actualReturnTypeRef,
+        params,
+        namespaceRef,
+      );
+    } else if (isMutation) {
       _writeMutation(
         buffer,
         methodName,
@@ -221,6 +257,221 @@ class SdkWriter {
         params,
         namespaceRef,
       );
+    }
+  }
+
+  void _writeWebSocket(
+    StringBuffer buffer,
+    String methodName,
+    int id,
+    String path,
+    String dartReturnType,
+    Map<String, dynamic> returnTypeRef,
+    List<Map<String, dynamic>> params,
+    String namespaceRef,
+  ) {
+    buffer.write('  AxiomChannel<dynamic, dynamic> $methodName(');
+    _writeMethodParams(buffer, params);
+    buffer.writeln(') {');
+
+    _writeParamMaps(buffer, params, false);
+
+    final nsArg = namespaceRef.startsWith('_')
+        ? namespaceRef
+        : "'$namespaceRef'";
+    buffer.writeln('    final res = _runtime.callStream(');
+    buffer.writeln('      namespace: $nsArg,');
+    buffer.writeln('      endpointId: $id,');
+    buffer.writeln('      method: \'WS\',');
+    buffer.writeln('      path: \'$path\',');
+    if (params.any((p) => p['source'] == 'path'))
+      buffer.writeln('      pathParams: pathParams,');
+    if (params.any((p) => p['source'] == 'query'))
+      buffer.writeln('      queryParams: queryParams,');
+    buffer.writeln('      requestBytes: Uint8List(0),'); // Handled natively
+    buffer.writeln('    );');
+
+    buffer.writeln('    final mapped = res.stream.map((state) {');
+    buffer.writeln(
+      '      if (state.hasError) return state.map<dynamic>((_) => throw \'\');',
+    );
+    buffer.writeln(
+      '      if (state.data != null) return AxiomState<dynamic>.success(utf8.decode(state.data!), state.source, isStreaming: true);',
+    );
+    buffer.writeln('      return AxiomState<dynamic>.loading();');
+    buffer.writeln('    });');
+
+    buffer.writeln(
+      '    return AxiomChannel<dynamic, dynamic>(res.requestId, mapped, _runtime);',
+    );
+    buffer.writeln('  }');
+    buffer.writeln();
+  }
+
+  // --- NEW: HTTP Stream Generator ---
+  void _writeStream(
+    StringBuffer buffer,
+    String methodName,
+    int id,
+    String path,
+    String httpMethod,
+    String dartReturnType,
+    Map<String, dynamic> returnTypeRef,
+    List<Map<String, dynamic>> params,
+    String namespaceRef,
+  ) {
+    buffer.write('  AxiomStreamQuery<$dartReturnType> $methodName(');
+    _writeMethodParams(buffer, params);
+    buffer.writeln(') {');
+
+    _writeParamMaps(buffer, params, false);
+
+    final shape = GeneratorUtils.classifyResponse(returnTypeRef);
+    String decoder;
+    if (shape.kind == ResponseKind.voidType) {
+      decoder = '(bytes) => null';
+    } else {
+      String jsonParser;
+      if (shape.kind == ResponseKind.model) {
+        jsonParser =
+            'models.${GeneratorUtils.pascalCase(shape.modelName!)}.fromJson(json)';
+      } else if (shape.kind == ResponseKind.modelVec) {
+        jsonParser =
+            '(json as List).map((e) => models.${GeneratorUtils.pascalCase(shape.modelName!)}.fromJson(e)).toList()';
+      } else {
+        jsonParser = 'json as $dartReturnType';
+      }
+
+      decoder =
+          '''(bytes) {
+          final str = utf8.decode(bytes).trim();
+          if (str.isEmpty) return null;
+
+          // Split chunk sequences explicitly (Newline JSON/SSE events fallback handler)
+          final lines = str.split('\\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+          if (lines.isEmpty) return null;
+
+          for (var line in lines) {
+            if (line.startsWith('data:')) {
+              line = line.substring(5).trim();
+            }
+            try {
+              final json = jsonDecode(line);
+              return $jsonParser;
+            } catch (_) {}
+          }
+
+          if (str is $dartReturnType) return str as $dartReturnType;
+          return null;
+        }''';
+    }
+
+    final nsArg = namespaceRef.startsWith('_')
+        ? namespaceRef
+        : "'$namespaceRef'";
+    buffer.writeln('    final res = _runtime.callStream(');
+    buffer.writeln('      namespace: $nsArg,');
+    buffer.writeln('      endpointId: $id,');
+    buffer.writeln('      method: \'$httpMethod\',');
+    buffer.writeln('      path: \'$path\',');
+    if (params.any((p) => p['source'] == 'path'))
+      buffer.writeln('      pathParams: pathParams,');
+    if (params.any((p) => p['source'] == 'query'))
+      buffer.writeln('      queryParams: queryParams,');
+    buffer.writeln(
+      '      requestBytes: Uint8List(0),',
+    ); // Usually GET streams don't have bodies
+    buffer.writeln('    );');
+
+    buffer.writeln('    final mapped = res.stream.map((state) {');
+    buffer.writeln(
+      '      if (state.hasError) return state.map<$dartReturnType>((_) => throw \'\');',
+    );
+    buffer.writeln('      if (state.data != null) {');
+    buffer.writeln('         final decodeFn = $decoder;');
+    buffer.writeln('         final decodedData = decodeFn(state.data!);');
+    buffer.writeln(
+      '         if (decodedData == null) return AxiomState<$dartReturnType>.loading();',
+    );
+    buffer.writeln(
+      '         return AxiomState<$dartReturnType>.success(decodedData, state.source, isStreaming: state.isStreaming);',
+    );
+    buffer.writeln('      }');
+    buffer.writeln('      return AxiomState<$dartReturnType>.loading();');
+    buffer.writeln('    });');
+
+    buffer.writeln('    return AxiomStreamQuery<$dartReturnType>(mapped);');
+    buffer.writeln('  }');
+    buffer.writeln();
+  }
+
+  void _writeMethodParams(
+    StringBuffer buffer,
+    List<Map<String, dynamic>> params,
+  ) {
+    if (params.isNotEmpty) {
+      buffer.write('{');
+      for (final p in params) {
+        final pName = GeneratorUtils.camelCase(p['name']);
+        final pType = GeneratorUtils.dartTypeFromIr(p['typeRef'], scoped: true);
+        final isOpt = p['isOptional'] as bool? ?? false;
+        buffer.write(isOpt ? '$pType? $pName, ' : 'required $pType $pName, ');
+      }
+      buffer.write('}');
+    }
+  }
+
+  void _writeParamMaps(
+    StringBuffer buffer,
+    List<Map<String, dynamic>> params,
+    bool isMutation,
+  ) {
+    String access(String pName) => isMutation ? 'args.$pName' : pName;
+
+    buffer.writeln('      final argsMap = <String, dynamic>{');
+    for (final p in params) {
+      final pName = GeneratorUtils.camelCase(p['name']);
+      final isNamed = p['typeRef']['kind'] == 'named';
+      buffer.writeln(
+        "        '${p['name']}': ${isNamed ? '${access(pName)}?.toJson()' : access(pName)},",
+      );
+    }
+    buffer.writeln('      };');
+
+    final pathParams = params.where((p) => p['source'] == 'path').toList();
+    if (pathParams.isNotEmpty) {
+      buffer.writeln('      final pathParams = <String, dynamic>{');
+      for (final p in pathParams)
+        buffer.writeln(
+          "        '${p['name']}': ${access(GeneratorUtils.camelCase(p['name']))},",
+        );
+      buffer.writeln('      };');
+    }
+
+    final queryParams = params.where((p) => p['source'] == 'query').toList();
+    if (queryParams.isNotEmpty) {
+      buffer.writeln('      final queryParams = <String, dynamic>{');
+      for (final p in queryParams)
+        buffer.writeln(
+          "        '${p['name']}': ${access(GeneratorUtils.camelCase(p['name']))},",
+        );
+      buffer.writeln('      };');
+    }
+
+    final bodyParams = params.where((p) => p['source'] == 'body').toList();
+    if (bodyParams.isNotEmpty) {
+      if (bodyParams.length == 1) {
+        buffer.writeln(
+          '      final body = ${access(GeneratorUtils.camelCase(bodyParams.first['name']))};',
+        );
+      } else {
+        buffer.writeln('      final body = {');
+        for (final p in bodyParams)
+          buffer.writeln(
+            "        '${p['name']}': ${access(GeneratorUtils.camelCase(p['name']))},",
+          );
+        buffer.writeln('      };');
+      }
     }
   }
 

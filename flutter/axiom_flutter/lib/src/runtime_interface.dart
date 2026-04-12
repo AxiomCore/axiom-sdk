@@ -8,6 +8,12 @@ import 'runtime_stub.dart'
     if (dart.library.io) 'runtime_io.dart'
     if (dart.library.js_interop) 'runtime_web.dart';
 
+class AxiomStreamResponse {
+  final int requestId;
+  final Stream<AxiomState<Uint8List>> stream;
+  AxiomStreamResponse(this.requestId, this.stream);
+}
+
 abstract class AxiomRuntime {
   factory AxiomRuntime() => getRuntime();
 
@@ -43,11 +49,13 @@ abstract class AxiomRuntime {
     required T Function(dynamic json) decoder,
   });
 
-  Stream<AxiomState<Uint8List>> callStream({
+  AxiomStreamResponse callStream({
     required String namespace,
     required int endpointId,
     required String method,
     required String path,
+    Map<String, dynamic>? pathParams,
+    Map<String, dynamic>? queryParams,
     required Uint8List requestBytes,
   });
 
@@ -60,6 +68,8 @@ abstract class AxiomRuntime {
 
   /// Clears an authentication token from the Rust secure storage.
   void clearAuthToken({required String namespace, required String methodName});
+
+  void sendStreamMessage({required int requestId, required Uint8List payload});
 }
 
 class EventType {
@@ -68,6 +78,7 @@ class EventType {
   static const int cacheHit = 2;
   static const int cacheHitAndFetching = 3;
   static const int error = 4;
+  static const int streamChunk = 5;
 }
 
 class FfiError {
