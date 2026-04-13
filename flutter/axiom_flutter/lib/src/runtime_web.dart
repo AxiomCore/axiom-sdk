@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
-import 'package:ansicolor/ansicolor.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:web/web.dart' as web;
 
@@ -11,7 +10,6 @@ import 'runtime_interface.dart';
 import 'state.dart';
 import 'query.dart';
 import 'query_manager.dart';
-import 'channel.dart';
 import 'internal/axiom_codec.dart';
 import 'internal/query_key.dart';
 import 'internal/tracing.dart';
@@ -28,7 +26,6 @@ class WasmExports {}
 extension WasmExportsExt on WasmExports {
   @JS('axiom_wasm_initialize')
   external int axiomInitialize(int dbPtr, int dbLen);
-
   @JS('axiom_wasm_load_contract')
   external int axiomLoadContract(
     int nPtr,
@@ -42,7 +39,6 @@ extension WasmExportsExt on WasmExports {
     int pkPtr,
     int pkLen,
   );
-
   @JS('axiom_wasm_call')
   external void axiomCall(
     JSNumber reqId,
@@ -58,7 +54,6 @@ extension WasmExportsExt on WasmExports {
     int bPtr,
     int bLen,
   );
-
   @JS('axiom_wasm_set_auth_token')
   external void axiomSetAuthToken(
     int nPtr,
@@ -68,22 +63,16 @@ extension WasmExportsExt on WasmExports {
     int tPtr,
     int tLen,
   );
-
   @JS('axiom_wasm_clear_auth_token')
   external void axiomClearAuthToken(int nPtr, int nLen, int mPtr, int mLen);
-
   @JS('axiom_wasm_send_stream_message')
   external void axiomSendMsg(JSNumber reqId, int ptr, int len);
-
   @JS('axiom_malloc')
   external int axiomMalloc(int size);
-
   @JS('axiom_free_memory')
   external void axiomFreeMemory(int ptr, int size);
-
   @JS('axiom_process_responses')
   external void axiomProcessResponses();
-
   @JS('memory')
   external WasmMemory get memory;
 }
@@ -103,6 +92,9 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   AxiomRuntimeWeb._internal();
 
   final _controllers = <int, StreamController<AxiomState<Uint8List>>>{};
+  // Tracks requests that received Error so the subsequent Complete
+  // closes the controller without emitting spurious state.
+  final _hadError = <int>{};
   int _nextRequestId = 1;
   late final WasmExports _wasm;
 
@@ -115,9 +107,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     required String methodName,
     required String token,
   }) {
-    final n = _alloc(namespace);
-    final m = _alloc(methodName);
-    final t = _alloc(token);
+    final n = _alloc(namespace), m = _alloc(methodName), t = _alloc(token);
     _wasm.axiomSetAuthToken(n.ptr, n.len, m.ptr, m.len, t.ptr, t.len);
     _free(n);
     _free(m);
@@ -126,8 +116,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
 
   @override
   void clearAuthToken({required String namespace, required String methodName}) {
-    final n = _alloc(namespace);
-    final m = _alloc(methodName);
+    final n = _alloc(namespace), m = _alloc(methodName);
     _wasm.axiomClearAuthToken(n.ptr, n.len, m.ptr, m.len);
     _free(n);
     _free(m);
@@ -160,7 +149,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       const Duration(milliseconds: 16),
       (_) => _wasm.axiomProcessResponses(),
     );
-    final db = _alloc(dbPath ?? "");
+    final db = _alloc(dbPath ?? '');
     _wasm.axiomInitialize(db.ptr, db.len);
     _free(db);
   }
@@ -179,54 +168,82 @@ class AxiomRuntimeWeb implements AxiomRuntime {
               final id = reqId.toDartInt;
               final controller = _controllers[id];
               if (controller == null) return;
-              Uint8List? data;
-              if (dPtr.toDartInt != 0)
-                data = Uint8List.fromList(
+
+              // EventType::Complete — always close so ActiveQuery._streamClosed is set.
+              // When this follows an Error, just close without emitting extra state.
+              if (evtType.toDartInt == EventType.complete) {
+                _hadError.remove(id);
+                if (!controller.isClosed) controller.close();
+                _controllers.remove(id);
+                return;
+              }
+
+              if (evtType.toDartInt == EventType.streamChunk) {
+                Uint8List data = Uint8List.fromList(
                   Uint8List.view(
                     _wasm.memory.jsBuffer.toDart,
                     dPtr.toDartInt,
                     dLen.toDartInt,
                   ),
                 );
-              if (evtType.toDartInt == EventType.complete) {
-                controller.close();
-                _controllers.remove(id);
-                return;
-              }
-              if (evtType.toDartInt == EventType.streamChunk) {
                 controller.add(
                   AxiomState.success(
-                    data!,
+                    data,
                     AxiomSource.network,
                     isStreaming: true,
                   ),
                 );
                 return;
               }
+
               if (evtType.toDartInt == EventType.error) {
-                final errJson = utf8.decode(
+                _hadError.add(id);
+                String errJson = '';
+                if (ePtr.toDartInt != 0) {
+                  errJson = utf8.decode(
+                    Uint8List.view(
+                      _wasm.memory.jsBuffer.toDart,
+                      ePtr.toDartInt,
+                      eLen.toDartInt,
+                    ),
+                  );
+                }
+                final error = errJson.isNotEmpty
+                    ? AxiomError.fromJson(jsonDecode(errJson))
+                    : AxiomError(
+                        stage: ErrorStage.runtime,
+                        category: ErrorCategory.unknown,
+                        code: UnknownCode(FfiError.name(errCode.toDartInt)),
+                        message: 'Internal error',
+                        retryable: false,
+                      );
+                controller.add(AxiomState.error(error));
+                // Do NOT close here — Rust sends Complete right after Error.
+                // We close on that Complete event so ActiveQuery gets onDone.
+                return;
+              }
+
+              // NetworkSuccess / CacheHit / CacheHitAndFetching
+              if (dPtr.toDartInt != 0) {
+                final data = Uint8List.fromList(
                   Uint8List.view(
                     _wasm.memory.jsBuffer.toDart,
-                    ePtr.toDartInt,
-                    eLen.toDartInt,
+                    dPtr.toDartInt,
+                    dLen.toDartInt,
                   ),
                 );
                 controller.add(
-                  AxiomState.error(AxiomError.fromJson(jsonDecode(errJson))),
+                  AxiomState.success(
+                    data,
+                    (evtType.toDartInt == EventType.cacheHit ||
+                            evtType.toDartInt == EventType.cacheHitAndFetching)
+                        ? AxiomSource.cache
+                        : AxiomSource.network,
+                    isFetching:
+                        evtType.toDartInt == EventType.cacheHitAndFetching,
+                  ),
                 );
-                return;
               }
-              controller.add(
-                AxiomState.success(
-                  data!,
-                  (evtType.toDartInt == EventType.cacheHit ||
-                          evtType.toDartInt == EventType.cacheHitAndFetching)
-                      ? AxiomSource.cache
-                      : AxiomSource.network,
-                  isFetching:
-                      evtType.toDartInt == EventType.cacheHitAndFetching,
-                ),
-              );
             })
             .toJS;
   }
@@ -239,11 +256,10 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     String? signature,
     String? publicKey,
   }) {
-    final n = _alloc(namespace);
-    final b = _alloc(baseUrl);
-    final c = _allocBytes(contractBytes);
-    final s = _alloc(signature ?? "");
-    final p = _alloc(publicKey ?? "");
+    final n = _alloc(namespace),
+        b = _alloc(baseUrl),
+        c = _allocBytes(contractBytes);
+    final s = _alloc(signature ?? ''), p = _alloc(publicKey ?? '');
     _wasm.axiomLoadContract(
       n.ptr,
       n.len,
@@ -277,23 +293,34 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     final controller = StreamController<AxiomState<Uint8List>>.broadcast();
     _controllers[id] = controller;
     controller.add(AxiomState.loading());
-    var fPath = path;
+
+    var fPath =
+        path; // Note: this variable is named 'finalPath' in runtime_io.dart
     pathParams?.forEach(
       (k, v) => fPath = fPath.replaceAll('{$k}', v.toString()),
     );
-    if (queryParams?.isNotEmpty ?? false)
-      fPath +=
-          (fPath.contains('?') ? '&' : '?') +
-          Uri(
-            queryParameters: queryParams!.map(
-              (k, v) => MapEntry(k, v.toString()),
-            ),
-          ).query;
+
+    // ✅ FIX: Filter out 'null' query parameters before building the URI
+    if (queryParams != null && queryParams.isNotEmpty) {
+      final filteredParams = <String, String>{};
+      for (final entry in queryParams.entries) {
+        if (entry.value != null) {
+          filteredParams[entry.key] = entry.value.toString();
+        }
+      }
+
+      if (filteredParams.isNotEmpty) {
+        fPath +=
+            (fPath.contains('?') ? '&' : '?') +
+            Uri(queryParameters: filteredParams).query;
+      }
+    }
+
     final tp = AxiomTracing.generateTraceparent();
-    final n = _alloc(namespace);
-    final m = _alloc(method);
-    final p = _alloc(fPath);
-    final t = _alloc(tp);
+    final n = _alloc(namespace),
+        m = _alloc(method),
+        p = _alloc(fPath),
+        t = _alloc(tp);
     final br = _allocBytes(requestBytes);
     _wasm.axiomCall(
       id.toJS,
@@ -337,27 +364,78 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       key,
       AxiomQueryManager().watch<T>(
         key,
-        () =>
-            callStream(
-              namespace: namespace,
-              endpointId: endpointId,
-              method: method,
-              path: path,
-              pathParams: pathParams,
-              queryParams: queryParams,
-              requestBytes: AxiomCodec.encodeBody(body),
-            ).stream.map((state) {
-              if (state.data != null)
-                return AxiomState.success(
-                  AxiomCodec.decode(state.data!, decoder),
-                  state.source,
-                  isFetching: state.isFetching,
-                  isStreaming: state.isStreaming,
-                );
-              return state.map((_) => null as T);
-            }),
+        () => _rawStream(
+          namespace: namespace,
+          endpointId: endpointId,
+          method: method,
+          path: path,
+          pathParams: pathParams,
+          queryParams: queryParams,
+          body: body,
+          decoder: decoder,
+        ),
       ),
     );
+  }
+
+  @override
+  AxiomQuery<T> sendMutation<T>({
+    required String namespace,
+    required int endpointId,
+    required String method,
+    required String path,
+    Map<String, dynamic>? pathParams,
+    Map<String, dynamic>? queryParams,
+    Object? body,
+    required T Function(dynamic json) decoder,
+  }) {
+    final key =
+        '${namespace}_${endpointId}_mut_${DateTime.now().microsecondsSinceEpoch}';
+    return AxiomQuery(
+      key,
+      _rawStream(
+        namespace: namespace,
+        endpointId: endpointId,
+        method: method,
+        path: path,
+        pathParams: pathParams,
+        queryParams: queryParams,
+        body: body,
+        decoder: decoder,
+      ),
+      isMutation: true,
+    );
+  }
+
+  Stream<AxiomState<T>> _rawStream<T>({
+    required String namespace,
+    required int endpointId,
+    required String method,
+    required String path,
+    Map<String, dynamic>? pathParams,
+    Map<String, dynamic>? queryParams,
+    Object? body,
+    required T Function(dynamic json) decoder,
+  }) {
+    return callStream(
+      namespace: namespace,
+      endpointId: endpointId,
+      method: method,
+      path: path,
+      pathParams: pathParams,
+      queryParams: queryParams,
+      requestBytes: AxiomCodec.encodeBody(body),
+    ).stream.map((state) {
+      if (state.data != null) {
+        return AxiomState.success(
+          AxiomCodec.decode(state.data!, decoder),
+          state.source,
+          isFetching: state.isFetching,
+          isStreaming: state.isStreaming,
+        );
+      }
+      return state.map((_) => null as T);
+    });
   }
 
   _WebAlloc _alloc(String s) => _allocBytes(Uint8List.fromList(utf8.encode(s)));
@@ -389,7 +467,6 @@ class AxiomRuntimeWeb implements AxiomRuntime {
 }
 
 class _WebAlloc {
-  final int ptr;
-  final int len;
+  final int ptr, len;
   _WebAlloc(this.ptr, this.len);
 }

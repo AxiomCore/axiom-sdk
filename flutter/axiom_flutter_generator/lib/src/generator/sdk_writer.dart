@@ -220,6 +220,7 @@ class SdkWriter {
         actualReturnTypeRef,
         params,
         namespaceRef,
+        streaming,
       );
     } else if (isStream) {
       _writeStream(
@@ -265,12 +266,30 @@ class SdkWriter {
     String methodName,
     int id,
     String path,
-    String dartReturnType,
+    String dartReturnType, // This was the default return type, we'll override
     Map<String, dynamic> returnTypeRef,
     List<Map<String, dynamic>> params,
     String namespaceRef,
+    Map<String, dynamic>? streaming, // Pass the streaming def here
   ) {
-    buffer.write('  AxiomChannel<dynamic, dynamic> $methodName(');
+    // 1. Resolve Receive Type (from serverMessages)
+    final serverMsgs = streaming?['serverMessages'] as List?;
+    final receiveTypeRef = (serverMsgs != null && serverMsgs.isNotEmpty)
+        ? serverMsgs[0]['model'] as Map<String, dynamic>
+        : {'kind': 'json'};
+    final receiveType = GeneratorUtils.dartTypeFromIr(
+      receiveTypeRef,
+      scoped: true,
+    );
+
+    // 2. Resolve Send Type (from clientMessages)
+    final clientMsgs = streaming?['clientMessages'] as List?;
+    final sendTypeRef = (clientMsgs != null && clientMsgs.isNotEmpty)
+        ? clientMsgs[0]['model'] as Map<String, dynamic>
+        : {'kind': 'json'};
+    final sendType = GeneratorUtils.dartTypeFromIr(sendTypeRef, scoped: true);
+
+    buffer.write('  AxiomChannel<$receiveType, $sendType> $methodName(');
     _writeMethodParams(buffer, params);
     buffer.writeln(') {');
 
@@ -279,6 +298,7 @@ class SdkWriter {
     final nsArg = namespaceRef.startsWith('_')
         ? namespaceRef
         : "'$namespaceRef'";
+
     buffer.writeln('    final res = _runtime.callStream(');
     buffer.writeln('      namespace: $nsArg,');
     buffer.writeln('      endpointId: $id,');
@@ -288,21 +308,35 @@ class SdkWriter {
       buffer.writeln('      pathParams: pathParams,');
     if (params.any((p) => p['source'] == 'query'))
       buffer.writeln('      queryParams: queryParams,');
-    buffer.writeln('      requestBytes: Uint8List(0),'); // Handled natively
+    buffer.writeln('      requestBytes: Uint8List(0),');
     buffer.writeln('    );');
+
+    // Generate Decoder for ReceiveType
+    final shape = GeneratorUtils.classifyResponse(receiveTypeRef);
+    String decoderLogic;
+    if (shape.kind == ResponseKind.model) {
+      decoderLogic =
+          'models.${GeneratorUtils.pascalCase(shape.modelName!)}.fromJson(jsonDecode(utf8.decode(state.data!)))';
+    } else {
+      decoderLogic = 'utf8.decode(state.data!) as $receiveType';
+    }
 
     buffer.writeln('    final mapped = res.stream.map((state) {');
     buffer.writeln(
-      '      if (state.hasError) return state.map<dynamic>((_) => throw \'\');',
+      '      if (state.hasError) return state.map<$receiveType>((_) => throw \'\');',
     );
+    buffer.writeln('      if (state.data != null) {');
+    buffer.writeln('        try {');
     buffer.writeln(
-      '      if (state.data != null) return AxiomState<dynamic>.success(utf8.decode(state.data!), state.source, isStreaming: true);',
+      '          return AxiomState<$receiveType>.success($decoderLogic, state.source, isStreaming: true);',
     );
-    buffer.writeln('      return AxiomState<dynamic>.loading();');
+    buffer.writeln('        } catch (e) { print("WS Decode Error: \$e"); }');
+    buffer.writeln('      }');
+    buffer.writeln('      return AxiomState<$receiveType>.loading();');
     buffer.writeln('    });');
 
     buffer.writeln(
-      '    return AxiomChannel<dynamic, dynamic>(res.requestId, mapped, _runtime);',
+      '    return AxiomChannel<$receiveType, $sendType>(res.requestId, mapped, _runtime);',
     );
     buffer.writeln('  }');
     buffer.writeln();

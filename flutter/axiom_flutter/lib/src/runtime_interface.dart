@@ -3,7 +3,6 @@ import 'dart:typed_data';
 import 'state.dart';
 import 'query.dart';
 
-// Conditional import: Uses IO by default, Web if compiled for JS, Stub if neither.
 import 'runtime_stub.dart'
     if (dart.library.io) 'runtime_io.dart'
     if (dart.library.js_interop) 'runtime_web.dart';
@@ -17,7 +16,7 @@ class AxiomStreamResponse {
 abstract class AxiomRuntime {
   factory AxiomRuntime() => getRuntime();
 
-  bool debug = false; // NEW: Controls FFI logging
+  bool debug = false;
 
   Future<void> init([String? dbPath]);
 
@@ -37,12 +36,29 @@ abstract class AxiomRuntime {
     String? publicKey,
   });
 
+  /// Execute a read-only or cacheable query.
+  /// Results are shared and de-duplicated via AxiomQueryManager — multiple
+  /// callers with the same key receive the same stream.
   AxiomQuery<T> send<T>({
     required String namespace,
     required int endpointId,
     required String method,
     required String path,
     Map<String, dynamic> args = const {},
+    Map<String, dynamic>? pathParams,
+    Map<String, dynamic>? queryParams,
+    Object? body,
+    required T Function(dynamic json) decoder,
+  });
+
+  /// Execute a mutation (POST/PUT/DELETE).
+  /// Each call creates a fresh stream that is NEVER cached or shared.
+  /// This is the correct method for login, form submission, delete actions, etc.
+  AxiomQuery<T> sendMutation<T>({
+    required String namespace,
+    required int endpointId,
+    required String method,
+    required String path,
     Map<String, dynamic>? pathParams,
     Map<String, dynamic>? queryParams,
     Object? body,
@@ -59,14 +75,12 @@ abstract class AxiomRuntime {
     required Uint8List requestBytes,
   });
 
-  /// Sets an authentication token directly into the Rust secure storage.
   void setAuthToken({
     required String namespace,
     required String methodName,
     required String token,
   });
 
-  /// Clears an authentication token from the Rust secure storage.
   void clearAuthToken({required String namespace, required String methodName});
 
   void sendStreamMessage({required int requestId, required Uint8List payload});

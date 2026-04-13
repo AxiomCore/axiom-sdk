@@ -8,7 +8,6 @@ import 'dart:typed_data';
 
 import 'package:ansicolor/ansicolor.dart';
 import 'package:ffi/ffi.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'runtime_interface.dart';
 import 'state.dart';
@@ -44,10 +43,8 @@ base class AxiomResponseBuffer extends Struct {
 }
 
 typedef AxiomCallback = Void Function(Pointer<AxiomResponseBuffer> response);
-
 typedef _AxiomInitializeNative = Int32 Function(AxiomString);
 typedef _AxiomInitialize = int Function(AxiomString);
-
 typedef _AxiomLoadContractNative =
     Int32 Function(
       AxiomString,
@@ -64,12 +61,10 @@ typedef _AxiomLoadContract =
       AxiomString,
       AxiomString,
     );
-
 typedef _AxiomRegisterCallbackNative =
     Void Function(Pointer<NativeFunction<AxiomCallback>>);
 typedef _AxiomRegisterCallback =
     void Function(Pointer<NativeFunction<AxiomCallback>>);
-
 typedef _AxiomCallNative =
     Void Function(
       Uint64,
@@ -90,26 +85,27 @@ typedef _AxiomCall =
       AxiomString,
       AxiomBuffer,
     );
-
 typedef _AxiomSetAuthTokenNative =
     Void Function(AxiomString, AxiomString, AxiomString);
 typedef _AxiomSetAuthToken =
     void Function(AxiomString, AxiomString, AxiomString);
-
 typedef _AxiomClearAuthTokenNative = Void Function(AxiomString, AxiomString);
 typedef _AxiomClearAuthToken = void Function(AxiomString, AxiomString);
-
 typedef _AxiomSendStreamMsgNative = Void Function(Uint64, AxiomBuffer);
 typedef _AxiomSendStreamMsg = void Function(int, AxiomBuffer);
-
 typedef _AxiomProcessResponsesNative = Void Function();
 typedef _AxiomProcessResponses = void Function();
-
 typedef _AxiomFreeResponseBufferNative =
     Void Function(Pointer<AxiomResponseBuffer>);
 typedef _AxiomFreeResponseBuffer = void Function(Pointer<AxiomResponseBuffer>);
 
 final _controllers = HashMap<int, StreamController<AxiomState<Uint8List>>>();
+
+// Tracks whether a request already received an Error event.
+// When Rust sends Error then Complete, we close the controller on Complete
+// but must NOT emit a new success/loading state from the Complete event.
+final _hadError = HashSet<int>();
+
 int _nextRequestId = 1;
 Completer<void>? _initCompleter;
 SendPort? _dataPort;
@@ -266,7 +262,12 @@ class AxiomRuntimeIo implements AxiomRuntime {
       final controller = _controllers[requestId];
       if (controller == null || controller.isClosed) return;
 
+      // EventType::Complete — always close the controller so ActiveQuery
+      // gets its onDone callback and sets _streamClosed = true.
+      // If this Complete follows an Error (Rust now always sends Complete
+      // after Error), just close without emitting any extra state.
       if (eventTypeValue == EventType.complete) {
+        _hadError.remove(requestId);
         controller.close();
         _controllers.remove(requestId);
         return;
@@ -283,6 +284,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
       }
 
       if (eventTypeValue == EventType.error) {
+        _hadError.add(requestId);
         AxiomError richError = errorPtr != 0
             ? AxiomError.fromJson(
                 jsonDecode(
@@ -295,13 +297,17 @@ class AxiomRuntimeIo implements AxiomRuntime {
                 stage: ErrorStage.runtime,
                 category: ErrorCategory.unknown,
                 code: UnknownCode(FfiError.name(errorCodeValue)),
-                message: "Internal error",
+                message: 'Internal error',
                 retryable: false,
               );
         controller.add(AxiomState.error(richError));
+        // Do NOT close here — wait for the Complete event that Rust sends next.
+        // Closing on Error and then again on Complete would throw a "stream
+        // already closed" exception.
         return;
       }
 
+      // NetworkSuccess / CacheHit / CacheHitAndFetching
       if (dataPtr != 0) {
         final data = Uint8List.fromList(
           Pointer<Uint8>.fromAddress(dataPtr).asTypedList(dataLen),
@@ -320,7 +326,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
     });
 
     await Isolate.spawn(_runRustEventLoop, [mainIsolatePort.sendPort]);
-    using((Arena arena) => _initFfi(_toAxiomString(dbPath ?? "", arena)));
+    using((Arena arena) => _initFfi(_toAxiomString(dbPath ?? '', arena)));
     return _initCompleter!.future;
   }
 
@@ -342,8 +348,8 @@ class AxiomRuntimeIo implements AxiomRuntime {
         _toAxiomString(namespace, arena),
         _toAxiomString(baseUrl, arena),
         buf.ref,
-        _toAxiomString(signature ?? "", arena),
-        _toAxiomString(publicKey ?? "", arena),
+        _toAxiomString(signature ?? '', arena),
+        _toAxiomString(publicKey ?? '', arena),
       );
     });
   }
@@ -363,15 +369,26 @@ class AxiomRuntimeIo implements AxiomRuntime {
     _controllers[requestId] = controller;
     controller.add(AxiomState.loading());
 
-    var finalPath = path;
+    var finalPath =
+        path; // Note: this variable is named 'finalPath' in runtime_io.dart
     pathParams?.forEach(
       (k, v) => finalPath = finalPath.replaceAll('{$k}', v.toString()),
     );
-    if (queryParams?.isNotEmpty ?? false) {
-      final uri = Uri(
-        queryParameters: queryParams!.map((k, v) => MapEntry(k, v.toString())),
-      );
-      finalPath += (finalPath.contains('?') ? '&' : '?') + uri.query;
+
+    // ✅ FIX: Filter out 'null' query parameters before building the URI
+    if (queryParams != null && queryParams.isNotEmpty) {
+      final filteredParams = <String, String>{};
+      for (final entry in queryParams.entries) {
+        if (entry.value != null) {
+          filteredParams[entry.key] = entry.value.toString();
+        }
+      }
+
+      if (filteredParams.isNotEmpty) {
+        finalPath +=
+            (finalPath.contains('?') ? '&' : '?') +
+            Uri(queryParameters: filteredParams).query;
+      }
     }
 
     final traceparent = AxiomTracing.generateTraceparent();
@@ -380,7 +397,6 @@ class AxiomRuntimeIo implements AxiomRuntime {
       'ep': endpointId,
       'm': method,
       'p': finalPath,
-      'tp': traceparent,
     });
 
     final arena = Arena();
@@ -421,41 +437,93 @@ class AxiomRuntimeIo implements AxiomRuntime {
       endpoint: '${namespace}_$endpointId',
       args: args,
     );
-    final stream = AxiomQueryManager().watch<T>(key, () {
-      return callStream(
+    final stream = AxiomQueryManager().watch<T>(
+      key,
+      () => _rawStream(
         namespace: namespace,
         endpointId: endpointId,
         method: method,
         path: path,
         pathParams: pathParams,
         queryParams: queryParams,
-        requestBytes: AxiomCodec.encodeBody(body),
-      ).stream.map((state) {
-        if (state.hasError) return state.map((_) => null as T);
-        if (state.data != null) {
-          try {
-            return AxiomState.success(
-              AxiomCodec.decode(state.data!, decoder),
-              state.source,
-              isFetching: state.isFetching,
-              isStreaming: state.isStreaming,
-            );
-          } catch (e) {
-            return AxiomState.error(
-              AxiomError(
-                stage: ErrorStage.deserialize,
-                category: ErrorCategory.serialization,
-                code: const CodecError(),
-                message: e.toString(),
-                retryable: false,
-              ),
-            );
-          }
-        }
-        return state.map((_) => null as T);
-      });
-    });
+        body: body,
+        decoder: decoder,
+      ),
+    );
     return AxiomQuery(key, stream);
+  }
+
+  @override
+  AxiomQuery<T> sendMutation<T>({
+    required String namespace,
+    required int endpointId,
+    required String method,
+    required String path,
+    Map<String, dynamic>? pathParams,
+    Map<String, dynamic>? queryParams,
+    Object? body,
+    required T Function(dynamic json) decoder,
+  }) {
+    final key =
+        '${namespace}_${endpointId}_mut_${DateTime.now().microsecondsSinceEpoch}';
+    return AxiomQuery(
+      key,
+      _rawStream(
+        namespace: namespace,
+        endpointId: endpointId,
+        method: method,
+        path: path,
+        pathParams: pathParams,
+        queryParams: queryParams,
+        body: body,
+        decoder: decoder,
+      ),
+      isMutation: true,
+    );
+  }
+
+  Stream<AxiomState<T>> _rawStream<T>({
+    required String namespace,
+    required int endpointId,
+    required String method,
+    required String path,
+    Map<String, dynamic>? pathParams,
+    Map<String, dynamic>? queryParams,
+    Object? body,
+    required T Function(dynamic json) decoder,
+  }) {
+    return callStream(
+      namespace: namespace,
+      endpointId: endpointId,
+      method: method,
+      path: path,
+      pathParams: pathParams,
+      queryParams: queryParams,
+      requestBytes: AxiomCodec.encodeBody(body),
+    ).stream.map((state) {
+      if (state.hasError) return state.map((_) => null as T);
+      if (state.data != null) {
+        try {
+          return AxiomState.success(
+            AxiomCodec.decode(state.data!, decoder),
+            state.source,
+            isFetching: state.isFetching,
+            isStreaming: state.isStreaming,
+          );
+        } catch (e) {
+          return AxiomState.error(
+            AxiomError(
+              stage: ErrorStage.deserialize,
+              category: ErrorCategory.serialization,
+              code: const CodecError(),
+              message: e.toString(),
+              retryable: false,
+            ),
+          );
+        }
+      }
+      return state.map((_) => null as T);
+    });
   }
 
   AxiomString _toAxiomString(String s, Arena arena) {
