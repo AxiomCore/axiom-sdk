@@ -59,6 +59,7 @@ abstract class AxiomRuntime {
     required int endpointId,
     required String method,
     required String path,
+    Map<String, dynamic> args = const {},
     Map<String, dynamic>? pathParams,
     Map<String, dynamic>? queryParams,
     Object? body,

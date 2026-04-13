@@ -91,7 +91,18 @@ class SdkWriter {
     if (!isSingle) {
       for (final entry in contracts.entries) {
         _writeModule(buffer, entry.key, entry.value);
+        // ✅ GENERATE RPCs for Multi-mode
+        _writeModelRpcs(
+          buffer,
+          entry.value['ir'] ?? entry.value,
+          '${GeneratorUtils.pascalCase(entry.key)}Module',
+        );
       }
+    } else {
+      // ✅ GENERATE RPCs for Single-mode
+      final ns = contracts.keys.first;
+      final ir = contracts[ns]!['ir'] ?? contracts[ns]!;
+      _writeModelRpcs(buffer, ir, 'AxiomSdk');
     }
 
     return buffer.toString();
@@ -520,26 +531,31 @@ class SdkWriter {
     List<Map<String, dynamic>> params,
     String namespaceRef,
   ) {
-    String recordType = 'void';
-    if (params.isNotEmpty) {
-      final fields = params
-          .map((p) {
-            final type = GeneratorUtils.dartTypeFromIr(
-              p['typeRef'],
-              scoped: true,
-            );
-            final name = GeneratorUtils.camelCase(p['name']);
-            final isOpt = p['isOptional'] as bool? ?? false;
-            return '$type${isOpt ? '?' : ''} $name';
-          })
-          .join(', ');
-      recordType = '({$fields})';
+    bool hasBody = params.any((p) => p['source'] == 'body');
+    String recordType = '()';
+
+    final fields = params.map((p) {
+      final type = GeneratorUtils.dartTypeFromIr(p['typeRef'], scoped: true);
+      final name = GeneratorUtils.camelCase(p['name']);
+      final isOpt = p['isOptional'] as bool? ?? false;
+      return '$type${isOpt ? '?' : ''} $name';
+    }).toList();
+
+    // ✅ ESCAPE HATCH: If IR missed the body param, add a raw fallback body
+    if (!hasBody) {
+      fields.add('Map<String, dynamic>? body');
+    }
+
+    if (fields.isNotEmpty) {
+      recordType = '({${fields.join(', ')}})';
     }
 
     buffer.writeln(
       '  AxiomMutation<$dartReturnType, $recordType> $methodName() {',
     );
-    buffer.writeln('    return AxiomMutation((args) {');
+    buffer.writeln(
+      '    return AxiomMutation((\$queryArgs) {',
+    ); // ✅ Use $queryArgs
     _writeExecutionBody(
       buffer,
       id,
@@ -553,7 +569,6 @@ class SdkWriter {
     );
     buffer.writeln('    });');
     buffer.writeln('  }');
-    buffer.writeln();
   }
 
   void _writeQuery(
@@ -605,7 +620,7 @@ class SdkWriter {
     bool isMutation,
     String namespaceRef,
   ) {
-    String access(String pName) => isMutation ? 'args.$pName' : pName;
+    String access(String pName) => isMutation ? '\$queryArgs.$pName' : pName;
     final runtimeRef = isSingle ? 'runtime' : '_runtime';
 
     buffer.writeln('      final argsMap = <String, dynamic>{');
@@ -654,6 +669,8 @@ class SdkWriter {
       }
       buffer.writeln('      };');
       bodyArg = 'body';
+    } else if (isMutation) {
+      bodyArg = access('body');
     }
 
     final shape = GeneratorUtils.classifyResponse(returnTypeRef);
@@ -670,8 +687,10 @@ class SdkWriter {
       decoder = '(json) => json as $dartReturnType';
     }
 
-    buffer.writeln('      return $runtimeRef.send<$dartReturnType>(');
-    // Uses the dynamic namespace! In single mode it writes 'namespace_name', in multi mode it uses `_namespace`.
+    final sendMethod = isMutation ? 'sendMutation' : 'send';
+
+    buffer.writeln('      return $runtimeRef.$sendMethod<$dartReturnType>(');
+
     final nsArg = namespaceRef.startsWith('_')
         ? namespaceRef
         : "'$namespaceRef'";
@@ -687,5 +706,173 @@ class SdkWriter {
     if (bodyArg != 'null') buffer.writeln('        body: $bodyArg,');
     buffer.writeln('        decoder: $decoder,');
     buffer.writeln('      );');
+  }
+
+  void _writeModelRpcs(
+    StringBuffer buffer,
+    Map<String, dynamic> ir,
+    String moduleName,
+  ) {
+    final models = (ir['models'] as Map?)?.cast<String, dynamic>() ?? {};
+    final endpoints =
+        (ir['endpoints'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+
+    for (final modelEntry in models.entries) {
+      final modelClassName = GeneratorUtils.pascalCase(modelEntry.key);
+      final rpcs = (modelEntry.value['rpcs'] as Map?)?.cast<String, dynamic>();
+
+      if (rpcs == null || rpcs.isEmpty) continue;
+
+      buffer.writeln('// RPC Extension for $modelClassName');
+      buffer.writeln(
+        'extension ${modelClassName}Rpc on models.$modelClassName {',
+      );
+
+      for (final rpcEntry in rpcs.entries) {
+        final rpcName = GeneratorUtils.camelCase(rpcEntry.key);
+        final rpcDef = rpcEntry.value as Map<String, dynamic>;
+
+        final epRef = rpcDef['endpoint'];
+        final targetEp = endpoints.firstWhere((e) {
+          if (epRef is int) return e['id'] == epRef;
+          if (epRef is String) return e['name'] == epRef;
+          if (epRef is Map)
+            return e['id'] == epRef['id'] || e['name'] == epRef['name'];
+          return false;
+        }, orElse: () => <String, dynamic>{});
+
+        if (targetEp.isEmpty) {
+          print(
+            'Warning: RPC "$rpcName" skipped because target endpoint was not found.',
+          );
+          continue;
+        }
+
+        final targetMethodName = GeneratorUtils.camelCase(targetEp['name']);
+        final args =
+            (rpcDef['arguments'] as Map?)?.cast<String, dynamic>() ?? {};
+        final resolver =
+            (rpcDef['resolver'] as Map?)?.cast<String, dynamic>() ?? {};
+
+        final httpMethod = (targetEp['method'] as String).toUpperCase();
+        final isWs = targetEp['streaming']?['type'] == 'websocket';
+        final isStream = targetEp['streaming'] != null && !isWs;
+        final isMutation = httpMethod != 'GET' && !isWs && !isStream;
+
+        buffer.write('  dynamic $rpcName($moduleName module');
+        if (args.isNotEmpty) {
+          buffer.write(', {');
+          for (final argEntry in args.entries) {
+            final argName = GeneratorUtils.camelCase(argEntry.key);
+            final dartType = GeneratorUtils.dartTypeFromIr(
+              argEntry.value,
+              scoped: true,
+            );
+            buffer.write('required $dartType $argName, ');
+          }
+          buffer.write('}');
+        }
+        buffer.writeln(') {');
+
+        // Helper to resolve string values
+        String resolveValue(String val) {
+          if (val.startsWith('\$args.')) {
+            return GeneratorUtils.camelCase(val.substring(6));
+          } else if (val.startsWith('\$this.')) {
+            return 'this.${GeneratorUtils.camelCase(val.substring(6))}';
+          }
+          return "'$val'";
+        }
+
+        // Flatten resolver for easy lookup
+        final flatResolver = <String, String>{};
+        final groupedResolver = <String, Map<String, String>>{
+          'path': {},
+          'query': {},
+          'body': {},
+          'header': {},
+        };
+
+        for (final section in groupedResolver.keys) {
+          final sectionMap = resolver[section] as Map?;
+          if (sectionMap != null) {
+            for (final entry in sectionMap.entries) {
+              final k = entry.key as String;
+              final v = entry.value.toString();
+              groupedResolver[section]![k] = v;
+              flatResolver[k] = v;
+            }
+          }
+        }
+
+        final epParams =
+            (targetEp['parameters'] as List?)?.cast<Map<String, dynamic>>() ??
+            [];
+        final callArgs = <String, String>{};
+        final hasNamedBody = epParams.any((p) => p['source'] == 'body');
+
+        for (final epParam in epParams) {
+          final source = epParam['source'] as String;
+          final origName = epParam['name'] as String;
+          final paramName = GeneratorUtils.camelCase(origName);
+          final typeRef = epParam['typeRef'] as Map<String, dynamic>;
+
+          if (source == 'body' && typeRef['kind'] == 'named') {
+            final section = groupedResolver['body']!;
+            if (section.isNotEmpty) {
+              final modelName = GeneratorUtils.pascalCase(typeRef['value']);
+              final modelArgs = StringBuffer('models.$modelName(');
+              for (final entry in section.entries) {
+                final fieldName = GeneratorUtils.camelCase(entry.key);
+                final resolvedVal = resolveValue(entry.value);
+                modelArgs.write('$fieldName: $resolvedVal, ');
+              }
+              modelArgs.write(')');
+              callArgs[paramName] = modelArgs.toString();
+            }
+          } else {
+            String? mappedValue =
+                groupedResolver[source]![origName] ?? flatResolver[origName];
+            if (mappedValue != null) {
+              callArgs[paramName] = resolveValue(mappedValue);
+            }
+          }
+        }
+
+        // ✅ ESCAPE HATCH: Map the resolver body to the raw fallback body map
+        if (!hasNamedBody && groupedResolver['body']!.isNotEmpty) {
+          final mapArgs = StringBuffer('{');
+          for (final entry in groupedResolver['body']!.entries) {
+            mapArgs.write("'${entry.key}': ${resolveValue(entry.value)}, ");
+          }
+          mapArgs.write('}');
+          callArgs['body'] = mapArgs.toString();
+        }
+
+        if (isMutation) {
+          buffer.write('    return module.$targetMethodName().mutationFn(');
+          if (epParams.isNotEmpty || !hasNamedBody) {
+            // ✅ Updated condition
+            buffer.writeln('(');
+            for (final entry in callArgs.entries) {
+              buffer.writeln('      ${entry.key}: ${entry.value},');
+            }
+            buffer.writeln('    ));');
+          } else {
+            buffer.writeln('());');
+          }
+        } else {
+          buffer.writeln('    return module.$targetMethodName(');
+          for (final entry in callArgs.entries) {
+            buffer.writeln('      ${entry.key}: ${entry.value},');
+          }
+          buffer.writeln('    );');
+        }
+
+        buffer.writeln('  }');
+      }
+      buffer.writeln('}');
+      buffer.writeln();
+    }
   }
 }

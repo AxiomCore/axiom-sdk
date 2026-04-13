@@ -461,6 +461,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
     required String path,
     Map<String, dynamic>? pathParams,
     Map<String, dynamic>? queryParams,
+    Map<String, dynamic> args = const {},
     Object? body,
     required T Function(dynamic json) decoder,
   }) {
