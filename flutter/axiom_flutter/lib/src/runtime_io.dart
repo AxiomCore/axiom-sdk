@@ -65,6 +65,8 @@ typedef _AxiomRegisterCallbackNative =
     Void Function(Pointer<NativeFunction<AxiomCallback>>);
 typedef _AxiomRegisterCallback =
     void Function(Pointer<NativeFunction<AxiomCallback>>);
+
+// Update FFI Signature to include headers_json
 typedef _AxiomCallNative =
     Void Function(
       Uint64,
@@ -73,6 +75,7 @@ typedef _AxiomCallNative =
       AxiomString,
       AxiomString,
       AxiomString,
+      AxiomString, // <-- headers_json
       AxiomBuffer,
     );
 typedef _AxiomCall =
@@ -83,8 +86,10 @@ typedef _AxiomCall =
       AxiomString,
       AxiomString,
       AxiomString,
+      AxiomString, // <-- headers_json
       AxiomBuffer,
     );
+
 typedef _AxiomSetAuthTokenNative =
     Void Function(AxiomString, AxiomString, AxiomString);
 typedef _AxiomSetAuthToken =
@@ -100,10 +105,6 @@ typedef _AxiomFreeResponseBufferNative =
 typedef _AxiomFreeResponseBuffer = void Function(Pointer<AxiomResponseBuffer>);
 
 final _controllers = HashMap<int, StreamController<AxiomState<Uint8List>>>();
-
-// Tracks whether a request already received an Error event.
-// When Rust sends Error then Complete, we close the controller on Complete
-// but must NOT emit a new success/loading state from the Complete event.
 final _hadError = HashSet<int>();
 
 int _nextRequestId = 1;
@@ -262,10 +263,6 @@ class AxiomRuntimeIo implements AxiomRuntime {
       final controller = _controllers[requestId];
       if (controller == null || controller.isClosed) return;
 
-      // EventType::Complete — always close the controller so ActiveQuery
-      // gets its onDone callback and sets _streamClosed = true.
-      // If this Complete follows an Error (Rust now always sends Complete
-      // after Error), just close without emitting any extra state.
       if (eventTypeValue == EventType.complete) {
         _hadError.remove(requestId);
         controller.close();
@@ -301,13 +298,9 @@ class AxiomRuntimeIo implements AxiomRuntime {
                 retryable: false,
               );
         controller.add(AxiomState.error(richError));
-        // Do NOT close here — wait for the Complete event that Rust sends next.
-        // Closing on Error and then again on Complete would throw a "stream
-        // already closed" exception.
         return;
       }
 
-      // NetworkSuccess / CacheHit / CacheHitAndFetching
       if (dataPtr != 0) {
         final data = Uint8List.fromList(
           Pointer<Uint8>.fromAddress(dataPtr).asTypedList(dataLen),
@@ -360,6 +353,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
     required int endpointId,
     required String method,
     required String path,
+    Map<String, String>? headers,
     Map<String, dynamic>? pathParams,
     Map<String, dynamic>? queryParams,
     required Uint8List requestBytes,
@@ -369,13 +363,11 @@ class AxiomRuntimeIo implements AxiomRuntime {
     _controllers[requestId] = controller;
     controller.add(AxiomState.loading());
 
-    var finalPath =
-        path; // Note: this variable is named 'finalPath' in runtime_io.dart
+    var finalPath = path;
     pathParams?.forEach(
       (k, v) => finalPath = finalPath.replaceAll('{$k}', v.toString()),
     );
 
-    // ✅ FIX: Filter out 'null' query parameters before building the URI
     if (queryParams != null && queryParams.isNotEmpty) {
       final filteredParams = <String, String>{};
       for (final entry in queryParams.entries) {
@@ -392,11 +384,16 @@ class AxiomRuntimeIo implements AxiomRuntime {
     }
 
     final traceparent = AxiomTracing.generateTraceparent();
+    final headersJson = headers != null && headers.isNotEmpty
+        ? jsonEncode(headers)
+        : '';
+
     _logTransaction('OUT', requestId, {
       'ns': namespace,
       'ep': endpointId,
       'm': method,
       'p': finalPath,
+      'h': headers,
     });
 
     final arena = Arena();
@@ -413,6 +410,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
       _toAxiomString(method, arena),
       _toAxiomString(finalPath, arena),
       _toAxiomString(traceparent, arena),
+      _toAxiomString(headersJson, arena), // <-- Pass headers to native
       b.ref,
     );
     Future.microtask(() => arena.releaseAll());
@@ -427,6 +425,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
     required int endpointId,
     required String method,
     required String path,
+    Map<String, String>? headers,
     Map<String, dynamic> args = const {},
     Map<String, dynamic>? pathParams,
     Map<String, dynamic>? queryParams,
@@ -437,20 +436,24 @@ class AxiomRuntimeIo implements AxiomRuntime {
       endpoint: '${namespace}_$endpointId',
       args: args,
     );
-    final stream = AxiomQueryManager().watch<T>(
-      key,
-      () => _rawStream(
-        namespace: namespace,
-        endpointId: endpointId,
-        method: method,
-        path: path,
-        pathParams: pathParams,
-        queryParams: queryParams,
-        body: body,
-        decoder: decoder,
-      ),
-    );
-    return AxiomQuery(key, stream);
+
+    return AxiomQuery(key, (customHeaders) {
+      final mergedHeaders = {...?headers, ...customHeaders};
+      return AxiomQueryManager().watch<T>(
+        key,
+        () => _rawStream(
+          namespace: namespace,
+          endpointId: endpointId,
+          method: method,
+          path: path,
+          headers: mergedHeaders,
+          pathParams: pathParams,
+          queryParams: queryParams,
+          body: body,
+          decoder: decoder,
+        ),
+      );
+    });
   }
 
   @override
@@ -459,6 +462,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
     required int endpointId,
     required String method,
     required String path,
+    Map<String, String>? headers,
     Map<String, dynamic>? pathParams,
     Map<String, dynamic>? queryParams,
     Map<String, dynamic> args = const {},
@@ -467,20 +471,21 @@ class AxiomRuntimeIo implements AxiomRuntime {
   }) {
     final key =
         '${namespace}_${endpointId}_mut_${DateTime.now().microsecondsSinceEpoch}';
-    return AxiomQuery(
-      key,
-      _rawStream(
+
+    return AxiomQuery(key, (customHeaders) {
+      final mergedHeaders = {...?headers, ...customHeaders};
+      return _rawStream(
         namespace: namespace,
         endpointId: endpointId,
         method: method,
         path: path,
+        headers: mergedHeaders,
         pathParams: pathParams,
         queryParams: queryParams,
         body: body,
         decoder: decoder,
-      ),
-      isMutation: true,
-    );
+      );
+    }, isMutation: true);
   }
 
   Stream<AxiomState<T>> _rawStream<T>({
@@ -488,6 +493,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
     required int endpointId,
     required String method,
     required String path,
+    Map<String, String>? headers,
     Map<String, dynamic>? pathParams,
     Map<String, dynamic>? queryParams,
     Object? body,
@@ -498,6 +504,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
       endpointId: endpointId,
       method: method,
       path: path,
+      headers: headers,
       pathParams: pathParams,
       queryParams: queryParams,
       requestBytes: AxiomCodec.encodeBody(body),

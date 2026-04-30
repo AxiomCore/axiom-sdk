@@ -168,9 +168,16 @@ class ModelWriter {
 
       case 'list':
         final innerType = typeRef['value'] as Map<String, dynamic>;
-        // We use 'e' as the parameter name inside the .map() closure
         final innerParse = _generateParseLogic(innerType, 'e', false);
         return wrap('($access as List).map((e) => $innerParse).toList()');
+
+      case 'map':
+        // Maps in Acore IR are represented as lists of [KeyType, ValueType]
+        final valueType = (typeRef['value'] as List)[1] as Map<String, dynamic>;
+        final innerParse = _generateParseLogic(valueType, 'v', false);
+        return wrap(
+          '($access as Map).map((k, v) => MapEntry(k as String, $innerParse))',
+        );
 
       case 'float':
       case 'double':
@@ -213,6 +220,13 @@ class ModelWriter {
           return '$varName?.map((e) => ${_generateSerializeLogic(innerType, 'e', false)}).toList()';
         }
         return '$varName.map((e) => ${_generateSerializeLogic(innerType, 'e', false)}).toList()';
+      case 'map':
+        final valueType = (typeRef['value'] as List)[1] as Map<String, dynamic>;
+        final innerSerialize = _generateSerializeLogic(valueType, 'v', false);
+        if (isOptional) {
+          return '$varName?.map((k, v) => MapEntry(k, $innerSerialize))';
+        }
+        return '$varName.map((k, v) => MapEntry(k, $innerSerialize))';
       default:
         return varName;
     }

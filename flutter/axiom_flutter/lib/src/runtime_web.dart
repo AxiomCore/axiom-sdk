@@ -51,6 +51,8 @@ extension WasmExportsExt on WasmExports {
     int pLen,
     int tpPtr,
     int tpLen,
+    int hPtr,
+    int hLen,
     int bPtr,
     int bLen,
   );
@@ -285,6 +287,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     required int endpointId,
     required String method,
     required String path,
+    Map<String, String>? headers,
     Map<String, dynamic>? pathParams,
     Map<String, dynamic>? queryParams,
     required Uint8List requestBytes,
@@ -317,10 +320,15 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     }
 
     final tp = AxiomTracing.generateTraceparent();
+    final hStr = headers != null && headers.isNotEmpty
+        ? jsonEncode(headers)
+        : '';
+
     final n = _alloc(namespace),
         m = _alloc(method),
         p = _alloc(fPath),
-        t = _alloc(tp);
+        t = _alloc(tp),
+        h = _alloc(hStr);
     final br = _allocBytes(requestBytes);
     _wasm.axiomCall(
       id.toJS,
@@ -333,6 +341,8 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       p.len,
       t.ptr,
       t.len,
+      h.ptr,
+      h.len,
       br.ptr,
       br.len,
     );
@@ -340,6 +350,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     _free(m);
     _free(p);
     _free(t);
+    _free(h);
     _free(br);
     return AxiomStreamResponse(id, controller.stream);
   }
@@ -350,6 +361,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     required int endpointId,
     required String method,
     required String path,
+    Map<String, String>? headers,
     Map<String, dynamic> args = const {},
     Map<String, dynamic>? pathParams,
     Map<String, dynamic>? queryParams,
@@ -360,22 +372,23 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       endpoint: '${namespace}_$endpointId',
       args: args,
     );
-    return AxiomQuery(
-      key,
-      AxiomQueryManager().watch<T>(
+    return AxiomQuery(key, (customHeaders) {
+      final mergedHeaders = {...?headers, ...customHeaders};
+      return AxiomQueryManager().watch<T>(
         key,
         () => _rawStream(
           namespace: namespace,
           endpointId: endpointId,
           method: method,
           path: path,
+          headers: mergedHeaders,
           pathParams: pathParams,
           queryParams: queryParams,
           body: body,
           decoder: decoder,
         ),
-      ),
-    );
+      );
+    });
   }
 
   @override
@@ -384,6 +397,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     required int endpointId,
     required String method,
     required String path,
+    Map<String, String>? headers,
     Map<String, dynamic>? pathParams,
     Map<String, dynamic>? queryParams,
     Map<String, dynamic> args = const {},
@@ -392,20 +406,20 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   }) {
     final key =
         '${namespace}_${endpointId}_mut_${DateTime.now().microsecondsSinceEpoch}';
-    return AxiomQuery(
-      key,
-      _rawStream(
+    return AxiomQuery(key, (customHeaders) {
+      final mergedHeaders = {...?headers, ...customHeaders};
+      return _rawStream(
         namespace: namespace,
         endpointId: endpointId,
         method: method,
         path: path,
+        headers: mergedHeaders,
         pathParams: pathParams,
         queryParams: queryParams,
         body: body,
         decoder: decoder,
-      ),
-      isMutation: true,
-    );
+      );
+    }, isMutation: true);
   }
 
   Stream<AxiomState<T>> _rawStream<T>({
@@ -413,6 +427,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     required int endpointId,
     required String method,
     required String path,
+    required Map<String, String> headers,
     Map<String, dynamic>? pathParams,
     Map<String, dynamic>? queryParams,
     Object? body,
@@ -423,6 +438,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       endpointId: endpointId,
       method: method,
       path: path,
+      headers: headers,
       pathParams: pathParams,
       queryParams: queryParams,
       requestBytes: AxiomCodec.encodeBody(body),

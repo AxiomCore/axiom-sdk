@@ -1,19 +1,31 @@
+import 'dart:async';
 import 'state.dart';
 import 'query_manager.dart';
 
 class AxiomQuery<T> {
   final String key;
-  final Stream<AxiomState<T>> stream;
-
-  /// When true this query was created for a one-shot mutation (POST/PUT/DELETE).
-  /// Mutations are never cached in AxiomQueryManager — every call fires a fresh
-  /// network request and the stream is not shared with any other subscriber.
   final bool isMutation;
 
-  AxiomQuery(this.key, this.stream, {this.isMutation = false});
+  final Map<String, String> _customHeaders = {};
+  Stream<AxiomState<T>>? _cachedStream;
+  final Stream<AxiomState<T>> Function(Map<String, String> headers)
+  _streamFactory;
 
-  /// Trigger a re-fetch of this query.
-  /// No-op for mutations (they are inherently one-shot).
+  AxiomQuery(this.key, this._streamFactory, {this.isMutation = false});
+
+  /// Appends a custom header to the HTTP Request.
+  /// Example: query..setHeader('Content-Type', 'application/x-www-form-urlencoded')
+  void setHeader(String key, String value) {
+    _customHeaders[key] = value;
+  }
+
+  /// Execution triggers here! Delaying execution until the stream is
+  /// accessed allows `..setHeader` to safely apply before the network runs.
+  Stream<AxiomState<T>> get stream {
+    _cachedStream ??= _streamFactory(_customHeaders);
+    return _cachedStream!;
+  }
+
   void refresh() {
     if (!isMutation) {
       AxiomQueryManager().invalidate(key);
