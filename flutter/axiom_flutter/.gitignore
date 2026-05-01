@@ -12,6 +12,10 @@ migrate_working_dir/
 
 .pubignore
 
+ios/AxiomRuntime.xcframework
+macos/AxiomRuntime.xcframework
+*.zip
+
 # IntelliJ related
 *.iml
 *.ipr
