@@ -36,9 +36,6 @@ abstract class AxiomRuntime {
     String? publicKey,
   });
 
-  /// Execute a read-only or cacheable query.
-  /// Results are shared and de-duplicated via AxiomQueryManager — multiple
-  /// callers with the same key receive the same stream.
   AxiomQuery<T> send<T>({
     required String namespace,
     required int endpointId,
@@ -52,18 +49,15 @@ abstract class AxiomRuntime {
     required T Function(dynamic json) decoder,
   });
 
-  /// Execute a mutation (POST/PUT/DELETE).
-  /// Each call creates a fresh stream that is NEVER cached or shared.
-  /// This is the correct method for login, form submission, delete actions, etc.
   AxiomQuery<T> sendMutation<T>({
     required String namespace,
     required int endpointId,
     required String method,
     required String path,
     Map<String, String>? headers,
-    Map<String, dynamic> args = const {},
     Map<String, dynamic>? pathParams,
     Map<String, dynamic>? queryParams,
+    Map<String, dynamic> args = const {},
     Object? body,
     required T Function(dynamic json) decoder,
   });

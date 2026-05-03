@@ -20,7 +20,8 @@ class AxiomChannel<ReceiveType, SendType> {
 
   /// Sends a message up to the server via the active WebSocket.
   void send(SendType data) {
-    final bytes = AxiomCodec.encodeBody(data);
+    // Pass null for headers since WebSockets don't use HTTP-style content-type per frame.
+    final bytes = AxiomCodec.encodeBody(data, null);
     _runtime.sendStreamMessage(requestId: _requestId, payload: bytes);
   }
 }

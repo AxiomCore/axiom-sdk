@@ -198,6 +198,8 @@ class SdkWriter {
       bodyParamName = 'body';
     }
 
+    // REMOVED: paramsList.add('Map<String, String>? headers'); to prevent collisions!
+
     final paramsSignature = paramsList.isEmpty
         ? ''
         : '{${paramsList.join(', ')}}';
@@ -210,7 +212,20 @@ class SdkWriter {
     for (final p in parameters) {
       final pName = GeneratorUtils.camelCase(p['name']);
       final irName = p['name'];
-      buffer.writeln("        '$irName': $pName,");
+
+      // If the parameter is a Model, we must call .toJson() before sending it to the args map
+      // so that it serializes correctly for the cache key and network payload.
+      final pTypeKind = p['typeRef']['kind'] as String? ?? '';
+      if (pTypeKind == 'named') {
+        final isOpt = p['isOptional'] as bool? ?? false;
+        if (isOpt) {
+          buffer.writeln("        '$irName': $pName?.toJson(),");
+        } else {
+          buffer.writeln("        '$irName': $pName.toJson(),");
+        }
+      } else {
+        buffer.writeln("        '$irName': $pName,");
+      }
     }
     buffer.writeln('      };');
 
@@ -247,6 +262,7 @@ class SdkWriter {
     buffer.writeln("        endpointId: $endpointId,");
     buffer.writeln("        method: '$method',");
     buffer.writeln("        path: '$path',");
+    // REMOVED: buffer.writeln("        headers: headers,");
     buffer.writeln("        args: argsMap,");
 
     if (pathParams.isNotEmpty) {

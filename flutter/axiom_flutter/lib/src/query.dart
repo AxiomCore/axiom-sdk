@@ -13,14 +13,12 @@ class AxiomQuery<T> {
 
   AxiomQuery(this.key, this._streamFactory, {this.isMutation = false});
 
-  /// Appends a custom header to the HTTP Request.
-  /// Example: query..setHeader('Content-Type', 'application/x-www-form-urlencoded')
+  /// Appends a custom HTTP header to this request before it executes.
   void setHeader(String key, String value) {
     _customHeaders[key] = value;
   }
 
-  /// Execution triggers here! Delaying execution until the stream is
-  /// accessed allows `..setHeader` to safely apply before the network runs.
+  /// The stream triggers execution the first time it is accessed.
   Stream<AxiomState<T>> get stream {
     _cachedStream ??= _streamFactory(_customHeaders);
     return _cachedStream!;

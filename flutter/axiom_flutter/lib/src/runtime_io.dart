@@ -66,7 +66,7 @@ typedef _AxiomRegisterCallbackNative =
 typedef _AxiomRegisterCallback =
     void Function(Pointer<NativeFunction<AxiomCallback>>);
 
-// Update FFI Signature to include headers_json
+// 8 Arguments exactly matching Rust signature
 typedef _AxiomCallNative =
     Void Function(
       Uint64,
@@ -75,7 +75,7 @@ typedef _AxiomCallNative =
       AxiomString,
       AxiomString,
       AxiomString,
-      AxiomString, // <-- headers_json
+      AxiomString,
       AxiomBuffer,
     );
 typedef _AxiomCall =
@@ -86,7 +86,7 @@ typedef _AxiomCall =
       AxiomString,
       AxiomString,
       AxiomString,
-      AxiomString, // <-- headers_json
+      AxiomString,
       AxiomBuffer,
     );
 
@@ -371,11 +371,9 @@ class AxiomRuntimeIo implements AxiomRuntime {
     if (queryParams != null && queryParams.isNotEmpty) {
       final filteredParams = <String, String>{};
       for (final entry in queryParams.entries) {
-        if (entry.value != null) {
+        if (entry.value != null)
           filteredParams[entry.key] = entry.value.toString();
-        }
       }
-
       if (filteredParams.isNotEmpty) {
         finalPath +=
             (finalPath.contains('?') ? '&' : '?') +
@@ -393,7 +391,6 @@ class AxiomRuntimeIo implements AxiomRuntime {
       'ep': endpointId,
       'm': method,
       'p': finalPath,
-      'h': headers,
     });
 
     final arena = Arena();
@@ -410,7 +407,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
       _toAxiomString(method, arena),
       _toAxiomString(finalPath, arena),
       _toAxiomString(traceparent, arena),
-      _toAxiomString(headersJson, arena), // <-- Pass headers to native
+      _toAxiomString(headersJson, arena), // Passed to Native Rust successfully
       b.ref,
     );
     Future.microtask(() => arena.releaseAll());
@@ -436,7 +433,6 @@ class AxiomRuntimeIo implements AxiomRuntime {
       endpoint: '${namespace}_$endpointId',
       args: args,
     );
-
     return AxiomQuery(key, (customHeaders) {
       final mergedHeaders = {...?headers, ...customHeaders};
       return AxiomQueryManager().watch<T>(
@@ -471,7 +467,6 @@ class AxiomRuntimeIo implements AxiomRuntime {
   }) {
     final key =
         '${namespace}_${endpointId}_mut_${DateTime.now().microsecondsSinceEpoch}';
-
     return AxiomQuery(key, (customHeaders) {
       final mergedHeaders = {...?headers, ...customHeaders};
       return _rawStream(
@@ -507,7 +502,10 @@ class AxiomRuntimeIo implements AxiomRuntime {
       headers: headers,
       pathParams: pathParams,
       queryParams: queryParams,
-      requestBytes: AxiomCodec.encodeBody(body),
+      requestBytes: AxiomCodec.encodeBody(
+        body,
+        headers,
+      ), // Passes headers into codec
     ).stream.map((state) {
       if (state.hasError) return state.map((_) => null as T);
       if (state.data != null) {

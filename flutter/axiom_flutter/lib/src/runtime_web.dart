@@ -26,6 +26,7 @@ class WasmExports {}
 extension WasmExportsExt on WasmExports {
   @JS('axiom_wasm_initialize')
   external int axiomInitialize(int dbPtr, int dbLen);
+
   @JS('axiom_wasm_load_contract')
   external int axiomLoadContract(
     int nPtr,
@@ -39,6 +40,7 @@ extension WasmExportsExt on WasmExports {
     int pkPtr,
     int pkLen,
   );
+
   @JS('axiom_wasm_call')
   external void axiomCall(
     JSNumber reqId,
@@ -52,10 +54,11 @@ extension WasmExportsExt on WasmExports {
     int tpPtr,
     int tpLen,
     int hPtr,
-    int hLen,
+    int hLen, // <-- Headers
     int bPtr,
-    int bLen,
+    int bLen, // <-- Payload
   );
+
   @JS('axiom_wasm_set_auth_token')
   external void axiomSetAuthToken(
     int nPtr,
@@ -65,16 +68,22 @@ extension WasmExportsExt on WasmExports {
     int tPtr,
     int tLen,
   );
+
   @JS('axiom_wasm_clear_auth_token')
   external void axiomClearAuthToken(int nPtr, int nLen, int mPtr, int mLen);
+
   @JS('axiom_wasm_send_stream_message')
   external void axiomSendMsg(JSNumber reqId, int ptr, int len);
+
   @JS('axiom_malloc')
   external int axiomMalloc(int size);
+
   @JS('axiom_free_memory')
   external void axiomFreeMemory(int ptr, int size);
+
   @JS('axiom_process_responses')
   external void axiomProcessResponses();
+
   @JS('memory')
   external WasmMemory get memory;
 }
@@ -94,8 +103,6 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   AxiomRuntimeWeb._internal();
 
   final _controllers = <int, StreamController<AxiomState<Uint8List>>>{};
-  // Tracks requests that received Error so the subsequent Complete
-  // closes the controller without emitting spurious state.
   final _hadError = <int>{};
   int _nextRequestId = 1;
   late final WasmExports _wasm;
@@ -141,6 +148,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       ..type = 'application/javascript'
       ..text = '$jsCode\nwindow.wasm_bindgen = wasm_bindgen;';
     web.document.head!.appendChild(script);
+
     final wasmData = await rootBundle.load(
       'packages/axiom_flutter/lib/assets/wasm/axiom_runtime_bg.wasm',
     );
@@ -151,6 +159,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       const Duration(milliseconds: 16),
       (_) => _wasm.axiomProcessResponses(),
     );
+
     final db = _alloc(dbPath ?? '');
     _wasm.axiomInitialize(db.ptr, db.len);
     _free(db);
@@ -171,8 +180,6 @@ class AxiomRuntimeWeb implements AxiomRuntime {
               final controller = _controllers[id];
               if (controller == null) return;
 
-              // EventType::Complete — always close so ActiveQuery._streamClosed is set.
-              // When this follows an Error, just close without emitting extra state.
               if (evtType.toDartInt == EventType.complete) {
                 _hadError.remove(id);
                 if (!controller.isClosed) controller.close();
@@ -220,12 +227,9 @@ class AxiomRuntimeWeb implements AxiomRuntime {
                         retryable: false,
                       );
                 controller.add(AxiomState.error(error));
-                // Do NOT close here — Rust sends Complete right after Error.
-                // We close on that Complete event so ActiveQuery gets onDone.
                 return;
               }
 
-              // NetworkSuccess / CacheHit / CacheHitAndFetching
               if (dPtr.toDartInt != 0) {
                 final data = Uint8List.fromList(
                   Uint8List.view(
@@ -297,21 +301,17 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     _controllers[id] = controller;
     controller.add(AxiomState.loading());
 
-    var fPath =
-        path; // Note: this variable is named 'finalPath' in runtime_io.dart
+    var fPath = path;
     pathParams?.forEach(
       (k, v) => fPath = fPath.replaceAll('{$k}', v.toString()),
     );
 
-    // ✅ FIX: Filter out 'null' query parameters before building the URI
     if (queryParams != null && queryParams.isNotEmpty) {
       final filteredParams = <String, String>{};
       for (final entry in queryParams.entries) {
-        if (entry.value != null) {
+        if (entry.value != null)
           filteredParams[entry.key] = entry.value.toString();
-        }
       }
-
       if (filteredParams.isNotEmpty) {
         fPath +=
             (fPath.contains('?') ? '&' : '?') +
@@ -330,6 +330,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
         t = _alloc(tp),
         h = _alloc(hStr);
     final br = _allocBytes(requestBytes);
+
     _wasm.axiomCall(
       id.toJS,
       n.ptr,
@@ -342,10 +343,11 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       t.ptr,
       t.len,
       h.ptr,
-      h.len,
+      h.len, // Passed to Wasm Rust successfully
       br.ptr,
       br.len,
     );
+
     _free(n);
     _free(m);
     _free(p);
@@ -427,7 +429,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     required int endpointId,
     required String method,
     required String path,
-    required Map<String, String> headers,
+    Map<String, String>? headers,
     Map<String, dynamic>? pathParams,
     Map<String, dynamic>? queryParams,
     Object? body,
@@ -441,15 +443,31 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       headers: headers,
       pathParams: pathParams,
       queryParams: queryParams,
-      requestBytes: AxiomCodec.encodeBody(body),
+      requestBytes: AxiomCodec.encodeBody(
+        body,
+        headers,
+      ), // Passes headers into codec
     ).stream.map((state) {
+      if (state.hasError) return state.map((_) => null as T);
       if (state.data != null) {
-        return AxiomState.success(
-          AxiomCodec.decode(state.data!, decoder),
-          state.source,
-          isFetching: state.isFetching,
-          isStreaming: state.isStreaming,
-        );
+        try {
+          return AxiomState.success(
+            AxiomCodec.decode(state.data!, decoder),
+            state.source,
+            isFetching: state.isFetching,
+            isStreaming: state.isStreaming,
+          );
+        } catch (e) {
+          return AxiomState.error(
+            AxiomError(
+              stage: ErrorStage.deserialize,
+              category: ErrorCategory.serialization,
+              code: const CodecError(),
+              message: e.toString(),
+              retryable: false,
+            ),
+          );
+        }
       }
       return state.map((_) => null as T);
     });
