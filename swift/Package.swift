@@ -26,7 +26,7 @@ let package = Package(
         // 🚀 THE MAGIC: SPM downloads the exact same zip as Flutter!
         .binaryTarget(
             name: "AxiomRuntime",
-            url: "https://github.com/AxiomCore/AxiomCore/releases/download/v0.39.0/AxiomRuntime.xcframework.zip",
+            url: "https://github.com/AxiomCore/AxiomCore/releases/download/v0.43.0/AxiomRuntime.xcframework.zip",
             // IMPORTANT: SPM requires a checksum. You must run:
             // `shasum -a 256 AxiomRuntime.xcframework.zip` and paste the result here!
             checksum: "15614ed80f96d7d2eb03c73243ed92dd02710a36b1c115eadd4d10eff5045b8f"

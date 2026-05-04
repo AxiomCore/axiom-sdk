@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'axiom_flutter'
-  s.version          = '0.39.0' # Make sure this matches your GitHub release version!
+  s.version          = '0.43.0' # Make sure this matches your GitHub release version!
   s.summary          = 'Axiom Runtime'
   s.homepage         = 'https://axiomcore.dev'
   s.license          = { :file => '../LICENSE' }
