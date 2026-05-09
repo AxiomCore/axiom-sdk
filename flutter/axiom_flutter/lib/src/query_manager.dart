@@ -1,19 +1,19 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'state.dart';
+import 'runtime_interface.dart'; // Import this
 
 class ActiveQuery<T> {
   final String key;
   StreamController<AxiomState<T>>? _controller;
   AxiomState<T> _lastState = AxiomState.loading();
   StreamSubscription? _rustSubscription;
-
-  // True once the upstream Rust stream has closed (Rust sent EventType::Complete).
-  // When true, the next listen() must fire a fresh network request instead of
-  // replaying _lastState. This flag is the mechanism that allows "press button
-  // after error → set token → press button again → works".
   bool _streamClosed = false;
 
-  final Stream<AxiomState<T>> Function() _createStream;
+  // ✨ NEW: Track the active Request ID for WebSockets
+  int? currentReqId;
+
+  final AxiomActiveStream<T> Function() _createStream;
 
   ActiveQuery(this.key, this._createStream) {
     _controller = StreamController<AxiomState<T>>.broadcast(
@@ -27,15 +27,8 @@ class ActiveQuery<T> {
 
   void _onListen() {
     if (_rustSubscription == null || _streamClosed) {
-      // Either:
-      // (a) First subscriber ever — start fresh.
-      // (b) The previous Rust stream completed (success OR error) and a new
-      //     subscriber just arrived. Always re-fetch so stale auth errors
-      //     don't get replayed after the user sets a token.
       _connect();
     } else {
-      // Upstream is still in-flight — replay the last known state so the
-      // new subscriber sees immediate feedback (Loading / partial data).
       _controller?.add(_lastState);
     }
   }
@@ -44,7 +37,11 @@ class ActiveQuery<T> {
     _streamClosed = false;
     _rustSubscription?.cancel();
 
-    _rustSubscription = _createStream().listen(
+    // ✨ FIX: Capture the Request ID when the stream is created
+    final active = _createStream();
+    currentReqId = active.requestId;
+
+    _rustSubscription = active.stream.listen(
       (newState) {
         _lastState = newState;
         if (!(_controller?.isClosed ?? true)) {
@@ -106,7 +103,7 @@ class AxiomQueryManager {
 
   Stream<AxiomState<T>> watch<T>(
     String key,
-    Stream<AxiomState<T>> Function() createFn,
+    AxiomActiveStream<T> Function() createFn, // ✨ FIX: Signature
   ) {
     if (_activeQueries.containsKey(key)) {
       final query = _activeQueries[key] as ActiveQuery<T>;
@@ -116,6 +113,19 @@ class AxiomQueryManager {
     final query = ActiveQuery<T>(key, createFn);
     _activeQueries[key] = query;
     return query.stream;
+  }
+
+  // ✨ NEW: Native Send Method
+  void send(String key, Uint8List payload, AxiomRuntime runtime) {
+    final query = _activeQueries[key];
+    if (query != null && query.currentReqId != null) {
+      runtime.sendStreamMessage(
+        requestId: query.currentReqId!,
+        payload: payload,
+      );
+    } else {
+      print('ATMX: Cannot send message, stream not active for $key');
+    }
   }
 
   void invalidate(String key) {
@@ -135,5 +145,23 @@ class AxiomQueryManager {
       q.dispose();
     }
     _activeQueries.clear();
+  }
+
+  /// Similar to watch, but returns the full AxiomActiveStream wrapper.
+  /// Used by the SDK to link the Query object to the Request ID.
+  AxiomActiveStream<T> watchRaw<T>(
+    String key,
+    AxiomActiveStream<T> Function() createFn,
+  ) {
+    if (_activeQueries.containsKey(key)) {
+      final query = _activeQueries[key] as ActiveQuery<T>;
+      // Reconstruct wrapper from existing query
+      return AxiomActiveStream<T>(query.currentReqId ?? 0, query.stream);
+    }
+
+    final query = ActiveQuery<T>(key, createFn);
+    _activeQueries[key] = query;
+
+    return AxiomActiveStream<T>(query.currentReqId ?? 0, query.stream);
   }
 }

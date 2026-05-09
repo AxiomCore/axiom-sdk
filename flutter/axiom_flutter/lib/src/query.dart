@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:axiom_flutter/src/runtime_interface.dart';
+
 import 'state.dart';
 import 'query_manager.dart';
 
@@ -8,19 +10,21 @@ class AxiomQuery<T> {
 
   final Map<String, String> _customHeaders = {};
   Stream<AxiomState<T>>? _cachedStream;
-  final Stream<AxiomState<T>> Function(Map<String, String> headers)
+
+  // The factory returns the wrapper so QueryManager can grab the Request ID
+  final AxiomActiveStream<T> Function(Map<String, String> headers)
   _streamFactory;
 
   AxiomQuery(this.key, this._streamFactory, {this.isMutation = false});
 
-  /// Appends a custom HTTP header to this request before it executes.
   void setHeader(String key, String value) {
     _customHeaders[key] = value;
   }
 
-  /// The stream triggers execution the first time it is accessed.
+  /// The public getter for the UI
   Stream<AxiomState<T>> get stream {
-    _cachedStream ??= _streamFactory(_customHeaders);
+    // ✨ FIX: Extract .stream from the AxiomActiveStream wrapper
+    _cachedStream ??= _streamFactory(_customHeaders).stream;
     return _cachedStream!;
   }
 

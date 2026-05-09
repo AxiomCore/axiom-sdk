@@ -1,0 +1,24 @@
+{
+    "selected_files": [
+        "/Users/yashmakan/AxiomCore/axiom-sdk/flutter/axiom_flutter/lib/assets/wasm/axiom_runtime.js",
+        "/Users/yashmakan/AxiomCore/axiom-sdk/flutter/axiom_flutter/lib/axiom_flutter.dart",
+        "/Users/yashmakan/AxiomCore/axiom-sdk/flutter/axiom_flutter/lib/src/channel.dart",
+        "/Users/yashmakan/AxiomCore/axiom-sdk/flutter/axiom_flutter/lib/src/config.dart",
+        "/Users/yashmakan/AxiomCore/axiom-sdk/flutter/axiom_flutter/lib/src/extensions.dart",
+        "/Users/yashmakan/AxiomCore/axiom-sdk/flutter/axiom_flutter/lib/src/internal/axiom_codec.dart",
+        "/Users/yashmakan/AxiomCore/axiom-sdk/flutter/axiom_flutter/lib/src/internal/query_key.dart",
+        "/Users/yashmakan/AxiomCore/axiom-sdk/flutter/axiom_flutter/lib/src/internal/tracing.dart",
+        "/Users/yashmakan/AxiomCore/axiom-sdk/flutter/axiom_flutter/lib/src/mutation.dart",
+        "/Users/yashmakan/AxiomCore/axiom-sdk/flutter/axiom_flutter/lib/src/query.dart",
+        "/Users/yashmakan/AxiomCore/axiom-sdk/flutter/axiom_flutter/lib/src/query_manager.dart",
+        "/Users/yashmakan/AxiomCore/axiom-sdk/flutter/axiom_flutter/lib/src/runtime_interface.dart",
+        "/Users/yashmakan/AxiomCore/axiom-sdk/flutter/axiom_flutter/lib/src/runtime_io.dart",
+        "/Users/yashmakan/AxiomCore/axiom-sdk/flutter/axiom_flutter/lib/src/runtime_stub.dart",
+        "/Users/yashmakan/AxiomCore/axiom-sdk/flutter/axiom_flutter/lib/src/runtime_web.dart",
+        "/Users/yashmakan/AxiomCore/axiom-sdk/flutter/axiom_flutter/lib/src/state.dart",
+        "/Users/yashmakan/AxiomCore/axiom-sdk/flutter/axiom_flutter/lib/src/widgets/axiom_builder.dart",
+        "/Users/yashmakan/AxiomCore/axiom-sdk/flutter/axiom_flutter/lib/src/widgets/axiom_mutation_builder.dart",
+        "/Users/yashmakan/AxiomCore/axiom-sdk/flutter/axiom_flutter/pubspec.yaml"
+    ],
+    "compressed_files": []
+}

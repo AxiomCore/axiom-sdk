@@ -13,6 +13,12 @@ class AxiomStreamResponse {
   AxiomStreamResponse(this.requestId, this.stream);
 }
 
+class AxiomActiveStream<T> {
+  final int requestId;
+  final Stream<AxiomState<T>> stream;
+  AxiomActiveStream(this.requestId, this.stream);
+}
+
 abstract class AxiomRuntime {
   factory AxiomRuntime() => getRuntime();
 
