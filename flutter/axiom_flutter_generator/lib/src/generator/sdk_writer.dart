@@ -31,6 +31,13 @@ class SdkWriter {
     );
     buffer.writeln("import 'package:axiom_flutter/axiom_flutter.dart';");
     buffer.writeln(
+      "import 'package:axiom_flutter/src/internal/query_key.dart';",
+    );
+    buffer.writeln(
+      "import 'package:axiom_flutter/src/internal/axiom_codec.dart';",
+    );
+    buffer.writeln("import 'package:axiom_flutter/src/query_manager.dart';");
+    buffer.writeln(
       "import 'package:$packageName/$modelsImportPath' as models;",
     );
     buffer.writeln();
@@ -121,18 +128,10 @@ class SdkWriter {
     buffer.writeln('class $className {');
     buffer.writeln('  final AxiomRuntime _runtime;');
     buffer.writeln('  final String _namespace;');
+    buffer.writeln('  late final ${className}AxiomNamespace axiom;');
     buffer.writeln();
-    buffer.writeln('  $className(this._runtime, this._namespace);');
-    buffer.writeln();
-    buffer.writeln('  void setAuthToken(String methodName, String token) {');
-    buffer.writeln(
-      "    _runtime.setAuthToken(namespace: _namespace, methodName: methodName, token: token);",
-    );
-    buffer.writeln('  }');
-    buffer.writeln('  void clearAuthToken(String methodName) {');
-    buffer.writeln(
-      "    _runtime.clearAuthToken(namespace: _namespace, methodName: methodName);",
-    );
+    buffer.writeln('  $className(this._runtime, this._namespace) {');
+    buffer.writeln('    axiom = ${className}AxiomNamespace(this);');
     buffer.writeln('  }');
     buffer.writeln();
 
@@ -146,6 +145,73 @@ class SdkWriter {
       _writeEndpoint(buffer, ep as Map<String, dynamic>);
     }
 
+    buffer.writeln('}');
+    buffer.writeln();
+
+    // ✨ NEW: Generate the .axiom Namespace class!
+    buffer.writeln('class ${className}AxiomNamespace {');
+    buffer.writeln('  final $className _parent;');
+    buffer.writeln('  ${className}AxiomNamespace(this._parent);');
+    buffer.writeln();
+    buffer.writeln('  void setAuthToken(String methodName, String token) {');
+    buffer.writeln(
+      '    _parent._runtime.setAuthToken(namespace: _parent._namespace, methodName: methodName, token: token);',
+    );
+    buffer.writeln('  }');
+    buffer.writeln();
+    buffer.writeln('  void clearAuthToken(String methodName) {');
+    buffer.writeln(
+      '    _parent._runtime.clearAuthToken(namespace: _parent._namespace, methodName: methodName);',
+    );
+    buffer.writeln('  }');
+    buffer.writeln();
+    buffer.writeln(
+      '  void connect(String methodName, {Map<String, dynamic> args = const {}}) {',
+    );
+    buffer.writeln(
+      "    print('Warning: .connect() in Dart requires active UI subscription. Use the endpoint stream directly.');",
+    );
+    buffer.writeln('  }');
+    buffer.writeln();
+    buffer.writeln(
+      '  void disconnect(String methodName, {Map<String, dynamic> args = const {}}) {',
+    );
+    buffer.writeln('    int? endpointId;');
+    buffer.writeln('    switch (methodName) {');
+    for (final ep in endpoints) {
+      buffer.writeln(
+        "      case '${ep['name']}': endpointId = ${ep['id']}; break;",
+      );
+    }
+    buffer.writeln('    }');
+    buffer.writeln('    if (endpointId != null) {');
+    buffer.writeln(
+      "      final key = AxiomQueryKey.build(endpoint: '\${_parent._namespace}_\$endpointId', args: args);",
+    );
+    buffer.writeln('      AxiomQueryManager().remove(key);');
+    buffer.writeln('    }');
+    buffer.writeln('  }');
+    buffer.writeln();
+    buffer.writeln(
+      '  void send(String methodName, dynamic payload, {Map<String, dynamic> args = const {}}) {',
+    );
+    buffer.writeln('    int? endpointId;');
+    buffer.writeln('    switch (methodName) {');
+    for (final ep in endpoints) {
+      buffer.writeln(
+        "      case '${ep['name']}': endpointId = ${ep['id']}; break;",
+      );
+    }
+    buffer.writeln('    }');
+    buffer.writeln('    if (endpointId == null) return;');
+    buffer.writeln(
+      "    final key = AxiomQueryKey.build(endpoint: '\${_parent._namespace}_\$endpointId', args: args);",
+    );
+    buffer.writeln('    final bytes = AxiomCodec.encodeBody(payload, null);');
+    buffer.writeln(
+      '    AxiomQueryManager().send(key, bytes, _parent._runtime);',
+    );
+    buffer.writeln('  }');
     buffer.writeln('}');
     buffer.writeln();
   }
@@ -167,8 +233,7 @@ class SdkWriter {
       'POST',
       'PUT',
       'DELETE',
-      'PATCH',
-      'WS',
+      'PATCH', // WS removed so WebSockets route through the cached Query system!
     ].contains(method.toUpperCase());
 
     // --- 1. Build Parameters ---

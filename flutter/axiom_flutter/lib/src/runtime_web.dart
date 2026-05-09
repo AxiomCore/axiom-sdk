@@ -374,9 +374,13 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       endpoint: '${namespace}_$endpointId',
       args: args,
     );
+
+    // ✨ FIX: Return AxiomActiveStream by calling the QueryManager's new wrapper logic
     return AxiomQuery(key, (customHeaders) {
       final mergedHeaders = {...?headers, ...customHeaders};
-      return AxiomQueryManager().watch<T>(
+
+      // We wrap the rawStream in a new AxiomActiveStream for AxiomQuery
+      return AxiomQueryManager().watchRaw<T>(
         key,
         () => _rawStream(
           namespace: namespace,
@@ -424,7 +428,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     }, isMutation: true);
   }
 
-  Stream<AxiomState<T>> _rawStream<T>({
+  AxiomActiveStream<T> _rawStream<T>({
     required String namespace,
     required int endpointId,
     required String method,
@@ -435,7 +439,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     Object? body,
     required T Function(dynamic json) decoder,
   }) {
-    return callStream(
+    final response = callStream(
       namespace: namespace,
       endpointId: endpointId,
       method: method,
@@ -443,22 +447,21 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       headers: headers,
       pathParams: pathParams,
       queryParams: queryParams,
-      requestBytes: AxiomCodec.encodeBody(
-        body,
-        headers,
-      ), // Passes headers into codec
-    ).stream.map((state) {
+      requestBytes: AxiomCodec.encodeBody(body, headers),
+    );
+
+    final mappedStream = response.stream.map((state) {
       if (state.hasError) return state.map((_) => null as T);
       if (state.data != null) {
         try {
-          return AxiomState.success(
+          return AxiomState<T>.success(
             AxiomCodec.decode(state.data!, decoder),
             state.source,
             isFetching: state.isFetching,
             isStreaming: state.isStreaming,
           );
         } catch (e) {
-          return AxiomState.error(
+          return AxiomState<T>.error(
             AxiomError(
               stage: ErrorStage.deserialize,
               category: ErrorCategory.serialization,
@@ -471,6 +474,8 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       }
       return state.map((_) => null as T);
     });
+
+    return AxiomActiveStream<T>(response.requestId, mappedStream);
   }
 
   _WebAlloc _alloc(String s) => _allocBytes(Uint8List.fromList(utf8.encode(s)));
