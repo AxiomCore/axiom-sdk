@@ -5,6 +5,7 @@ flutter/axiom_flutter/ios/AxiomRuntime.xcframework
 flutter/axiom_flutter/ios/*.zip
 flutter/axiom_flutter/macos/AxiomRuntime.xcframework
 flutter/axiom_flutter/macos/*.zip
+flutter/axiom_flutter/.summary_files/
 
 # Ignore downloaded binaries for Swift
 swift/.build

@@ -15,7 +15,7 @@ migrate_working_dir/
 ios/AxiomRuntime.xcframework
 macos/AxiomRuntime.xcframework
 *.zip
-
+.summary_files
 # IntelliJ related
 *.iml
 *.ipr
