@@ -11,3 +11,4 @@ flutter/axiom_flutter/.summary_files/
 swift/.build
 swift/AxiomRuntime.xcframework
 swift/*.zip
+swift/.summary_files/
