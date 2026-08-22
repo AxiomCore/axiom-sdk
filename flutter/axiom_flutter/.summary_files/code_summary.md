@@ -171,8 +171,8 @@ let wasm_bindgen = (function(exports) {
                 const ret = getObject(arg0).fetch(getObject(arg1));
                 return addHeapObject(ret);
             },
-            __wbg_fetch_8d9b732df7467c44: function(arg0) {
-                const ret = fetch(getObject(arg0));
+            __wbg_fetch_9ea633a8592ee39a: function(arg0, arg1) {
+                const ret = getObject(arg0).fetch(getObject(arg1));
                 return addHeapObject(ret);
             },
             __wbg_fetch_fda7bc27c982b1f3: function(arg0) {
@@ -213,16 +213,6 @@ let wasm_bindgen = (function(exports) {
                 let result;
                 try {
                     result = getObject(arg0) instanceof ArrayBuffer;
-                } catch (_) {
-                    result = false;
-                }
-                const ret = result;
-                return ret;
-            },
-            __wbg_instanceof_Error_6872d63ba7922898: function(arg0) {
-                let result;
-                try {
-                    result = getObject(arg0) instanceof Error;
                 } catch (_) {
                     result = false;
                 }
@@ -315,16 +305,8 @@ let wasm_bindgen = (function(exports) {
                     wasm.__wbindgen_export4(deferred1_0, deferred1_1, 1);
                 }
             }, arguments); },
-            __wbg_message_cb4f84ee66e5e341: function(arg0) {
-                const ret = getObject(arg0).message;
-                return addHeapObject(ret);
-            },
             __wbg_msCrypto_bd5a034af96bcba6: function(arg0) {
                 const ret = getObject(arg0).msCrypto;
-                return addHeapObject(ret);
-            },
-            __wbg_name_d3c35622d14bb080: function(arg0) {
-                const ret = getObject(arg0).name;
                 return addHeapObject(ret);
             },
             __wbg_new_0c7403db6e782f19: function(arg0) {
@@ -337,14 +319,6 @@ let wasm_bindgen = (function(exports) {
             }, arguments); },
             __wbg_new_2a6e9133304ae2bf: function() { return handleError(function (arg0, arg1) {
                 const ret = new WebSocket(getStringFromWasm0(arg0, arg1));
-                return addHeapObject(ret);
-            }, arguments); },
-            __wbg_new_4331d3ba658c037d: function() { return handleError(function () {
-                const ret = new URLSearchParams();
-                return addHeapObject(ret);
-            }, arguments); },
-            __wbg_new_490db15a0a09fb24: function() { return handleError(function (arg0, arg1) {
-                const ret = new URL(getStringFromWasm0(arg0, arg1));
                 return addHeapObject(ret);
             }, arguments); },
             __wbg_new_98c22165a42231aa: function() { return handleError(function () {
@@ -363,10 +337,6 @@ let wasm_bindgen = (function(exports) {
                 const ret = new Uint8Array(arg0 >>> 0);
                 return addHeapObject(ret);
             },
-            __wbg_new_with_str_5f3ca98523ee76ef: function() { return handleError(function (arg0, arg1) {
-                const ret = new Request(getStringFromWasm0(arg0, arg1));
-                return addHeapObject(ret);
-            }, arguments); },
             __wbg_new_with_str_and_init_897be1708e42f39d: function() { return handleError(function (arg0, arg1, arg2) {
                 const ret = new Request(getStringFromWasm0(arg0, arg1), getObject(arg2));
                 return addHeapObject(ret);
@@ -427,13 +397,6 @@ let wasm_bindgen = (function(exports) {
                 const ret = Promise.resolve(getObject(arg0));
                 return addHeapObject(ret);
             },
-            __wbg_search_98479a9dd6b1643e: function(arg0, arg1) {
-                const ret = getObject(arg1).search;
-                const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_export, wasm.__wbindgen_export2);
-                const len1 = WASM_VECTOR_LEN;
-                getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
-                getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
-            },
             __wbg_send_15358dbe221c6258: function() { return handleError(function (arg0, arg1, arg2) {
                 getObject(arg0).send(getStringFromWasm0(arg1, arg2));
             }, arguments); },
@@ -450,9 +413,6 @@ let wasm_bindgen = (function(exports) {
             __wbg_setTimeout_ef24d2fc3ad97385: function() { return handleError(function (arg0, arg1) {
                 const ret = setTimeout(getObject(arg0), arg1);
                 return addHeapObject(ret);
-            }, arguments); },
-            __wbg_set_1ffc463d4c541483: function() { return handleError(function (arg0, arg1, arg2, arg3, arg4) {
-                getObject(arg0).set(getStringFromWasm0(arg1, arg2), getStringFromWasm0(arg3, arg4));
             }, arguments); },
             __wbg_set_binaryType_770e68648ca5e83d: function(arg0, arg1) {
                 getObject(arg0).binaryType = __wbindgen_enum_BinaryType[arg1];
@@ -480,9 +440,6 @@ let wasm_bindgen = (function(exports) {
             },
             __wbg_set_onmessage_c1db358b9c38e3f1: function(arg0, arg1) {
                 getObject(arg0).onmessage = getObject(arg1);
-            },
-            __wbg_set_search_2982fabf5212b32d: function(arg0, arg1, arg2) {
-                getObject(arg0).search = getStringFromWasm0(arg1, arg2);
             },
             __wbg_set_signal_1d4e73c2305a0e7c: function(arg0, arg1) {
                 getObject(arg0).signal = getObject(arg1);
@@ -527,22 +484,7 @@ let wasm_bindgen = (function(exports) {
                 const ret = getObject(arg0).then(getObject(arg1));
                 return addHeapObject(ret);
             },
-            __wbg_toString_306ed0b9f320c1ca: function(arg0) {
-                const ret = getObject(arg0).toString();
-                return addHeapObject(ret);
-            },
-            __wbg_toString_6dc1a94e0bdba378: function(arg0) {
-                const ret = getObject(arg0).toString();
-                return addHeapObject(ret);
-            },
             __wbg_url_2bf741820e6563a0: function(arg0, arg1) {
-                const ret = getObject(arg1).url;
-                const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_export, wasm.__wbindgen_export2);
-                const len1 = WASM_VECTOR_LEN;
-                getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
-                getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
-            },
-            __wbg_url_94ef047be3ab790a: function(arg0, arg1) {
                 const ret = getObject(arg1).url;
                 const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_export, wasm.__wbindgen_export2);
                 const len1 = WASM_VECTOR_LEN;
@@ -558,23 +500,23 @@ let wasm_bindgen = (function(exports) {
                 return addHeapObject(ret);
             },
             __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-                // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 198, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-                const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_2406);
+                // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 193, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+                const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_2379);
                 return addHeapObject(ret);
             },
             __wbindgen_cast_0000000000000002: function(arg0, arg1) {
-                // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("Event")], shim_idx: 62, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-                const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_2239);
+                // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("Event")], shim_idx: 45, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+                const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_500);
                 return addHeapObject(ret);
             },
             __wbindgen_cast_0000000000000003: function(arg0, arg1) {
-                // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 62, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-                const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_2239_2);
+                // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 45, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+                const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_500_2);
                 return addHeapObject(ret);
             },
             __wbindgen_cast_0000000000000004: function(arg0, arg1) {
-                // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 111, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-                const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_2246);
+                // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 107, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+                const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_2219);
                 return addHeapObject(ret);
             },
             __wbindgen_cast_0000000000000005: function(arg0, arg1) {
@@ -601,22 +543,22 @@ let wasm_bindgen = (function(exports) {
         };
     }
 
-    function __wasm_bindgen_func_elem_2246(arg0, arg1) {
-        wasm.__wasm_bindgen_func_elem_2246(arg0, arg1);
+    function __wasm_bindgen_func_elem_2219(arg0, arg1) {
+        wasm.__wasm_bindgen_func_elem_2219(arg0, arg1);
     }
 
-    function __wasm_bindgen_func_elem_2239(arg0, arg1, arg2) {
-        wasm.__wasm_bindgen_func_elem_2239(arg0, arg1, addHeapObject(arg2));
+    function __wasm_bindgen_func_elem_500(arg0, arg1, arg2) {
+        wasm.__wasm_bindgen_func_elem_500(arg0, arg1, addHeapObject(arg2));
     }
 
-    function __wasm_bindgen_func_elem_2239_2(arg0, arg1, arg2) {
-        wasm.__wasm_bindgen_func_elem_2239_2(arg0, arg1, addHeapObject(arg2));
+    function __wasm_bindgen_func_elem_500_2(arg0, arg1, arg2) {
+        wasm.__wasm_bindgen_func_elem_500_2(arg0, arg1, addHeapObject(arg2));
     }
 
-    function __wasm_bindgen_func_elem_2406(arg0, arg1, arg2) {
+    function __wasm_bindgen_func_elem_2379(arg0, arg1, arg2) {
         try {
             const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.__wasm_bindgen_func_elem_2406(retptr, arg0, arg1, addHeapObject(arg2));
+            wasm.__wasm_bindgen_func_elem_2379(retptr, arg0, arg1, addHeapObject(arg2));
             var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
             var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
             if (r1) {
@@ -1208,6 +1150,8 @@ class AxiomMutation<T, Args> {
 
 ```dart
 import 'dart:async';
+import 'package:axiom_flutter/src/runtime_interface.dart';
+
 import 'state.dart';
 import 'query_manager.dart';
 
@@ -1217,19 +1161,21 @@ class AxiomQuery<T> {
 
   final Map<String, String> _customHeaders = {};
   Stream<AxiomState<T>>? _cachedStream;
-  final Stream<AxiomState<T>> Function(Map<String, String> headers)
+
+  // The factory returns the wrapper so QueryManager can grab the Request ID
+  final AxiomActiveStream<T> Function(Map<String, String> headers)
   _streamFactory;
 
   AxiomQuery(this.key, this._streamFactory, {this.isMutation = false});
 
-  /// Appends a custom HTTP header to this request before it executes.
   void setHeader(String key, String value) {
     _customHeaders[key] = value;
   }
 
-  /// The stream triggers execution the first time it is accessed.
+  /// The public getter for the UI
   Stream<AxiomState<T>> get stream {
-    _cachedStream ??= _streamFactory(_customHeaders);
+    // ✨ FIX: Extract .stream from the AxiomActiveStream wrapper
+    _cachedStream ??= _streamFactory(_customHeaders).stream;
     return _cachedStream!;
   }
 
@@ -1255,21 +1201,21 @@ class AxiomQuery<T> {
 
 ```dart
 import 'dart:async';
+import 'dart:typed_data';
 import 'state.dart';
+import 'runtime_interface.dart'; // Import this
 
 class ActiveQuery<T> {
   final String key;
   StreamController<AxiomState<T>>? _controller;
   AxiomState<T> _lastState = AxiomState.loading();
   StreamSubscription? _rustSubscription;
-
-  // True once the upstream Rust stream has closed (Rust sent EventType::Complete).
-  // When true, the next listen() must fire a fresh network request instead of
-  // replaying _lastState. This flag is the mechanism that allows "press button
-  // after error → set token → press button again → works".
   bool _streamClosed = false;
 
-  final Stream<AxiomState<T>> Function() _createStream;
+  // ✨ NEW: Track the active Request ID for WebSockets
+  int? currentReqId;
+
+  final AxiomActiveStream<T> Function() _createStream;
 
   ActiveQuery(this.key, this._createStream) {
     _controller = StreamController<AxiomState<T>>.broadcast(
@@ -1283,15 +1229,8 @@ class ActiveQuery<T> {
 
   void _onListen() {
     if (_rustSubscription == null || _streamClosed) {
-      // Either:
-      // (a) First subscriber ever — start fresh.
-      // (b) The previous Rust stream completed (success OR error) and a new
-      //     subscriber just arrived. Always re-fetch so stale auth errors
-      //     don't get replayed after the user sets a token.
       _connect();
     } else {
-      // Upstream is still in-flight — replay the last known state so the
-      // new subscriber sees immediate feedback (Loading / partial data).
       _controller?.add(_lastState);
     }
   }
@@ -1300,7 +1239,11 @@ class ActiveQuery<T> {
     _streamClosed = false;
     _rustSubscription?.cancel();
 
-    _rustSubscription = _createStream().listen(
+    // ✨ FIX: Capture the Request ID when the stream is created
+    final active = _createStream();
+    currentReqId = active.requestId;
+
+    _rustSubscription = active.stream.listen(
       (newState) {
         _lastState = newState;
         if (!(_controller?.isClosed ?? true)) {
@@ -1362,7 +1305,7 @@ class AxiomQueryManager {
 
   Stream<AxiomState<T>> watch<T>(
     String key,
-    Stream<AxiomState<T>> Function() createFn,
+    AxiomActiveStream<T> Function() createFn, // ✨ FIX: Signature
   ) {
     if (_activeQueries.containsKey(key)) {
       final query = _activeQueries[key] as ActiveQuery<T>;
@@ -1372,6 +1315,19 @@ class AxiomQueryManager {
     final query = ActiveQuery<T>(key, createFn);
     _activeQueries[key] = query;
     return query.stream;
+  }
+
+  // ✨ NEW: Native Send Method
+  void send(String key, Uint8List payload, AxiomRuntime runtime) {
+    final query = _activeQueries[key];
+    if (query != null && query.currentReqId != null) {
+      runtime.sendStreamMessage(
+        requestId: query.currentReqId!,
+        payload: payload,
+      );
+    } else {
+      print('ATMX: Cannot send message, stream not active for $key');
+    }
   }
 
   void invalidate(String key) {
@@ -1391,6 +1347,24 @@ class AxiomQueryManager {
       q.dispose();
     }
     _activeQueries.clear();
+  }
+
+  /// Similar to watch, but returns the full AxiomActiveStream wrapper.
+  /// Used by the SDK to link the Query object to the Request ID.
+  AxiomActiveStream<T> watchRaw<T>(
+    String key,
+    AxiomActiveStream<T> Function() createFn,
+  ) {
+    if (_activeQueries.containsKey(key)) {
+      final query = _activeQueries[key] as ActiveQuery<T>;
+      // Reconstruct wrapper from existing query
+      return AxiomActiveStream<T>(query.currentReqId ?? 0, query.stream);
+    }
+
+    final query = ActiveQuery<T>(key, createFn);
+    _activeQueries[key] = query;
+
+    return AxiomActiveStream<T>(query.currentReqId ?? 0, query.stream);
   }
 }
 
@@ -1412,6 +1386,12 @@ class AxiomStreamResponse {
   final int requestId;
   final Stream<AxiomState<Uint8List>> stream;
   AxiomStreamResponse(this.requestId, this.stream);
+}
+
+class AxiomActiveStream<T> {
+  final int requestId;
+  final Stream<AxiomState<T>> stream;
+  AxiomActiveStream(this.requestId, this.stream);
 }
 
 abstract class AxiomRuntime {
@@ -1975,9 +1955,13 @@ class AxiomRuntimeIo implements AxiomRuntime {
       endpoint: '${namespace}_$endpointId',
       args: args,
     );
+
+    // ✨ FIX: Return AxiomActiveStream by calling the QueryManager's new wrapper logic
     return AxiomQuery(key, (customHeaders) {
       final mergedHeaders = {...?headers, ...customHeaders};
-      return AxiomQueryManager().watch<T>(
+
+      // We wrap the rawStream in a new AxiomActiveStream for AxiomQuery
+      return AxiomQueryManager().watchRaw<T>(
         key,
         () => _rawStream(
           namespace: namespace,
@@ -2009,6 +1993,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
   }) {
     final key =
         '${namespace}_${endpointId}_mut_${DateTime.now().microsecondsSinceEpoch}';
+
     return AxiomQuery(key, (customHeaders) {
       final mergedHeaders = {...?headers, ...customHeaders};
       return _rawStream(
@@ -2025,7 +2010,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
     }, isMutation: true);
   }
 
-  Stream<AxiomState<T>> _rawStream<T>({
+  AxiomActiveStream<T> _rawStream<T>({
     required String namespace,
     required int endpointId,
     required String method,
@@ -2036,7 +2021,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
     Object? body,
     required T Function(dynamic json) decoder,
   }) {
-    return callStream(
+    final response = callStream(
       namespace: namespace,
       endpointId: endpointId,
       method: method,
@@ -2044,22 +2029,21 @@ class AxiomRuntimeIo implements AxiomRuntime {
       headers: headers,
       pathParams: pathParams,
       queryParams: queryParams,
-      requestBytes: AxiomCodec.encodeBody(
-        body,
-        headers,
-      ), // Passes headers into codec
-    ).stream.map((state) {
+      requestBytes: AxiomCodec.encodeBody(body, headers),
+    );
+
+    final mappedStream = response.stream.map((state) {
       if (state.hasError) return state.map((_) => null as T);
       if (state.data != null) {
         try {
-          return AxiomState.success(
+          return AxiomState<T>.success(
             AxiomCodec.decode(state.data!, decoder),
             state.source,
             isFetching: state.isFetching,
             isStreaming: state.isStreaming,
           );
         } catch (e) {
-          return AxiomState.error(
+          return AxiomState<T>.error(
             AxiomError(
               stage: ErrorStage.deserialize,
               category: ErrorCategory.serialization,
@@ -2072,6 +2056,8 @@ class AxiomRuntimeIo implements AxiomRuntime {
       }
       return state.map((_) => null as T);
     });
+
+    return AxiomActiveStream<T>(response.requestId, mappedStream);
   }
 
   AxiomString _toAxiomString(String s, Arena arena) {
@@ -2506,9 +2492,13 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       endpoint: '${namespace}_$endpointId',
       args: args,
     );
+
+    // ✨ FIX: Return AxiomActiveStream by calling the QueryManager's new wrapper logic
     return AxiomQuery(key, (customHeaders) {
       final mergedHeaders = {...?headers, ...customHeaders};
-      return AxiomQueryManager().watch<T>(
+
+      // We wrap the rawStream in a new AxiomActiveStream for AxiomQuery
+      return AxiomQueryManager().watchRaw<T>(
         key,
         () => _rawStream(
           namespace: namespace,
@@ -2556,7 +2546,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     }, isMutation: true);
   }
 
-  Stream<AxiomState<T>> _rawStream<T>({
+  AxiomActiveStream<T> _rawStream<T>({
     required String namespace,
     required int endpointId,
     required String method,
@@ -2567,7 +2557,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     Object? body,
     required T Function(dynamic json) decoder,
   }) {
-    return callStream(
+    final response = callStream(
       namespace: namespace,
       endpointId: endpointId,
       method: method,
@@ -2575,22 +2565,21 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       headers: headers,
       pathParams: pathParams,
       queryParams: queryParams,
-      requestBytes: AxiomCodec.encodeBody(
-        body,
-        headers,
-      ), // Passes headers into codec
-    ).stream.map((state) {
+      requestBytes: AxiomCodec.encodeBody(body, headers),
+    );
+
+    final mappedStream = response.stream.map((state) {
       if (state.hasError) return state.map((_) => null as T);
       if (state.data != null) {
         try {
-          return AxiomState.success(
+          return AxiomState<T>.success(
             AxiomCodec.decode(state.data!, decoder),
             state.source,
             isFetching: state.isFetching,
             isStreaming: state.isStreaming,
           );
         } catch (e) {
-          return AxiomState.error(
+          return AxiomState<T>.error(
             AxiomError(
               stage: ErrorStage.deserialize,
               category: ErrorCategory.serialization,
@@ -2603,6 +2592,8 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       }
       return state.map((_) => null as T);
     });
+
+    return AxiomActiveStream<T>(response.requestId, mappedStream);
   }
 
   _WebAlloc _alloc(String s) => _allocBytes(Uint8List.fromList(utf8.encode(s)));
@@ -3140,7 +3131,7 @@ class _AxiomMutationBuilderState<T, Args>
 ```yaml
 name: axiom_flutter
 description: "Axiom Flutter SDK"
-version: 0.69.0
+version: 0.107.0
 homepage: https://github.com/AxiomCore/axiom-sdk
 repository: https://github.com/AxiomCore/axiom-sdk
 issue_tracker: https://github.com/AxiomCore/axiom-sdk/issues
