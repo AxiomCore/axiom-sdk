@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'axiom_flutter'
-  s.version          = '0.146.0' # Make sure this matches your GitHub release version!
+  s.version          = '0.146.0'
   s.summary          = 'Axiom Runtime macOS'
   s.homepage         = 'https://axiomcore.dev'
   s.license          = { :file => '../LICENSE' }
@@ -16,11 +16,12 @@ Pod::Spec.new do |s|
   # 👇 THE MAGIC DOWNLOAD SCRIPT 👇
   framework_name = 'AxiomRuntime.xcframework'
   zip_name = "#{framework_name}.zip"
-  url = "https://github.com/AxiomCore/AxiomCore/releases/download/v#{s.version}/#{zip_name}"
+  runtime_version = '0.146.0' # Independent, verified AxiomRuntime release pin.
+  url = "https://github.com/AxiomCore/AxiomCore/releases/download/v#{runtime_version}/#{zip_name}"
 
   s.prepare_command = <<-CMD
     if [ ! -d "#{framework_name}" ]; then
-      echo "Downloading AxiomRuntime binary v#{s.version}..."
+      echo "Downloading AxiomRuntime binary v#{runtime_version}..."
       curl -L -o #{zip_name} #{url}
       unzip -q -o #{zip_name}
       rm #{zip_name}
