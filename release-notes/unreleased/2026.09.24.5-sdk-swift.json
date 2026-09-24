@@ -1,0 +1,5 @@
+{
+  "component": "sdk-swift",
+  "type": "feature",
+  "summary": "Release sdk-swift 0.147.0 through the verified Axiom release control plane."
+}
