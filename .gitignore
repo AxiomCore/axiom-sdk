@@ -12,3 +12,7 @@ swift/.build
 swift/AxiomRuntime.xcframework
 swift/*.zip
 swift/.summary_files/
+
+# Independent npm package repositories used by the platform release catalog.
+/web/atmx/
+/web/atmx-react/
