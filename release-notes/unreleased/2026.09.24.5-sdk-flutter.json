@@ -1,0 +1,5 @@
+{
+  "component": "sdk-flutter",
+  "type": "feature",
+  "summary": "Release sdk-flutter 0.147.0 through the verified Axiom release control plane."
+}
