@@ -68,7 +68,7 @@ typedef _AxiomRegisterCallback =
 
 // 8 Arguments exactly matching Rust signature
 typedef _AxiomCallNative =
-    Void Function(
+    Int32 Function(
       Uint64,
       AxiomString,
       Uint32,
@@ -79,7 +79,7 @@ typedef _AxiomCallNative =
       AxiomBuffer,
     );
 typedef _AxiomCall =
-    void Function(
+    int Function(
       int,
       AxiomString,
       int,
@@ -400,7 +400,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
       ..ref.ptr = bPtr
       ..ref.len = requestBytes.length;
 
-    _callFfi(
+    final callStatus = _callFfi(
       requestId,
       _toAxiomString(namespace, arena),
       endpointId,
@@ -411,6 +411,13 @@ class AxiomRuntimeIo implements AxiomRuntime {
       b.ref,
     );
     Future.microtask(() => arena.releaseAll());
+
+    if (callStatus != 0) {
+      controller.addError(
+        StateError('Axiom request was rejected before dispatch (status $callStatus).'),
+      );
+      controller.close();
+    }
 
     controller.onCancel = () => _controllers.remove(requestId);
     return AxiomStreamResponse(requestId, controller.stream);

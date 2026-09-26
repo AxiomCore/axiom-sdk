@@ -1,3 +1,10 @@
+## 0.147.1
+
+- Feature: Add sdk flutter improvements in 0.147.1.
+
+## 0.147.0
+
+- Feature: Add sdk flutter improvements in 0.147.0.
 
 ## 0.0.8
 

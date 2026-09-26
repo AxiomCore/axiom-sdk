@@ -79,6 +79,11 @@ abstract class AxiomRuntime {
     required Uint8List requestBytes,
   });
 
+  /// Supplies an explicit bearer/API-key credential for this runtime process.
+  ///
+  /// This is intentionally not a session-cookie API. Contracts declaring
+  /// `type = "session"` and `location = "cookie"` use the runtime-managed
+  /// cookie jar automatically, keeping HttpOnly cookie values out of Dart.
   void setAuthToken({
     required String namespace,
     required String methodName,

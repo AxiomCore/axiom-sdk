@@ -11,3 +11,7 @@ flutter/axiom_flutter/macos/*.zip
 swift/.build
 swift/AxiomRuntime.xcframework
 swift/*.zip
+
+# Independent npm package repositories used by the platform release catalog.
+/web/atmx/
+/web/atmx-react/
