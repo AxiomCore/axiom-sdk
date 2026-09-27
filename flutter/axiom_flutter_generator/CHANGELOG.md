@@ -1,3 +1,7 @@
+## 0.146.4
+
+- Feature: Add sdk flutter generator improvements in 0.146.4.
+
 ## 0.146.3
 
 - Feature: Add sdk flutter generator improvements in 0.146.3.
