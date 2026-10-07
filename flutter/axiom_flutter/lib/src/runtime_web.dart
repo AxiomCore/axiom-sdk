@@ -13,6 +13,7 @@ import 'query_manager.dart';
 import 'internal/axiom_codec.dart';
 import 'internal/query_key.dart';
 import 'internal/tracing.dart';
+import 'internal/contract_load_status.dart';
 
 AxiomRuntime getRuntime() => AxiomRuntimeWeb();
 
@@ -266,23 +267,28 @@ class AxiomRuntimeWeb implements AxiomRuntime {
         b = _alloc(baseUrl),
         c = _allocBytes(contractBytes);
     final s = _alloc(signature ?? ''), p = _alloc(publicKey ?? '');
-    _wasm.axiomLoadContract(
-      n.ptr,
-      n.len,
-      b.ptr,
-      b.len,
-      c.ptr,
-      c.len,
-      s.ptr,
-      s.len,
-      p.ptr,
-      p.len,
-    );
-    _free(n);
-    _free(b);
-    _free(c);
-    _free(s);
-    _free(p);
+    final int status;
+    try {
+      status = _wasm.axiomLoadContract(
+        n.ptr,
+        n.len,
+        b.ptr,
+        b.len,
+        c.ptr,
+        c.len,
+        s.ptr,
+        s.len,
+        p.ptr,
+        p.len,
+      );
+    } finally {
+      _free(n);
+      _free(b);
+      _free(c);
+      _free(s);
+      _free(p);
+    }
+    requireContractLoadStatus(status);
   }
 
   @override

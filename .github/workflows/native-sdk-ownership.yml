@@ -1,0 +1,19 @@
+name: Native SDK response ownership
+on:
+  push:
+    paths: ['flutter/axiom_flutter/lib/**', 'flutter/axiom_flutter/test/native/**', '.github/workflows/native-sdk-ownership.yml']
+  pull_request:
+    paths: ['flutter/axiom_flutter/lib/**', 'flutter/axiom_flutter/test/native/**', '.github/workflows/native-sdk-ownership.yml']
+permissions:
+  contents: read
+jobs:
+  dart-io:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d
+        with:
+          sdk: '3.8.1'
+      - run: python3 flutter/axiom_flutter/test/native/run_response_ownership.py

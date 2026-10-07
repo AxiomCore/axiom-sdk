@@ -16,6 +16,7 @@ import 'query_manager.dart';
 import 'internal/axiom_codec.dart';
 import 'internal/query_key.dart';
 import 'internal/tracing.dart';
+import 'internal/contract_load_status.dart';
 
 AxiomRuntime getRuntime() => AxiomRuntimeIo();
 
@@ -115,17 +116,28 @@ _AxiomFreeResponseBuffer? _freeResponseFfiBackground;
 @pragma('vm:entry-point')
 void _axiomCallbackHandler(Pointer<AxiomResponseBuffer> responsePtr) {
   if (responsePtr == nullptr) return;
-  final response = responsePtr.ref;
-  _dataPort?.send([
-    response.requestId,
-    response.eventType,
-    response.errorCode,
-    response.data.ptr.address,
-    response.data.len,
-    response.errorMessage.ptr.address,
-    response.errorMessage.len,
-  ]);
-  _freeResponseFfiBackground?.call(responsePtr);
+  try {
+    final response = responsePtr.ref;
+    // Native ownership ends in this callback. Send owned Dart bytes, never addresses.
+    final data = response.data.ptr == nullptr || response.data.len == 0
+        ? Uint8List(0)
+        : Uint8List.fromList(response.data.ptr.asTypedList(response.data.len));
+    final error =
+        response.errorMessage.ptr == nullptr || response.errorMessage.len == 0
+        ? Uint8List(0)
+        : Uint8List.fromList(
+            response.errorMessage.ptr.asTypedList(response.errorMessage.len),
+          );
+    _dataPort?.send([
+      response.requestId,
+      response.eventType,
+      response.errorCode,
+      data,
+      error,
+    ]);
+  } finally {
+    _freeResponseFfiBackground?.call(responsePtr);
+  }
 }
 
 @pragma('vm:entry-point')
@@ -255,10 +267,8 @@ class AxiomRuntimeIo implements AxiomRuntime {
       final int requestId = message[0];
       final int eventTypeValue = message[1];
       final int errorCodeValue = message[2];
-      final int dataPtr = message[3];
-      final int dataLen = message[4];
-      final int errorPtr = message[5];
-      final int errorLen = message[6];
+      final data = message[3] as Uint8List;
+      final error = message[4] as Uint8List;
 
       final controller = _controllers[requestId];
       if (controller == null || controller.isClosed) return;
@@ -271,9 +281,6 @@ class AxiomRuntimeIo implements AxiomRuntime {
       }
 
       if (eventTypeValue == EventType.streamChunk) {
-        final data = Uint8List.fromList(
-          Pointer<Uint8>.fromAddress(dataPtr).asTypedList(dataLen),
-        );
         controller.add(
           AxiomState.success(data, AxiomSource.network, isStreaming: true),
         );
@@ -282,14 +289,8 @@ class AxiomRuntimeIo implements AxiomRuntime {
 
       if (eventTypeValue == EventType.error) {
         _hadError.add(requestId);
-        AxiomError richError = errorPtr != 0
-            ? AxiomError.fromJson(
-                jsonDecode(
-                  utf8.decode(
-                    Pointer<Uint8>.fromAddress(errorPtr).asTypedList(errorLen),
-                  ),
-                ),
-              )
+        AxiomError richError = error.isNotEmpty
+            ? AxiomError.fromJson(jsonDecode(utf8.decode(error)))
             : AxiomError(
                 stage: ErrorStage.runtime,
                 category: ErrorCategory.unknown,
@@ -301,10 +302,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
         return;
       }
 
-      if (dataPtr != 0) {
-        final data = Uint8List.fromList(
-          Pointer<Uint8>.fromAddress(dataPtr).asTypedList(dataLen),
-        );
+      if (data.isNotEmpty) {
         controller.add(
           AxiomState.success(
             data,
@@ -337,13 +335,14 @@ class AxiomRuntimeIo implements AxiomRuntime {
       final buf = arena<AxiomBuffer>()
         ..ref.ptr = cPtr
         ..ref.len = contractBytes.length;
-      _loadContractFfi(
+      final status = _loadContractFfi(
         _toAxiomString(namespace, arena),
         _toAxiomString(baseUrl, arena),
         buf.ref,
         _toAxiomString(signature ?? '', arena),
         _toAxiomString(publicKey ?? '', arena),
       );
+      requireContractLoadStatus(status);
     });
   }
 
@@ -414,7 +413,9 @@ class AxiomRuntimeIo implements AxiomRuntime {
 
     if (callStatus != 0) {
       controller.addError(
-        StateError('Axiom request was rejected before dispatch (status $callStatus).'),
+        StateError(
+          'Axiom request was rejected before dispatch (status $callStatus).',
+        ),
       );
       controller.close();
     }
