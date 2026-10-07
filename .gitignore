@@ -16,3 +16,6 @@ swift/*.zip
 /web/atmx/
 /web/atmx-react/
 **/.DS_Store
+
+# Local generated source captures
+.summary_files/
