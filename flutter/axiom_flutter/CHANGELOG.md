@@ -1,3 +1,7 @@
+## 0.147.4
+
+- Fix: Reject invalid proof and qualify corrected runtime packages
+
 ## 0.147.3
 
 - Feature: Add sdk flutter improvements in 0.147.3.

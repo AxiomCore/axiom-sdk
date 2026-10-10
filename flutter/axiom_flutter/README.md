@@ -201,6 +201,16 @@ Axiom returns rich error objects defined in `state.dart`. You can check:
 
 Axiom contracts can be signed. If you provide a `signature` and `publicKey` during `startup`, the Rust core will cryptographically verify that the API definition hasn't been tampered with.
 
+Provide both proof values together. Partial, invalid or tampered proof fails
+startup and does not downgrade to unsigned mode. Omitting both is an explicit
+local unsigned load; locked applications require signed proof and matching
+artifact/proof hashes.
+
+Apple pod preparation verifies the pinned runtime archive checksum before
+installing its XCFramework. A failed download or checksum check preserves the
+previous framework and stops the build. Rebuild the consumer after updating its
+runtime pin; an old framework is not evidence for the replacement release.
+
 If the contract is unsigned, `AxiomRuntime` will print a security warning to the console in debug mode.
 
 ---
