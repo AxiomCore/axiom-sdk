@@ -30,7 +30,7 @@ let package = Package(
             url: "https://github.com/AxiomCore/AxiomCore/releases/download/v0.148.5/AxiomRuntime.xcframework.zip",
             // IMPORTANT: SPM requires a checksum. You must run:
             // `shasum -a 256 AxiomRuntime.xcframework.zip` and paste the result here!
-            checksum: "caa3e80dcb9374d633ffeb4fed3fe3797e832056154daab1f157bbfe13dbb1a5"
+            checksum: "1bf9a1d7b31d06f92d44773c43c77e1f689a54ed3777276731261c86fa148562"
         ),
         .testTarget(
             name: "AxiomTests",
