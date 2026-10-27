@@ -62,20 +62,21 @@ export interface AxiomAuth {
   user(): Promise<AuthUser | null>;
   subscribe(listener: (s: PublicSession) => void): () => void;
   restore(): Promise<PublicSession>;
-  signUp(email: string, password: string): Promise<{ status: 'signed_in' | 'verification_sent'; challenge?: string; resendAfterSeconds?: number }>;
+  signUp(email: string, password: string, opts?: { captchaToken?: string }): Promise<{ status: 'signed_in' | 'verification_sent'; challenge?: string; resendAfterSeconds?: number }>;
   verifySignUp(challenge: string, code: string): Promise<PublicSession>;
-  signInWithPassword(email: string, password: string, opts?: { tenant?: string }): Promise<PublicSession>;
-  requestEmailCode(email: string): Promise<{ challenge: string; resendAfterSeconds: number }>;
+  signInWithPassword(email: string, password: string, opts?: { tenant?: string; captchaToken?: string }): Promise<PublicSession>;
+  requestEmailCode(email: string, opts?: { captchaToken?: string }): Promise<{ challenge: string; resendAfterSeconds: number }>;
   verifyEmailCode(challenge: string, code: string): Promise<PublicSession>;
-  requestMagicLink(email: string, opts?: { returnTo?: string }): Promise<{ sent: true }>;
+  requestMagicLink(email: string, opts?: { returnTo?: string; captchaToken?: string }): Promise<{ sent: true }>;
   signInWithProvider(provider: string, opts?: { returnTo?: string }): Promise<never>;
-  signInHosted(opts?: { returnTo?: string }): Promise<never>;
-  handleRedirect(url?: string): Promise<{ handled: boolean; returnTo?: string }>;
+  signInHosted(opts?: { returnTo?: string; screen?: 'sign_in' | 'sign_up' }): Promise<never>;
+  handleRedirect(url?: string): Promise<{ handled: boolean; returnTo?: string; invitation?: boolean }>;
   refresh(opts?: { tenant?: string }): Promise<PublicSession>;
   signOut(opts?: { everywhere?: boolean; redirect?: boolean; returnTo?: string }): Promise<PublicSession>;
   changePassword(current: string, next: string): Promise<void>;
-  requestPasswordReset(email: string): Promise<{ sent: true }>;
+  requestPasswordReset(email: string, opts?: { captchaToken?: string }): Promise<{ sent: true }>;
   confirmPasswordReset(password: string): Promise<void>;
+  acceptInvitation(opts?: { password?: string; tenant?: string }): Promise<PublicSession>;
   selectTenant(tenant: string | null): Promise<PublicSession>;
   authorizationHeader(): Promise<string | null>;
   toJSON(): { issuer: string; session: PublicSession };
@@ -285,6 +286,11 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
   const setT = options.setTimeout ?? ((cb: () => void, ms: number): unknown => globalThis.setTimeout(cb, ms));
   const clearT = options.clearTimeout ?? ((h: unknown): void => globalThis.clearTimeout(h as ReturnType<typeof setTimeout>));
   const onTokens = options.onTokens;
+  if (storage.shared && !g.navigator?.locks) {
+    // Tabs sharing a rotating refresh token without a cross-tab lock would end
+    // each other's family through reuse detection.
+    throw new TypeError('a shared storage adapter requires navigator.locks');
+  }
   const storageKey = 'axiom-auth:refresh:' + issuer;
   const lockName = 'axiom-auth:' + issuer;
 
@@ -297,6 +303,7 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
   let retryNotBefore = 0;
   let retryCode: AuthErrorCode = 'unavailable';
   let resetToken: string | null = null;
+  let invitationToken: string | null = null;
 
   const cryptoApi = () => {
     const c = g.crypto ?? (globalThis as unknown as AuthGlobals).crypto;
@@ -417,6 +424,15 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
     }
     const code = parsed && isRecord(data) && isRecord(data.error) ? mapErrorCode(data.error.code) : 'unavailable';
     throw new AxiomAuthError(code, response.status, parseRetryAfter(response.headers.get('Retry-After'), clock()));
+  }
+
+  // Turnstile: `captcha_token` where the issuer requires it for this flow.
+  function captcha(body: Record<string, unknown>, opts?: { captchaToken?: string }): Record<string, unknown> {
+    if (opts?.captchaToken !== undefined) {
+      if (typeof opts.captchaToken !== 'string' || opts.captchaToken.length === 0 || opts.captchaToken.length > 4096) throw new AxiomAuthError('invalid_request', 0);
+      body.captcha_token = opts.captchaToken;
+    }
+    return body;
   }
 
   function withAudience(body: Record<string, unknown>): Record<string, unknown> {
@@ -603,11 +619,13 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
       if (generation !== gen || held !== presented) return;
       const next = heldFrom(data, presented);
       held = next;
-      if (next.refreshToken !== presented.refreshToken || storage.shared) await persist(next);
-      else await persist(next).catch(() => undefined);
-      if (held !== next) return;
       retryNotBefore = 0;
       pushToken(next.accessToken);
+      // A failed persist (quota, private mode) keeps the session in memory; a
+      // shared adapter must persist, or another tab would present the old token.
+      if (storage.shared) await persist(next);
+      else await persist(next).catch(() => undefined);
+      if (held !== next) return;
     };
 
     try {
@@ -779,7 +797,8 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
     const viaQuery = query.has('code') || query.has('error');
     const link = fragment.get('axiom_link');
     const reset = fragment.get('axiom_reset');
-    if (!viaQuery && link === null && reset === null) return Promise.resolve({ handled: false });
+    const invitation = fragment.get('axiom_invitation');
+    if (!viaQuery && link === null && reset === null && invitation === null) return Promise.resolve({ handled: false });
 
     const clean = new URL(parsed.href);
     for (const name of CALLBACK_QUERY) clean.searchParams.delete(name);
@@ -790,6 +809,10 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
       // A history failure must not leave the flow half done; the code is single use.
     }
 
+    if (!viaQuery && link === null && invitation !== null) {
+      invitationToken = invitation;
+      return Promise.resolve({ handled: true, invitation: true });
+    }
     if (!viaQuery && link === null) {
       resetToken = reset;
       return Promise.resolve({ handled: true });
@@ -831,7 +854,7 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
       const u = new URL(g.location.href);
       if (u.origin !== redirect.origin || u.pathname !== redirect.pathname) return false;
       const f = new URLSearchParams(u.hash.slice(1));
-      return u.searchParams.has('code') || u.searchParams.has('error') || f.has('axiom_link') || f.has('axiom_reset');
+      return u.searchParams.has('code') || u.searchParams.has('error') || f.has('axiom_link') || f.has('axiom_reset') || f.has('axiom_invitation');
     } catch {
       return false;
     }
@@ -925,8 +948,8 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
 
     restore,
 
-    async signUp(email: string, password: string) {
-      const { data } = await call('POST', '/v1/signup', withAudience({ email, password }));
+    async signUp(email: string, password: string, opts?: { captchaToken?: string }) {
+      const { data } = await call('POST', '/v1/signup', withAudience(captcha({ email, password }, opts)));
       if (isRecord(data) && typeof data.access_token === 'string') {
         await establish(data);
         return { status: 'signed_in' as const };
@@ -942,15 +965,15 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
       return establish(data);
     },
 
-    async signInWithPassword(email: string, password: string, opts?: { tenant?: string }) {
-      const body: Record<string, unknown> = { email, password };
+    async signInWithPassword(email: string, password: string, opts?: { tenant?: string; captchaToken?: string }) {
+      const body: Record<string, unknown> = captcha({ email, password }, opts);
       if (opts?.tenant !== undefined) body.tenant = opts.tenant;
       const { data } = await call('POST', '/v1/sign-in/password', withAudience(body));
       return establish(data);
     },
 
-    async requestEmailCode(email: string) {
-      const { data } = await call('POST', '/v1/email/code', { email });
+    async requestEmailCode(email: string, opts?: { captchaToken?: string }) {
+      const { data } = await call('POST', '/v1/email/code', captcha({ email }, opts));
       if (!isRecord(data) || typeof data.challenge_id !== 'string') throw new AxiomAuthError('unavailable', 0);
       return { challenge: data.challenge_id, resendAfterSeconds: typeof data.resend_after === 'number' ? data.resend_after : 60 };
     },
@@ -960,16 +983,16 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
       return establish(data);
     },
 
-    async requestMagicLink(email: string, opts?: { returnTo?: string }) {
+    async requestMagicLink(email: string, opts?: { returnTo?: string; captchaToken?: string }) {
       const { tx, challenge } = await beginTransaction('magic_link', null, opts?.returnTo);
       try {
-        await call('POST', '/v1/email/link', {
+        await call('POST', '/v1/email/link', captcha({
           email,
           redirect_uri: tx.redirectUri,
           state: tx.state,
           code_challenge: challenge,
           code_challenge_method: 'S256',
-        });
+        }, opts));
       } catch (err) {
         try {
           g.localStorage?.removeItem(TX_PREFIX + tx.state);
@@ -988,9 +1011,12 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
       return new Promise<never>(() => undefined);
     },
 
-    async signInHosted(opts?: { returnTo?: string }): Promise<never> {
+    async signInHosted(opts?: { returnTo?: string; screen?: 'sign_in' | 'sign_up' }): Promise<never> {
+      if (opts?.screen !== undefined && opts.screen !== 'sign_in' && opts.screen !== 'sign_up') throw new AxiomAuthError('invalid_request', 0);
       const { tx, challenge } = await beginTransaction('hosted', null, opts?.returnTo);
-      navigate(startUrl('/sign-in', tx, challenge));
+      const url = new URL(startUrl('/sign-in', tx, challenge));
+      if (opts?.screen) url.searchParams.set('screen', opts.screen);
+      navigate(url.href);
       return new Promise<never>(() => undefined);
     },
 
@@ -1006,7 +1032,16 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
           // Sign-out proceeds whatever the rotation did.
         }
       }
-      const refreshToken = held ? held.refreshToken : null;
+      let refreshToken = held ? held.refreshToken : null;
+      if (refreshToken === null) {
+        // A stored record not yet restored is revoked, not merely forgotten.
+        try {
+          const stored = await storage.get(storageKey);
+          if (isRefreshRecord(stored) && stored.issuer === issuer) refreshToken = stored.refreshToken;
+        } catch {
+          // Nothing readable to revoke.
+        }
+      }
       dropCredentials('anonymous');
       await removeRecord();
       if (refreshToken !== null) {
@@ -1042,8 +1077,8 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
       await call('POST', '/v1/password', { current_password: currentPassword, new_password: next }, token);
     },
 
-    async requestPasswordReset(email: string) {
-      const body: Record<string, unknown> = { email };
+    async requestPasswordReset(email: string, opts?: { captchaToken?: string }) {
+      const body: Record<string, unknown> = captcha({ email }, opts);
       if (redirectUri) body.redirect_uri = redirectUri;
       await call('POST', '/v1/password/reset', body);
       return { sent: true as const };
@@ -1059,6 +1094,23 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
         throw err;
       }
       resetToken = null;
+    },
+
+    async acceptInvitation(opts?: { password?: string; tenant?: string }): Promise<PublicSession> {
+      const token = invitationToken;
+      if (token === null) throw new AxiomAuthError('invalid_code', 0);
+      const body: Record<string, unknown> = { token };
+      if (opts?.password !== undefined) body.password = opts.password;
+      if (opts?.tenant !== undefined) body.tenant = opts.tenant;
+      let data: unknown;
+      try {
+        ({ data } = await call('POST', '/v1/invitations/accept', withAudience(body)));
+      } catch (err) {
+        if (!(err instanceof AxiomAuthError) || err.code !== 'weak_password') invitationToken = null;
+        throw err;
+      }
+      invitationToken = null;
+      return establish(data);
     },
 
     selectTenant(tenant: string | null): Promise<PublicSession> {

@@ -214,3 +214,57 @@ test('createAxiomAuth refuses a missing or malformed issuer', () => {
   assert.throws(() => createAxiomAuth({}), TypeError);
   assert.throws(() => createAxiomAuth({ issuer: 'not a url' }), TypeError);
 });
+
+test('review seams: captcha tokens, invitation links, hosted sign-up screen, shared storage without locks', async () => {
+  const { setup, makeSharedAdapter, makeBrowser, REDIRECT_URI } = await import('./helpers.mjs');
+  const ctx = setup();
+  await ctx.auth.requestEmailCode('jo@example.com', { captchaToken: 'cf-token' });
+  assert.equal(ctx.issuer.callsTo('POST /v1/email/code')[0].body.captcha_token, 'cf-token');
+  await ctx.auth.requestPasswordReset('jo@example.com', { captchaToken: 'cf-2' });
+  assert.equal(ctx.issuer.callsTo('POST /v1/password/reset')[0].body.captcha_token, 'cf-2');
+  await ctx.auth.signInWithPassword('jo@example.com', 'correct horse battery', { captchaToken: 'cf-3' });
+  assert.equal(ctx.issuer.callsTo('POST /v1/sign-in/password')[0].body.captcha_token, 'cf-3');
+  await ctx.auth.requestEmailCode('jo@example.com');
+  assert.equal('captcha_token' in ctx.issuer.callsTo('POST /v1/email/code')[1].body, false);
+  await assert.rejects(ctx.auth.requestEmailCode('jo@example.com', { captchaToken: '' }), { code: 'invalid_request' });
+
+  void ctx.auth.signInHosted({ screen: 'sign_up' });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(new URL(ctx.browser.location.assigned.at(-1)).searchParams.get('screen'), 'sign_up');
+
+  const invited = setup({ browser: makeBrowser({ href: REDIRECT_URI + '#axiom_invitation=axi1_secret' }) });
+  invited.issuer.on('POST /v1/invitations/accept', (body, call, issuer) => ({ body: issuer.tokens(issuer.createSession()) }));
+  const r = await invited.auth.handleRedirect();
+  assert.deepEqual(r, { handled: true, invitation: true });
+  assert.ok(!invited.browser.location.href.includes('axi1_secret'), 'the invitation token is stripped');
+  const s = await invited.auth.acceptInvitation({ password: 'correct horse battery' });
+  assert.equal(s.status, 'authenticated');
+  assert.deepEqual(invited.issuer.callsTo('POST /v1/invitations/accept')[0].body.token, 'axi1_secret');
+  await assert.rejects(invited.auth.acceptInvitation(), { code: 'invalid_code' }, 'single use');
+
+  const { createAxiomAuth } = await import('../dist/index.js');
+  assert.throws(() => createAxiomAuth({ issuer: ctx.issuer.issuer, storage: makeSharedAdapter(), globalObject: makeBrowser() }), /navigator.locks/);
+});
+
+test('review: signOut before restore revokes the stored refresh token; a failed persist still pushes the rotated token', async () => {
+  const { setup, FakeStorage, ISSUER } = await import('./helpers.mjs');
+  const { sessionStorageAdapter } = await import('../dist/index.js');
+  const backing = new FakeStorage();
+  const first = setup({ storage: sessionStorageAdapter(backing) });
+  await first.auth.signInWithPassword('jo@example.com', 'correct horse battery');
+  const stored = JSON.parse(backing.getItem('axiom-auth:refresh:' + ISSUER)).refreshToken;
+  const second = setup({ storage: sessionStorageAdapter(backing) });
+  second.issuer.sessions = first.issuer.sessions;
+  await second.auth.signOut();
+  assert.equal(second.issuer.callsTo('POST /v1/logout')[0].body.refresh_token, stored);
+  assert.equal(backing.length, 0);
+
+  const full = new FakeStorage();
+  const ctx = setup({ storage: sessionStorageAdapter(full) });
+  await ctx.auth.signInWithPassword('jo@example.com', 'correct horse battery');
+  full.setItem = () => { throw new Error('QuotaExceededError'); };
+  await ctx.clock.advance(800 * 1000);
+  assert.ok(ctx.issuer.rotations >= 1);
+  assert.equal(ctx.tokens.at(-1), ctx.issuer.issuedAccess.at(-1), 'the rotated access token reaches the transport');
+  assert.equal(ctx.auth.session().status, 'authenticated');
+});

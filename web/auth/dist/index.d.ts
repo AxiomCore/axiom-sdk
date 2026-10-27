@@ -44,6 +44,7 @@ export interface AuthGlobals {
 
 export const memoryStorage: () => AuthStorageAdapter;            // default
 /** Opt-in, per tab, survives reload. Additive: `target` defaults to `globalThis.sessionStorage`. */
+/** Additive: `captchaToken` is sent as `captcha_token` where Turnstile gates a flow. A shared adapter requires `navigator.locks`. */
 export const sessionStorageAdapter: (target?: StorageLike) => AuthStorageAdapter;
 
 export interface AxiomAuthOptions {
@@ -70,14 +71,14 @@ export interface AxiomAuth {
    * `expired`, or `error` with a retry scheduled).
    */
   restore(): Promise<PublicSession>;
-  signUp(email: string, password: string): Promise<{ status: 'signed_in'|'verification_sent'; challenge?: string; resendAfterSeconds?: number }>;
+  signUp(email: string, password: string, opts?: { captchaToken?: string }): Promise<{ status: 'signed_in'|'verification_sent'; challenge?: string; resendAfterSeconds?: number }>;
   verifySignUp(challenge: string, code: string): Promise<PublicSession>;
-  signInWithPassword(email: string, password: string, opts?: { tenant?: string }): Promise<PublicSession>;
-  requestEmailCode(email: string): Promise<{ challenge: string; resendAfterSeconds: number }>;
+  signInWithPassword(email: string, password: string, opts?: { tenant?: string; captchaToken?: string }): Promise<PublicSession>;
+  requestEmailCode(email: string, opts?: { captchaToken?: string }): Promise<{ challenge: string; resendAfterSeconds: number }>;
   verifyEmailCode(challenge: string, code: string): Promise<PublicSession>;
-  requestMagicLink(email: string, opts?: { returnTo?: string }): Promise<{ sent: true }>;
+  requestMagicLink(email: string, opts?: { returnTo?: string; captchaToken?: string }): Promise<{ sent: true }>;
   signInWithProvider(provider: string, opts?: { returnTo?: string }): Promise<never>;
-  signInHosted(opts?: { returnTo?: string }): Promise<never>;
+  signInHosted(opts?: { returnTo?: string; screen?: 'sign_in' | 'sign_up' }): Promise<never>;
   /**
    * `handled: false` when `url` (default `location.href`) is not a callback. Strips the
    * callback parameters with `history.replaceState` synchronously, before returning.
@@ -85,12 +86,14 @@ export interface AxiomAuth {
    * app's signed_in route applies. Rejects with `AxiomAuthError` (`state_mismatch`,
    * `invalid_grant`, a redirect outcome name, or a mapped server code).
    */
-  handleRedirect(url?: string): Promise<{ handled: boolean; returnTo?: string }>;
+  handleRedirect(url?: string): Promise<{ handled: boolean; returnTo?: string; invitation?: boolean }>;
   refresh(opts?: { tenant?: string }): Promise<PublicSession>;
   signOut(opts?: { everywhere?: boolean; redirect?: boolean; returnTo?: string }): Promise<PublicSession>;
   changePassword(current: string, next: string): Promise<void>;
-  requestPasswordReset(email: string): Promise<{ sent: true }>;
+  requestPasswordReset(email: string, opts?: { captchaToken?: string }): Promise<{ sent: true }>;
   confirmPasswordReset(password: string): Promise<void>;        // uses the captured #axiom_reset token
+  /** Additive: accepts the invitation captured from `#axiom_invitation` (POST /v1/invitations/accept). */
+  acceptInvitation(opts?: { password?: string; tenant?: string }): Promise<PublicSession>;
   selectTenant(tenant: string|null): Promise<PublicSession>;
   authorizationHeader(): Promise<string|null>;                  // non-Acore fetch; refreshes if due
   /** Additive: what `JSON.stringify(auth)` shows; never a token. */
