@@ -353,6 +353,29 @@ export function createAxiomAuth(options                  )            {
   const setT = options.setTimeout ?? ((cb            , ms        )          => globalThis.setTimeout(cb, ms));
   const clearT = options.clearTimeout ?? ((h         )       => globalThis.clearTimeout(h                                 ));
   const onTokens = options.onTokens;
+  // authorizedFetch attaches the bearer only to the page's own origin and these exact origins.
+  const apiOrigins = new Set        ();
+  for (const o of options.apiOrigins ?? []) {
+    let u     ;
+    try {
+      u = new URL(o);
+    } catch {
+      throw new TypeError('apiOrigins entries must be origins');
+    }
+    if (u.origin !== o || (u.protocol !== 'https:' && u.hostname !== 'localhost' && u.hostname !== '127.0.0.1' && u.hostname !== '[::1]')) {
+      throw new TypeError('apiOrigins entries must be https origins without a path');
+    }
+    apiOrigins.add(o);
+  }
+  const tokenOrigin = (input                        )          => {
+    let url     ;
+    try {
+      url = typeof Request !== 'undefined' && input instanceof Request ? new URL(input.url) : new URL(String(input), g.location?.href);
+    } catch {
+      return false;
+    }
+    return url.origin === g.location?.origin || apiOrigins.has(url.origin);
+  };
   if (storage.shared && !g.navigator?.locks) {
     // Tabs sharing a rotating refresh token without a cross-tab lock would end
     // each other's family through reuse detection.
@@ -1382,7 +1405,9 @@ export function createAxiomAuth(options                  )            {
     },
 
     // branches-v1 "Clients" (B10): on `401 authorization_changed` refresh once and retry once.
+    // Another origin than the page's or an `apiOrigins` entry gets a plain fetch: no bearer.
     async authorizedFetch(input                        , init              )                    {
+      if (!tokenOrigin(input)) return fetchFn(input, init);
       const base = typeof Request !== 'undefined' && input instanceof Request ? input : null;
       const retryable = base === null ? replayable(init?.body) : base.body === null || base.bodyUsed === false;
       const spare = base !== null && retryable ? base.clone() : null;

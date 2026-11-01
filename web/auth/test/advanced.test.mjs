@@ -427,6 +427,8 @@ function appApi(ctx, behaviour) {
   return { app, fetch };
 }
 
+const API = 'https://api.example.com';
+
 const changed = (exposed) => new Response(JSON.stringify({ error: { status: 401, code: 'authorization_changed', path: 'authentication', message: 'changed' } }), {
   status: 401, headers: exposed ? { 'WWW-Authenticate': 'Bearer error="invalid_token", error_description="authorization_changed"' } : {},
 });
@@ -434,7 +436,7 @@ const changed = (exposed) => new Response(JSON.stringify({ error: { status: 401,
 test('authorizedFetch: 401 authorization_changed refreshes once and retries once with the new token', async () => {
   const clock = makeClock();
   let api;
-  const ctx = setup({ clock, fetch: (u, i) => api.fetch(u, i) });
+  const ctx = setup({ clock, fetch: (u, i) => api.fetch(u, i), apiOrigins: [API] });
   api = appApi(ctx, (n) => (n === 1 ? changed(false) : new Response('{"ok":true}', { status: 200 })));
   await ctx.auth.signInWithPassword('jo@example.com', 'pw');
   const res = await ctx.auth.authorizedFetch('https://api.example.com/orders', { method: 'POST', body: '{"n":1}', headers: { 'Content-Type': 'application/json' } });
@@ -447,7 +449,7 @@ test('authorizedFetch: 401 authorization_changed refreshes once and retries once
 
 test('authorizedFetch: a second authorization_changed is returned, never a loop; other 401s are not retried', async () => {
   let api;
-  const ctx = setup({ fetch: (u, i) => api.fetch(u, i) });
+  const ctx = setup({ fetch: (u, i) => api.fetch(u, i), apiOrigins: [API] });
   api = appApi(ctx, () => changed(true));
   await ctx.auth.signInWithPassword('jo@example.com', 'pw');
   const res = await ctx.auth.authorizedFetch('https://api.example.com/orders');
@@ -456,7 +458,7 @@ test('authorizedFetch: a second authorization_changed is returned, never a loop;
   assert.equal(ctx.issuer.callsTo('POST /v1/token/refresh').length, 1);
 
   let api2;
-  const ctx2 = setup({ fetch: (u, i) => api2.fetch(u, i) });
+  const ctx2 = setup({ fetch: (u, i) => api2.fetch(u, i), apiOrigins: [API] });
   api2 = appApi(ctx2, () => new Response(JSON.stringify({ error: { status: 401, code: 'step_up_required', path: 'authorization', message: 'step-up required: acr_values=aal2' } }), { status: 401 }));
   await ctx2.auth.signInWithPassword('jo@example.com', 'pw');
   const res2 = await ctx2.auth.authorizedFetch('https://api.example.com/admin');
@@ -468,7 +470,7 @@ test('authorizedFetch: a second authorization_changed is returned, never a loop;
 
 test('authorizedFetch: a streamed body is not replayed; a Request input is cloned for the retry; signed out sends no header', async () => {
   let api;
-  const ctx = setup({ fetch: (u, i) => api.fetch(u, i) });
+  const ctx = setup({ fetch: (u, i) => api.fetch(u, i), apiOrigins: [API] });
   api = appApi(ctx, (n) => (n === 1 ? changed(false) : new Response('ok')));
   const anon = await ctx.auth.authorizedFetch('https://api.example.com/public');
   assert.equal(api.app.calls[0].authorization, null);
@@ -485,6 +487,34 @@ test('authorizedFetch: a streamed body is not replayed; a Request input is clone
   const res2 = await ctx.auth.authorizedFetch(req);
   assert.equal(res2.status, 200);
   assert.deepEqual(api.app.calls.map((c) => c.body), ['payload', 'payload']);
+});
+
+test('authorizedFetch: the bearer goes only to the page origin and apiOrigins entries (FR-A L-4)', async () => {
+  let api;
+  const ctx = setup({ fetch: (u, i) => api.fetch(u, i), apiOrigins: [API] });
+  api = appApi(ctx, () => changed(false));
+  await ctx.auth.signInWithPassword('jo@example.com', 'pw');
+  await ctx.auth.authorizedFetch('https://evil.example.net/steal', { headers: { 'X-Test': '1' } });
+  await ctx.auth.authorizedFetch('https://api.example.com.evil.example.net/x');
+  await ctx.auth.authorizedFetch('http://api.example.com/x');
+  await ctx.auth.authorizedFetch(new Request('https://evil.example.net/r'));
+  assert.deepEqual(api.app.calls.map((c) => c.authorization), [null, null, null, null], 'other origins: no bearer');
+  assert.equal(ctx.issuer.callsTo('POST /v1/token/refresh').length, 0, 'other origins: no refresh-and-retry');
+  api.app.calls.length = 0;
+  api = appApi(ctx, () => new Response('ok'));
+  await ctx.auth.authorizedFetch('/orders');
+  await ctx.auth.authorizedFetch(ORIGIN + '/orders');
+  await ctx.auth.authorizedFetch(new URL(API + '/orders'));
+  assert.ok(api.app.calls.every((c) => c.authorization?.startsWith('Bearer ')), 'same origin and listed origins get the bearer');
+  // Without apiOrigins another origin never gets it.
+  let api2;
+  const ctx2 = setup({ fetch: (u, i) => api2.fetch(u, i) });
+  api2 = appApi(ctx2, () => new Response('ok'));
+  await ctx2.auth.signInWithPassword('jo@example.com', 'pw');
+  await ctx2.auth.authorizedFetch(API + '/orders');
+  assert.equal(api2.app.calls[0].authorization, null);
+  assert.throws(() => setup({ apiOrigins: ['https://api.example.com/path'] }), TypeError);
+  assert.throws(() => setup({ apiOrigins: ['http://api.example.com'] }), TypeError);
 });
 
 test('the access token acr and auth_time reach the public session; W7 tokens without acr read as aal1', async () => {

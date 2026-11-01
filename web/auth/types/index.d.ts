@@ -68,6 +68,8 @@ export interface AxiomAuthOptions {
   logoutUri?: string;
   /** Additive test seam: browser objects (default `globalThis`). */
   globalObject?: AuthGlobals;
+  /** Additive: exact origins (https, or http on loopback) besides the page's own that `authorizedFetch` sends the bearer to; any other URL is fetched without it. */
+  apiOrigins?: string[];
   /** Additive test seam: timer functions (default `globalThis.setTimeout` and `clearTimeout`). */
   setTimeout?: (callback: () => void, ms: number) => unknown;
   clearTimeout?: (handle: unknown) => void;

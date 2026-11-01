@@ -65,6 +65,7 @@ export interface AxiomAuthOptions {
   globalObject?: AuthGlobals;
   setTimeout?: (callback: () => void, ms: number) => unknown;
   clearTimeout?: (handle: unknown) => void;
+  apiOrigins?: string[];
 }
 
 export interface AxiomAuth {
@@ -474,6 +475,29 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
   const setT = options.setTimeout ?? ((cb: () => void, ms: number): unknown => globalThis.setTimeout(cb, ms));
   const clearT = options.clearTimeout ?? ((h: unknown): void => globalThis.clearTimeout(h as ReturnType<typeof setTimeout>));
   const onTokens = options.onTokens;
+  // authorizedFetch attaches the bearer only to the page's own origin and these exact origins.
+  const apiOrigins = new Set<string>();
+  for (const o of options.apiOrigins ?? []) {
+    let u: URL;
+    try {
+      u = new URL(o);
+    } catch {
+      throw new TypeError('apiOrigins entries must be origins');
+    }
+    if (u.origin !== o || (u.protocol !== 'https:' && u.hostname !== 'localhost' && u.hostname !== '127.0.0.1' && u.hostname !== '[::1]')) {
+      throw new TypeError('apiOrigins entries must be https origins without a path');
+    }
+    apiOrigins.add(o);
+  }
+  const tokenOrigin = (input: string | URL | Request): boolean => {
+    let url: URL;
+    try {
+      url = typeof Request !== 'undefined' && input instanceof Request ? new URL(input.url) : new URL(String(input), g.location?.href);
+    } catch {
+      return false;
+    }
+    return url.origin === g.location?.origin || apiOrigins.has(url.origin);
+  };
   if (storage.shared && !g.navigator?.locks) {
     // Tabs sharing a rotating refresh token without a cross-tab lock would end
     // each other's family through reuse detection.
@@ -1503,7 +1527,9 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
     },
 
     // branches-v1 "Clients" (B10): on `401 authorization_changed` refresh once and retry once.
+    // Another origin than the page's or an `apiOrigins` entry gets a plain fetch: no bearer.
     async authorizedFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
+      if (!tokenOrigin(input)) return fetchFn(input, init);
       const base = typeof Request !== 'undefined' && input instanceof Request ? input : null;
       const retryable = base === null ? replayable(init?.body) : base.body === null || base.bodyUsed === false;
       const spare = base !== null && retryable ? base.clone() : null;

@@ -64,7 +64,9 @@ if (landing?.handled) route(landing.returnTo ?? signedInRoute);
 
 ## Runtime refusals (branches-v1 B10)
 
-`authorizedFetch(input, init)` adds the bearer. When an Acore runtime answers
+`authorizedFetch(input, init)` adds the bearer only to URLs on the page's own origin or an
+exact origin listed in `apiOrigins` (for example `apiOrigins: ['https://api.example.com']`);
+any other URL is fetched as is, without the token and without a retry. When an Acore runtime answers
 `401 authorization_changed` (the environment's authorization generation moved past the
 token), it refreshes once and retries once with the new token. Streamed bodies are not
 replayed. `401 step_up_required` is returned as is: `runtimeAuthRefusal(await res.text())`
