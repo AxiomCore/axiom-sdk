@@ -2,8 +2,16 @@
 // The contract's API block, plus the additive optional members marked "Additive".
 
 export type AuthStatus = 'unknown'|'loading'|'error'|'anonymous'|'authenticated'|'expired'|'refreshing';
+export type Acr = 'aal1'|'aal2'|'phr';                     // auth-advanced/v1 7.1
 export interface PublicPrincipal { subject: string; tenant: string|null; roles: string[]; permissions: string[] }
-export interface PublicSession { id: string; status: AuthStatus; principal: PublicPrincipal|null }
+/** auth-advanced/v1 17.1: `acr` and `authTime` (epoch seconds) from the access token; `aal1` and 0 while signed out. */
+export interface PublicSession { id: string; status: AuthStatus; principal: PublicPrincipal|null; acr: Acr; authTime: number }
+/** Set after `mfa_required` or `mfa_enrollment_required`; the ticket stays private. Redirect completions carry no factor list (`factors` is empty). */
+export interface MfaChallenge { factors: { id: string; type: 'totp'|'passkey'|'sms'; label: string }[]; recoveryCodes: boolean; enrollment?: { types: string[] } }
+export interface Factor { id: string; type: 'totp'|'passkey'|'sms'; label: string; status: 'pending'|'active'; createdAt: string; lastUsedOn?: string }
+/** Trusted UI memory only: show the secret or QR code once, never store or log it. */
+export interface TotpEnrollment { factorId: string; secret: string; otpauthUri: string }
+export type StepUpMethod = 'password'|'totp'|'sms'|'recovery'|'passkey';
 export interface AuthUser { id: string; kind: 'password'|'external'; email?: string; emailVerified: boolean; hasPassword: boolean; providers: string[] }
 export type AuthErrorCode = string;                      // the mechanical names; never free text
 export class AxiomAuthError extends Error {              // message is the code
@@ -37,7 +45,11 @@ export interface AuthGlobals {
   history?: { readonly state: unknown; replaceState(state: unknown, unused: string, url?: string): void };
   localStorage?: StorageLike;
   sessionStorage?: StorageLike;
-  navigator?: { readonly locks?: { request<T>(name: string, callback: () => Promise<T>): Promise<T> } };
+  navigator?: {
+    readonly locks?: { request<T>(name: string, callback: () => Promise<T>): Promise<T> };
+    /** WebAuthn on the application origin (passkeys). */
+    readonly credentials?: { create(options: { publicKey: unknown }): Promise<unknown>; get(options: { publicKey: unknown; mediation?: string }): Promise<unknown> };
+  };
   document?: { readonly visibilityState?: string; addEventListener?(type: string, listener: () => void): void };
   crypto?: { getRandomValues<T extends ArrayBufferView>(array: T): T; readonly subtle: { digest(algorithm: string, data: ArrayBufferView): Promise<ArrayBuffer> } };
 }
@@ -96,7 +108,43 @@ export interface AxiomAuth {
   acceptInvitation(opts?: { password?: string; tenant?: string }): Promise<PublicSession>;
   selectTenant(tenant: string|null): Promise<PublicSession>;
   authorizationHeader(): Promise<string|null>;                  // non-Acore fetch; refreshes if due
+  /**
+   * Additive (branches-v1 B10): `fetch` with the bearer. On `401 authorization_changed` from an
+   * Acore runtime (`WWW-Authenticate` or the body code) refreshes once and retries once with the
+   * new token. Bodies that cannot be replayed (streams) are not retried. Other responses,
+   * including `401 step_up_required`, are returned as they are: read them with
+   * `runtimeAuthRefusal` or `parseStepUpChallenge` and call `stepUp`.
+   */
+  authorizedFetch(input: string|URL|Request, init?: RequestInit): Promise<Response>;
   /** Additive: what `JSON.stringify(auth)` shows; never a token. */
   toJSON(): { issuer: string; session: PublicSession };
+
+  // auth-advanced/v1 17.1
+  mfaChallenge(): MfaChallenge|null;                            // null when none or after 300 s
+  verifyMfa(factorId: string, code: string): Promise<PublicSession>;
+  verifyRecoveryCode(code: string): Promise<PublicSession>;
+  sendSmsCode(factorId: string): Promise<{ resendAfterSeconds: number }>;
+  verifyMfaWithPasskey(): Promise<PublicSession>;               // navigator.credentials.get on the app origin
+  signInWithPasskey(opts?: { tenant?: string }): Promise<PublicSession>;
+  /** Additive: `factorId` selects a TOTP or SMS factor; without it the user's one active factor of that type is used. */
+  stepUp(opts: { acr?: Acr; method: StepUpMethod; password?: string; code?: string; factorId?: string }): Promise<PublicSession>;
+  listFactors(): Promise<{ factors: Factor[]; recoveryCodesRemaining: number; phone?: { masked: string } }>;
+  /** With a session (fresh reauthentication) or the enroll ticket of an enrollment-required sign-in. */
+  enrollTotp(label: string): Promise<TotpEnrollment>;
+  /** Completes an enrollment-required sign-in when the server returns tokens. Recovery codes are returned once and never cached. */
+  confirmTotp(factorId: string, code: string): Promise<{ recoveryCodes?: string[] }>;
+  registerPasskey(label: string): Promise<Factor & { recoveryCodes?: string[] }>;
+  removeFactor(factorId: string): Promise<void>;
+  regenerateRecoveryCodes(): Promise<string[]>;
+  /** Additive: `captchaToken` where Turnstile gates phone verification. */
+  addPhone(phone: string, opts?: { captchaToken?: string }): Promise<{ challengeId: string }>;
+  verifyPhone(challengeId: string, code: string): Promise<void>;
+  enableSmsFactor(): Promise<Factor>;
+  listConsents(): Promise<{ clientId: string; name: string; scopes: string[] }[]>;
+  revokeConsent(clientId: string): Promise<void>;
 }
 export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth;
+/** RFC 9470 challenge of a `WWW-Authenticate` header (same-origin, or when the header is exposed). */
+export function parseStepUpChallenge(response: Response): { acr?: Acr; maxAge?: number }|null;
+/** Additive: the Acore runtime's refusal body (`authorization_changed`, `step_up_required`); works cross-origin. */
+export function runtimeAuthRefusal(body: unknown): { code: 'authorization_changed' }|{ code: 'step_up_required'; acr?: Acr; maxAge?: number }|null;

@@ -13,7 +13,7 @@ function assertNoSecret(text, secrets, where) {
 }
 
 test('exports are exactly the contract block', () => {
-  assert.deepEqual(Object.keys(pkg).sort(), ['AxiomAuthError', 'createAxiomAuth', 'memoryStorage', 'sessionStorageAdapter']);
+  assert.deepEqual(Object.keys(pkg).sort(), ['AxiomAuthError', 'createAxiomAuth', 'memoryStorage', 'parseStepUpChallenge', 'runtimeAuthRefusal', 'sessionStorageAdapter']);
 });
 
 test('memory default: nothing in sessionStorage, only PKCE transactions in localStorage', async () => {
@@ -52,7 +52,7 @@ test('no token in JSON.stringify(auth), session(), errors or the global object',
   assert.deepEqual(JSON.parse(json), { issuer: ISSUER, session: JSON.parse(JSON.stringify(ctx.auth.session())) });
   assertNoSecret(json, secrets, 'JSON.stringify(auth)');
   assertNoSecret(JSON.stringify(ctx.auth.session()), secrets, 'session()');
-  assert.deepEqual(Object.keys(ctx.auth.session()).sort(), ['id', 'principal', 'status']);
+  assert.deepEqual(Object.keys(ctx.auth.session()).sort(), ['acr', 'authTime', 'id', 'principal', 'status']);
   assert.deepEqual(Object.keys(ctx.auth.session().principal).sort(), ['permissions', 'roles', 'subject', 'tenant']);
 
   assert.ok(err instanceof AxiomAuthError);
@@ -194,6 +194,8 @@ test('user() is null without a session; authenticated session maps claims', asyn
     id: sess.sid,
     status: 'authenticated',
     principal: { subject: sess.sub, tenant: null, roles: ['member'], permissions: ['orders.read'] },
+    acr: 'aal1',
+    authTime: Math.floor(ctx.clock.now() / 1000),
   });
   assert.ok(Object.isFrozen(s));
 });

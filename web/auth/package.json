@@ -1,7 +1,7 @@
 {
   "name": "@axiomcore/auth-web",
-  "version": "0.1.0",
-  "description": "Browser client for Axiom project authentication (auth-surfaces/v1).",
+  "version": "0.2.0",
+  "description": "Browser client for Axiom project authentication (auth-surfaces/v1, auth-advanced/v1).",
   "license": "Apache-2.0",
   "type": "module",
   "sideEffects": false,

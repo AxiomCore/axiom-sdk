@@ -154,7 +154,7 @@ test('invalid_refresh clears tokens and the adapter and sets expired', async () 
   ctx.issuer.on(REFRESH, (_b, _c, iss) => iss.error(401, 'AXAUTH_INVALID_REFRESH'));
   await assert.rejects(ctx.auth.refresh(), { code: 'invalid_refresh', status: 401 });
   assert.equal(await storage.get(KEY), null);
-  assert.deepEqual(ctx.auth.session(), { id: '', status: 'expired', principal: null });
+  assert.deepEqual(ctx.auth.session(), { id: '', status: 'expired', principal: null, acr: 'aal1', authTime: 0 });
   assert.equal(ctx.tokens.at(-1), null);
   assert.equal(await ctx.auth.authorizationHeader(), null);
   assert.equal(ctx.clock.pending().length, 0);

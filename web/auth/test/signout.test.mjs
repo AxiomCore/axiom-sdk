@@ -17,7 +17,7 @@ test('signOut posts the refresh token once; a second call posts nothing', async 
   const refreshToken = ctx.issuer.issuedRefresh[0];
   const forwarded = hostForwarder(ctx.auth);
   const s = await ctx.auth.signOut();
-  assert.deepEqual(s, { id: '', status: 'anonymous', principal: null });
+  assert.deepEqual(s, { id: '', status: 'anonymous', principal: null, acr: 'aal1', authTime: 0 });
   const posts = ctx.issuer.callsTo('POST /v1/logout');
   assert.equal(posts.length, 1);
   assert.deepEqual(posts[0].body, { refresh_token: refreshToken });

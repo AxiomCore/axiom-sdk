@@ -170,6 +170,7 @@ export class FakeIssuer {
       amr: ['pwd'], auth_time: iat, roles: this.roles, permissions: this.permissions, authz_ver: 1, epoch: 1,
     };
     if (s.tenant) payload.tenant = s.tenant;
+    if (s.acr) { payload.acr = s.acr; payload.amr = s.amr; payload.auth_time = s.authTime ?? iat; }
     const token = b64u({ alg: 'EdDSA', typ: 'at+jwt', kid: 'k1' }) + '.' + b64u(payload) + '.' + randomBytes(64).toString('base64url');
     this.issuedAccess.push(token);
     return token;

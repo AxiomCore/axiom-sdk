@@ -9,8 +9,13 @@
 // captured password-reset token. Nothing is placed on the global object.
 
 export type AuthStatus = 'unknown' | 'loading' | 'error' | 'anonymous' | 'authenticated' | 'expired' | 'refreshing';
+export type Acr = 'aal1' | 'aal2' | 'phr';
 export interface PublicPrincipal { subject: string; tenant: string | null; roles: string[]; permissions: string[] }
-export interface PublicSession { id: string; status: AuthStatus; principal: PublicPrincipal | null }
+export interface PublicSession { id: string; status: AuthStatus; principal: PublicPrincipal | null; acr: Acr; authTime: number }
+export interface MfaChallenge { factors: { id: string; type: 'totp' | 'passkey' | 'sms'; label: string }[]; recoveryCodes: boolean; enrollment?: { types: string[] } }
+export interface Factor { id: string; type: 'totp' | 'passkey' | 'sms'; label: string; status: 'pending' | 'active'; createdAt: string; lastUsedOn?: string }
+export interface TotpEnrollment { factorId: string; secret: string; otpauthUri: string }
+export type StepUpMethod = 'password' | 'totp' | 'sms' | 'recovery' | 'passkey';
 export interface AuthUser { id: string; kind: 'password' | 'external'; email?: string; emailVerified: boolean; hasPassword: boolean; providers: string[] }
 export type AuthErrorCode = string;
 export interface RefreshRecord { refreshToken: string; refreshExpiresAt: string; issuer: string; audience: string; sessionId: string }
@@ -33,12 +38,17 @@ interface LockManagerLike {
   request<T>(name: string, callback: () => Promise<T>): Promise<T>;
 }
 
+interface CredentialsLike {
+  create(options: { publicKey: unknown }): Promise<unknown>;
+  get(options: { publicKey: unknown; mediation?: string }): Promise<unknown>;
+}
+
 export interface AuthGlobals {
   location?: { readonly href: string; readonly origin: string; assign(url: string): void };
   history?: { readonly state: unknown; replaceState(state: unknown, unused: string, url?: string): void };
   localStorage?: StorageLike;
   sessionStorage?: StorageLike;
-  navigator?: { readonly locks?: LockManagerLike };
+  navigator?: { readonly locks?: LockManagerLike; readonly credentials?: CredentialsLike };
   document?: { readonly visibilityState?: string; addEventListener?(type: string, listener: () => void): void };
   crypto?: { getRandomValues<T extends ArrayBufferView>(array: T): T; readonly subtle: { digest(algorithm: string, data: ArrayBufferView): Promise<ArrayBuffer> } };
 }
@@ -79,7 +89,27 @@ export interface AxiomAuth {
   acceptInvitation(opts?: { password?: string; tenant?: string }): Promise<PublicSession>;
   selectTenant(tenant: string | null): Promise<PublicSession>;
   authorizationHeader(): Promise<string | null>;
+  authorizedFetch(input: string | URL | Request, init?: RequestInit): Promise<Response>;
   toJSON(): { issuer: string; session: PublicSession };
+  // auth-advanced/v1 17.1
+  mfaChallenge(): MfaChallenge | null;
+  verifyMfa(factorId: string, code: string): Promise<PublicSession>;
+  verifyRecoveryCode(code: string): Promise<PublicSession>;
+  sendSmsCode(factorId: string): Promise<{ resendAfterSeconds: number }>;
+  verifyMfaWithPasskey(): Promise<PublicSession>;
+  signInWithPasskey(opts?: { tenant?: string }): Promise<PublicSession>;
+  stepUp(opts: { acr?: Acr; method: StepUpMethod; password?: string; code?: string; factorId?: string }): Promise<PublicSession>;
+  listFactors(): Promise<{ factors: Factor[]; recoveryCodesRemaining: number; phone?: { masked: string } }>;
+  enrollTotp(label: string): Promise<TotpEnrollment>;
+  confirmTotp(factorId: string, code: string): Promise<{ recoveryCodes?: string[] }>;
+  registerPasskey(label: string): Promise<Factor & { recoveryCodes?: string[] }>;
+  removeFactor(factorId: string): Promise<void>;
+  regenerateRecoveryCodes(): Promise<string[]>;
+  addPhone(phone: string, opts?: { captchaToken?: string }): Promise<{ challengeId: string }>;
+  verifyPhone(challengeId: string, code: string): Promise<void>;
+  enableSmsFactor(): Promise<Factor>;
+  listConsents(): Promise<{ clientId: string; name: string; scopes: string[] }[]>;
+  revokeConsent(clientId: string): Promise<void>;
 }
 
 // Codes of auth-core/v1 and auth-surfaces/v1 "Public protocol additions". Any other
@@ -91,13 +121,23 @@ const KNOWN_CODES = new Set([
   'CONFLICT', 'LIMIT', 'KEY_LIMIT', 'TOO_MANY_PERMISSIONS', 'ISSUER_SCOPE',
   'INVALID_CODE', 'INVALID_GRANT', 'REDIRECT_URI', 'CAPTCHA', 'REAUTH_REQUIRED', 'EMAIL_UNVERIFIED',
   'METHOD_DISABLED', 'ACCOUNT_LINK_REQUIRED', 'IDENTITY_LINKED', 'LAST_METHOD', 'UPGRADE_PENDING',
+  // auth-advanced/v1 13
+  'MFA_REQUIRED', 'MFA_ENROLLMENT_REQUIRED', 'STEP_UP_REQUIRED', 'WEBAUTHN', 'FACTOR_LIMIT', 'FACTOR_REQUIRED',
+  'PHONE_NOT_ALLOWED', 'FEATURE_DISABLED', 'HOOK_FAILED',
 ]);
 
 // Redirect outcomes keep their names (auth-surfaces/v1 "Error names").
 const REDIRECT_OUTCOMES = new Set([
   'invalid_request', 'access_denied', 'provider_error', 'temporarily_unavailable',
   'account_link_required', 'identity_linked', 'signup_disabled', 'user_disabled', 'quota', 'method_disabled',
+  'mfa_required', 'mfa_enrollment_required',
 ]);
+
+const ACR_RANK: Record<string, number> = { aal1: 1, aal2: 2, phr: 3 };
+const STEP_UP_METHODS = new Set(['password', 'totp', 'sms', 'recovery', 'passkey']);
+const FACTOR_TYPES = new Set(['totp', 'passkey', 'sms']);
+// Sealed MFA and enroll tickets (axs1), never shown to app code.
+const TICKET_MAX = 4096;
 
 const TX_PREFIX = 'axiom-auth:tx:';
 const RETURN_KEY = 'axiom-auth:return';
@@ -107,7 +147,7 @@ const EXP_MARGIN_MS = 60 * 1000;
 const ROTATION_MARGIN_MS = 120 * 1000;
 const JITTER_MAX_MS = 10 * 1000;
 const DEFAULT_RETRY_MS = 30 * 1000;
-const CALLBACK_QUERY = ['code', 'state', 'iss', 'error', 'error_code'];
+const CALLBACK_QUERY = ['code', 'state', 'iss', 'error', 'error_code', 'mfa_ticket', 'enroll_ticket'];
 
 export class AxiomAuthError extends Error {
   readonly code: AuthErrorCode;
@@ -201,7 +241,7 @@ function decodeBase64url(text: string): Uint8Array {
   return out;
 }
 
-interface Claims { sub: string; aud: string | null; tenant: string | null; roles: string[]; permissions: string[]; iat: number; exp: number }
+interface Claims { sub: string; aud: string | null; tenant: string | null; roles: string[]; permissions: string[]; iat: number; exp: number; acr: Acr; authTime: number }
 
 // Decoded for display and scheduling only; the access token is never verified here.
 function decodeClaims(token: string): Claims | null {
@@ -225,7 +265,155 @@ function decodeClaims(token: string): Claims | null {
     permissions: strings(payload.permissions),
     iat,
     exp,
+    // W7.1 issuers omit `acr`: absent means aal1 (auth-advanced/v1 7.4).
+    acr: payload.acr === 'aal2' || payload.acr === 'phr' ? payload.acr : 'aal1',
+    authTime: typeof payload.auth_time === 'number' ? payload.auth_time : iat,
   };
+}
+
+// Error bodies that carry a sealed ticket. The ticket is read once into the client's
+// closure; the error the caller sees never holds it.
+const challengeBodies = new WeakMap<object, Record<string, unknown>>();
+
+// RFC 9470: `WWW-Authenticate: Bearer error="insufficient_user_authentication", acr_values="aal2", max_age=600`.
+export function parseStepUpChallenge(response: Response): { acr?: Acr; maxAge?: number } | null {
+  let header: string | null = null;
+  try {
+    header = response.headers.get('WWW-Authenticate');
+  } catch {
+    return null;
+  }
+  if (header === null || !/^\s*Bearer\b/i.test(header)) return null;
+  const params = new Map<string, string>();
+  const re = /([A-Za-z_]+)\s*=\s*(?:"([^"]*)"|([^\s,]+))/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(header)) !== null) params.set(m[1].toLowerCase(), m[2] ?? m[3]);
+  if (params.get('error') !== 'insufficient_user_authentication') return null;
+  const out: { acr?: Acr; maxAge?: number } = {};
+  const acr = (params.get('acr_values') ?? '').split(' ').find((v) => v in ACR_RANK);
+  if (acr !== undefined) out.acr = acr as Acr;
+  const maxAge = params.get('max_age');
+  if (maxAge !== undefined && /^\d{1,9}$/.test(maxAge)) out.maxAge = Number(maxAge);
+  return out;
+}
+
+// The Acore runtime's refusal body: {"error":{"code":"authorization_changed"|"step_up_required","message":...}}.
+// Cross-origin responses do not expose WWW-Authenticate, so the body is the portable signal.
+export function runtimeAuthRefusal(body: unknown): { code: 'authorization_changed' } | { code: 'step_up_required'; acr?: Acr; maxAge?: number } | null {
+  let value = body;
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (!isRecord(value) || !isRecord(value.error)) return null;
+  const { code, message } = value.error;
+  if (code === 'authorization_changed') return { code };
+  if (code !== 'step_up_required') return null;
+  const out: { code: 'step_up_required'; acr?: Acr; maxAge?: number } = { code };
+  const m = typeof message === 'string' ? /acr_values=(aal1|aal2|phr)(?:, max_age=(\d{1,9}))?$/.exec(message) : null;
+  if (m) {
+    out.acr = m[1] as Acr;
+    if (m[2] !== undefined) out.maxAge = Number(m[2]);
+  }
+  return out;
+}
+
+// WebAuthn JSON (go-webauthn): binary members are base64url strings.
+function bufferOf(text: unknown): ArrayBuffer {
+  if (typeof text !== 'string') throw new AxiomAuthError('webauthn', 0);
+  const bytes = decodeBase64url(text);
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+function descriptors(list: unknown): unknown {
+  if (!Array.isArray(list)) return undefined;
+  return list.filter(isRecord).map((d) => ({ ...d, id: bufferOf(d.id) }));
+}
+
+function creationOptions(json: unknown): unknown {
+  if (!isRecord(json) || !isRecord(json.user) || !isRecord(json.rp)) throw new AxiomAuthError('webauthn', 0);
+  const out: Record<string, unknown> = { ...json, challenge: bufferOf(json.challenge), user: { ...json.user, id: bufferOf(json.user.id) } };
+  if (json.excludeCredentials !== undefined) out.excludeCredentials = descriptors(json.excludeCredentials);
+  return out;
+}
+
+function requestOptions(json: unknown): unknown {
+  if (!isRecord(json)) throw new AxiomAuthError('webauthn', 0);
+  const out: Record<string, unknown> = { ...json, challenge: bufferOf(json.challenge) };
+  if (json.allowCredentials !== undefined) out.allowCredentials = descriptors(json.allowCredentials);
+  return out;
+}
+
+function bytesOf(value: unknown): string | undefined {
+  if (value instanceof ArrayBuffer) return base64url(new Uint8Array(value));
+  if (ArrayBuffer.isView(value)) return base64url(new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
+  return undefined;
+}
+
+// PublicKeyCredential to its JSON form; works where `toJSON` is missing.
+function credentialJSON(credential: unknown): Record<string, unknown> {
+  if (!isRecord(credential) || typeof credential.id !== 'string' || !isRecord(credential.response)) throw new AxiomAuthError('webauthn', 0);
+  const r = credential.response;
+  const response: Record<string, unknown> = { clientDataJSON: bytesOf(r.clientDataJSON) };
+  if (r.attestationObject !== undefined) {
+    response.attestationObject = bytesOf(r.attestationObject);
+    if (typeof r.getTransports === 'function') {
+      try {
+        response.transports = (r.getTransports as () => string[]).call(r);
+      } catch {
+        // Optional metadata.
+      }
+    }
+  } else {
+    response.authenticatorData = bytesOf(r.authenticatorData);
+    response.signature = bytesOf(r.signature);
+    const handle = bytesOf(r.userHandle);
+    if (handle !== undefined) response.userHandle = handle;
+  }
+  if (typeof response.clientDataJSON !== 'string') throw new AxiomAuthError('webauthn', 0);
+  let extensions: unknown = {};
+  if (typeof credential.getClientExtensionResults === 'function') {
+    try {
+      extensions = (credential.getClientExtensionResults as () => unknown).call(credential);
+    } catch {
+      extensions = {};
+    }
+  }
+  const out: Record<string, unknown> = {
+    id: credential.id,
+    rawId: bytesOf(credential.rawId) ?? credential.id,
+    type: 'public-key',
+    response,
+    clientExtensionResults: isRecord(extensions) ? extensions : {},
+  };
+  if (typeof credential.authenticatorAttachment === 'string') out.authenticatorAttachment = credential.authenticatorAttachment;
+  return out;
+}
+
+function factorOf(value: unknown): Factor | null {
+  if (!isRecord(value) || typeof value.id !== 'string' || typeof value.type !== 'string' || !FACTOR_TYPES.has(value.type)
+    || typeof value.label !== 'string' || (value.status !== 'pending' && value.status !== 'active')) return null;
+  const f: Factor = {
+    id: value.id,
+    type: value.type as Factor['type'],
+    label: value.label,
+    status: value.status,
+    createdAt: typeof value.created_at === 'string' ? value.created_at : '',
+  };
+  if (typeof value.last_used_on === 'string') f.lastUsedOn = value.last_used_on;
+  return f;
+}
+
+function frozen<T>(items: T[]): T[] {
+  return Object.freeze(items) as T[];
+}
+
+function stringList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value) || !value.every((x) => typeof x === 'string')) return undefined;
+  return value.slice();
 }
 
 // auth-surfaces/v1 "returnTo" (security S-9).
@@ -296,7 +484,7 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
 
   let held: Held | null = null;
   let generation = 0;
-  let current: PublicSession = Object.freeze({ id: '', status: 'unknown' as AuthStatus, principal: null });
+  let current: PublicSession = Object.freeze({ id: '', status: 'unknown' as AuthStatus, principal: null, acr: 'aal1' as Acr, authTime: 0 });
   const listeners = new Set<(s: PublicSession) => void>();
   let inflight: Promise<PublicSession> | null = null;
   let timer: unknown = undefined;
@@ -304,6 +492,9 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
   let retryCode: AuthErrorCode = 'unavailable';
   let resetToken: string | null = null;
   let invitationToken: string | null = null;
+  // auth-advanced/v1 17.1: the MFA or enroll ticket of an unfinished sign-in, bound to the
+  // PKCE verifier of the flow that produced it. Module-private memory only.
+  let pending: { kind: 'mfa' | 'enroll'; ticket: string; verifier: string | null; expiresAt: number; challenge: MfaChallenge } | null = null;
 
   const cryptoApi = () => {
     const c = g.crypto ?? (globalThis as unknown as AuthGlobals).crypto;
@@ -318,7 +509,8 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
   // Session projection
 
   function emit(next: PublicSession): void {
-    if (next.id === current.id && next.status === current.status && next.principal === current.principal) return;
+    if (next.id === current.id && next.status === current.status && next.principal === current.principal
+      && next.acr === current.acr && next.authTime === current.authTime) return;
     current = Object.freeze(next);
     for (const listener of Array.from(listeners)) {
       try {
@@ -344,14 +536,14 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
   }
 
   function publishHeld(): void {
-    if (held && held.claims) emit({ id: held.sessionId, status: 'authenticated', principal: principalOf(held.claims) });
+    if (held && held.claims) emit({ id: held.sessionId, status: 'authenticated', principal: principalOf(held.claims), acr: held.claims.acr, authTime: held.claims.authTime });
   }
 
   function publishStatus(status: AuthStatus): void {
     if (status === 'anonymous' || status === 'expired' || status === 'unknown') {
-      emit({ id: '', status, principal: null });
+      emit({ id: '', status, principal: null, acr: 'aal1', authTime: 0 });
     } else {
-      emit({ id: current.id, status, principal: current.principal });
+      emit({ id: current.id, status, principal: current.principal, acr: current.acr, authTime: current.authTime });
     }
   }
 
@@ -384,7 +576,7 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
 
   // Transport
 
-  async function call(method: 'GET' | 'POST', path: string, body?: Record<string, unknown>, bearer?: string): Promise<{ status: number; data: unknown }> {
+  async function call(method: 'GET' | 'POST' | 'DELETE', path: string, body?: Record<string, unknown>, bearer?: string): Promise<{ status: number; data: unknown }> {
     const headers: Record<string, string> = { Accept: 'application/json' };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (bearer !== undefined) headers.Authorization = 'Bearer ' + bearer;
@@ -423,7 +615,64 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
       return { status: response.status, data };
     }
     const code = parsed && isRecord(data) && isRecord(data.error) ? mapErrorCode(data.error.code) : 'unavailable';
-    throw new AxiomAuthError(code, response.status, parseRetryAfter(response.headers.get('Retry-After'), clock()));
+    const failure = new AxiomAuthError(code, response.status, parseRetryAfter(response.headers.get('Retry-After'), clock()));
+    if ((code === 'mfa_required' || code === 'mfa_enrollment_required') && isRecord(data) && isRecord(data.error)) {
+      challengeBodies.set(failure, data.error);
+    }
+    throw failure;
+  }
+
+  // auth-advanced/v1 8.2: a first-factor flow answered AXAUTH_MFA_REQUIRED or
+  // AXAUTH_MFA_ENROLLMENT_REQUIRED. Keeps the ticket private and rethrows a plain error.
+  function capture(err: unknown, verifier: string | null): never {
+    const body = err instanceof AxiomAuthError ? challengeBodies.get(err) : undefined;
+    if (err instanceof AxiomAuthError && body !== undefined) {
+      challengeBodies.delete(err);
+      const now = clock();
+      if (err.code === 'mfa_required' && isRecord(body.mfa) && typeof body.mfa.ticket === 'string' && body.mfa.ticket.length <= TICKET_MAX) {
+        const factors: MfaChallenge['factors'] = [];
+        if (Array.isArray(body.mfa.factors)) {
+          for (const f of body.mfa.factors) {
+            if (isRecord(f) && typeof f.id === 'string' && typeof f.type === 'string' && FACTOR_TYPES.has(f.type) && typeof f.label === 'string' && f.usable !== false) {
+              factors.push(Object.freeze({ id: f.id, type: f.type as Factor['type'], label: f.label }));
+            }
+          }
+        }
+        const ttl = typeof body.mfa.expires_in === 'number' && body.mfa.expires_in > 0 ? Math.min(body.mfa.expires_in, 300) : 300;
+        pending = { kind: 'mfa', ticket: body.mfa.ticket, verifier, expiresAt: now + ttl * 1000,
+          challenge: Object.freeze({ factors: frozen(factors), recoveryCodes: body.mfa.recovery_codes === true }) };
+      } else if (err.code === 'mfa_enrollment_required' && isRecord(body.mfa_enrollment) && typeof body.mfa_enrollment.ticket === 'string' && body.mfa_enrollment.ticket.length <= TICKET_MAX) {
+        const types = (stringList(body.mfa_enrollment.types) ?? []).filter((t) => FACTOR_TYPES.has(t));
+        pending = { kind: 'enroll', ticket: body.mfa_enrollment.ticket, verifier, expiresAt: now + 300 * 1000,
+          challenge: Object.freeze({ factors: frozen<MfaChallenge['factors'][number]>([]), recoveryCodes: false, enrollment: Object.freeze({ types: frozen(types) }) }) };
+      }
+      throw new AxiomAuthError(err.code, err.status);
+    }
+    throw err;
+  }
+
+  // A first-factor call: clears any earlier unfinished MFA and captures a new one.
+  async function firstFactor(path: string, body: Record<string, unknown>, verifier: string | null = null): Promise<unknown> {
+    pending = null;
+    try {
+      return (await call('POST', path, body)).data;
+    } catch (err) {
+      return capture(err, verifier);
+    }
+  }
+
+  function livePending(kind: 'mfa' | 'enroll' | null): { kind: 'mfa' | 'enroll'; ticket: string; verifier: string | null; expiresAt: number; challenge: MfaChallenge } | null {
+    if (pending && clock() >= pending.expiresAt) pending = null;
+    if (!pending || (kind !== null && pending.kind !== kind)) return null;
+    return pending;
+  }
+
+  // The ticket carries the audience; the routes decode strictly, so nothing else is sent.
+  // Only the completion routes take the PKCE verifier (8.2); the enrollment routes do not.
+  function ticketBody(p: { ticket: string; verifier: string | null }, body: Record<string, unknown>, verifier: boolean): Record<string, unknown> {
+    body.ticket = p.ticket;
+    if (verifier && p.verifier !== null) body.code_verifier = p.verifier;
+    return body;
   }
 
   // Turnstile: `captcha_token` where the issuer requires it for this flow.
@@ -485,6 +734,7 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
   // A new session from a sign-in, verification or redirect completion.
   async function establish(data: unknown): Promise<PublicSession> {
     const next = heldFrom(data, null);
+    pending = null;
     generation++;
     held = next;
     retryNotBefore = 0;
@@ -562,14 +812,49 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
       if (tenant === undefined) return inflight;
       return inflight.catch(() => undefined).then(() => refresh(opts));
     }
-    const p: Promise<PublicSession> = rotate(tenant).finally(() => {
+    const p: Promise<PublicSession> = rotate((presented) => {
+      const body: Record<string, unknown> = { refresh_token: presented.refreshToken };
+      if (tenant !== undefined) body.tenant = tenant;
+      return call('POST', '/v1/token/refresh', withAudience(body)).then((r) => r.data);
+    }, false).finally(() => {
       if (inflight === p) inflight = null;
     });
     inflight = p;
     return p;
   }
 
-  async function rotate(tenant?: string): Promise<PublicSession> {
+  // auth-advanced/v1 8.6: reauthentication rotates the refresh token, so it runs as the
+  // one in-flight rotation (and under the cross-tab lock), never beside a refresh.
+  async function reauthenticate(request: (presented: Held, bearer: string) => Promise<unknown>): Promise<PublicSession> {
+    while (inflight) {
+      try {
+        await inflight;
+      } catch {
+        // The step-up runs on whatever the rotation left.
+      }
+    }
+    const bearer = await freshAccessToken();
+    if (bearer === null) throw new AxiomAuthError('invalid_token', 0);
+    while (inflight) {
+      try {
+        await inflight;
+      } catch {
+        // As above.
+      }
+    }
+    const p: Promise<PublicSession> = rotate((presented) => request(presented, bearer), true).finally(() => {
+      if (inflight === p) inflight = null;
+    });
+    // Refresh callers that coalesce onto a step-up get the session, not its failure.
+    const shared: Promise<PublicSession> = p.catch(() => current);
+    inflight = shared;
+    p.finally(() => {
+      if (inflight === shared) inflight = null;
+    }).catch(() => undefined);
+    return p;
+  }
+
+  async function rotate(request: (presented: Held) => Promise<unknown>, reauth: boolean): Promise<PublicSession> {
     if (!held) throw new AxiomAuthError('invalid_refresh', 0);
     const now = clock();
     if (now >= held.refreshExpiresAt) {
@@ -577,7 +862,7 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
       await removeRecord();
       throw new AxiomAuthError('invalid_refresh', 0);
     }
-    if (retryNotBefore > now) {
+    if (!reauth && retryNotBefore > now) {
       throw new AxiomAuthError(retryCode, 0, Math.ceil((retryNotBefore - now) / 1000));
     }
     const gen = generation;
@@ -613,11 +898,10 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
         }
       }
       const presented = held;
-      const body: Record<string, unknown> = { refresh_token: presented.refreshToken };
-      if (tenant !== undefined) body.tenant = tenant;
-      const { data } = await call('POST', '/v1/token/refresh', withAudience(body));
+      const data = await request(presented);
       if (generation !== gen || held !== presented) return;
-      const next = heldFrom(data, presented);
+      const next = heldFrom(data, reauth ? null : presented);
+      if (next.sessionId !== presented.sessionId) throw new AxiomAuthError('unavailable', 0);
       held = next;
       retryNotBefore = 0;
       pushToken(next.accessToken);
@@ -641,6 +925,13 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
         throw e;
       }
       if (!held) throw e;
+      if (reauth) {
+        // A refused step-up (wrong code, below the session's level) changes nothing.
+        scheduleProactive();
+        if (held.claims) publishHeld();
+        else publishStatus('error');
+        throw e;
+      }
       if (e.code === 'unavailable' || e.code === 'rate_limited') {
         retryCode = e.code;
         retryNotBefore = clock() + (e.retryAfterSeconds !== undefined ? e.retryAfterSeconds * 1000 : DEFAULT_RETRY_MS);
@@ -832,6 +1123,14 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
       if (query.get('iss') !== issuer) return Promise.reject(new AxiomAuthError('invalid_grant', 0));
       const outcome = query.get('error');
       if (outcome !== null) {
+        // auth-advanced/v1 8.2: the ticket is bound to this transaction's PKCE challenge,
+        // so the completion sends its verifier. The factor list is not in the URL.
+        const ticket = outcome === 'mfa_required' ? query.get('mfa_ticket') : outcome === 'mfa_enrollment_required' ? query.get('enroll_ticket') : null;
+        if (ticket !== null && ticket.length > 0 && ticket.length <= TICKET_MAX) {
+          pending = outcome === 'mfa_required'
+            ? { kind: 'mfa', ticket, verifier: tx.verifier, expiresAt: clock() + 300 * 1000, challenge: Object.freeze({ factors: frozen<MfaChallenge['factors'][number]>([]), recoveryCodes: true }) }
+            : { kind: 'enroll', ticket, verifier: tx.verifier, expiresAt: clock() + 300 * 1000, challenge: Object.freeze({ factors: frozen<MfaChallenge['factors'][number]>([]), recoveryCodes: false, enrollment: Object.freeze({ types: frozen<string>([]) }) }) };
+        }
         return Promise.reject(new AxiomAuthError(REDIRECT_OUTCOMES.has(outcome) ? outcome : 'unavailable', 0));
       }
       const code = query.get('code');
@@ -843,8 +1142,9 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
       path = '/v1/email/link/verify';
       body = withAudience({ token: link, code_verifier: tx.verifier });
     }
-    return call('POST', path, body)
-      .then(({ data }) => establish(data))
+    const verifier = tx.verifier;
+    return firstFactor(path, body, verifier)
+      .then((data) => establish(data))
       .then(() => (returnTo === undefined ? { handled: true } : { handled: true, returnTo }));
   }
 
@@ -908,6 +1208,85 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
     return restoreStored();
   }
 
+  // WebAuthn ceremonies run on the application origin (auth-advanced/v1 8.5).
+  function credentials(): CredentialsLike {
+    const c = g.navigator?.credentials ?? (globalThis as unknown as { navigator?: { credentials?: CredentialsLike } }).navigator?.credentials;
+    if (!c) throw new AxiomAuthError('webauthn', 0);
+    return c;
+  }
+
+  async function assertion(options: unknown): Promise<Record<string, unknown>> {
+    let credential: unknown;
+    try {
+      credential = await credentials().get({ publicKey: requestOptions(options) });
+    } catch (err) {
+      if (err instanceof AxiomAuthError) throw err;
+      throw new AxiomAuthError('webauthn', 0);
+    }
+    if (credential === null || credential === undefined) throw new AxiomAuthError('webauthn', 0);
+    return credentialJSON(credential);
+  }
+
+  async function attestation(options: unknown): Promise<Record<string, unknown>> {
+    let credential: unknown;
+    try {
+      credential = await credentials().create({ publicKey: creationOptions(options) });
+    } catch (err) {
+      if (err instanceof AxiomAuthError) throw err;
+      throw new AxiomAuthError('webauthn', 0);
+    }
+    if (credential === null || credential === undefined) throw new AxiomAuthError('webauthn', 0);
+    return credentialJSON(credential);
+  }
+
+  function ceremony(data: unknown): { challenge: string; options: unknown } {
+    if (!isRecord(data) || typeof data.challenge !== 'string' || !isRecord(data.options)) throw new AxiomAuthError('unavailable', 0);
+    return { challenge: data.challenge, options: data.options };
+  }
+
+  async function bearer(): Promise<string> {
+    const token = await freshAccessToken();
+    if (token === null) throw new AxiomAuthError('invalid_token', 0);
+    return token;
+  }
+
+  // Bearer for a signed-in user, else the enroll ticket of an enrollment-required sign-in.
+  async function enrollActor(): Promise<{ token?: string; ticket?: { ticket: string; verifier: string | null } }> {
+    const p = livePending('enroll');
+    if (!held && p) return { ticket: p };
+    return { token: await bearer() };
+  }
+
+  // A factor confirmation: recovery codes go to the caller once and are not kept;
+  // `tokens` completes an enrollment-required sign-in.
+  async function confirmation(data: unknown): Promise<{ factor: Factor | null; recoveryCodes?: string[] }> {
+    if (!isRecord(data)) throw new AxiomAuthError('unavailable', 0);
+    const out: { factor: Factor | null; recoveryCodes?: string[] } = { factor: factorOf(data.factor) };
+    const codes = stringList(data.recovery_codes);
+    if (codes !== undefined) out.recoveryCodes = codes;
+    if (isRecord(data.tokens)) await establish(data.tokens);
+    return out;
+  }
+
+  function replayable(body: unknown): boolean {
+    return body === undefined || body === null || typeof body === 'string' || body instanceof URLSearchParams
+      || (typeof Blob !== 'undefined' && body instanceof Blob) || body instanceof ArrayBuffer || ArrayBuffer.isView(body)
+      || (typeof FormData !== 'undefined' && body instanceof FormData);
+  }
+
+  async function authorizationChanged(response: Response): Promise<boolean> {
+    try {
+      if (/error_description="authorization_changed"/.test(response.headers.get('WWW-Authenticate') ?? '')) return true;
+    } catch {
+      // Fall through to the body.
+    }
+    try {
+      return runtimeAuthRefusal(await response.clone().text())?.code === 'authorization_changed';
+    } catch {
+      return false;
+    }
+  }
+
   purgeTransactions();
 
   const api: AxiomAuth = {
@@ -949,7 +1328,7 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
     restore,
 
     async signUp(email: string, password: string, opts?: { captchaToken?: string }) {
-      const { data } = await call('POST', '/v1/signup', withAudience(captcha({ email, password }, opts)));
+      const data = await firstFactor('/v1/signup', withAudience(captcha({ email, password }, opts)));
       if (isRecord(data) && typeof data.access_token === 'string') {
         await establish(data);
         return { status: 'signed_in' as const };
@@ -961,14 +1340,14 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
     },
 
     async verifySignUp(challenge: string, code: string) {
-      const { data } = await call('POST', '/v1/signup/verify', withAudience({ challenge_id: challenge, code }));
+      const data = await firstFactor('/v1/signup/verify', withAudience({ challenge_id: challenge, code }));
       return establish(data);
     },
 
     async signInWithPassword(email: string, password: string, opts?: { tenant?: string; captchaToken?: string }) {
       const body: Record<string, unknown> = captcha({ email, password }, opts);
       if (opts?.tenant !== undefined) body.tenant = opts.tenant;
-      const { data } = await call('POST', '/v1/sign-in/password', withAudience(body));
+      const data = await firstFactor('/v1/sign-in/password', withAudience(body));
       return establish(data);
     },
 
@@ -979,7 +1358,7 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
     },
 
     async verifyEmailCode(challenge: string, code: string) {
-      const { data } = await call('POST', '/v1/email/code/verify', withAudience({ challenge_id: challenge, code }));
+      const data = await firstFactor('/v1/email/code/verify', withAudience({ challenge_id: challenge, code }));
       return establish(data);
     },
 
@@ -1042,6 +1421,7 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
           // Nothing readable to revoke.
         }
       }
+      pending = null;
       dropCredentials('anonymous');
       await removeRecord();
       if (refreshToken !== null) {
@@ -1104,7 +1484,7 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
       if (opts?.tenant !== undefined) body.tenant = opts.tenant;
       let data: unknown;
       try {
-        ({ data } = await call('POST', '/v1/invitations/accept', withAudience(body)));
+        data = await firstFactor('/v1/invitations/accept', withAudience(body));
       } catch (err) {
         if (!(err instanceof AxiomAuthError) || err.code !== 'weak_password') invitationToken = null;
         throw err;
@@ -1120,6 +1500,202 @@ export function createAxiomAuth(options: AxiomAuthOptions): AxiomAuth {
     async authorizationHeader(): Promise<string | null> {
       const token = await freshAccessToken();
       return token === null ? null : 'Bearer ' + token;
+    },
+
+    // branches-v1 "Clients" (B10): on `401 authorization_changed` refresh once and retry once.
+    async authorizedFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
+      const base = typeof Request !== 'undefined' && input instanceof Request ? input : null;
+      const retryable = base === null ? replayable(init?.body) : base.body === null || base.bodyUsed === false;
+      const spare = base !== null && retryable ? base.clone() : null;
+      const send = (token: string | null, req: string | URL | Request): Promise<Response> => {
+        const headers = new Headers(init?.headers ?? (req instanceof Request ? req.headers : undefined));
+        if (token !== null) headers.set('Authorization', 'Bearer ' + token);
+        else headers.delete('Authorization');
+        return fetchFn(req, { ...init, headers });
+      };
+      const first = await freshAccessToken();
+      const response = await send(first, input);
+      if (response.status !== 401 || first === null || !retryable || !(await authorizationChanged(response))) return response;
+      try {
+        await refresh();
+      } catch {
+        return response;
+      }
+      const second = held && held.accessToken && held.claims && clock() < held.claims.exp * 1000 ? held.accessToken : null;
+      if (second === null || second === first) return response;
+      return send(second, spare ?? input);
+    },
+
+    mfaChallenge(): MfaChallenge | null {
+      return livePending(null)?.challenge ?? null;
+    },
+
+    async verifyMfa(factorId: string, code: string): Promise<PublicSession> {
+      const p = livePending('mfa');
+      if (!p) throw new AxiomAuthError('mfa_required', 0);
+      const { data } = await call('POST', '/v1/mfa/verify', ticketBody(p, { factor_id: factorId, code }, true));
+      return establish(data);
+    },
+
+    async verifyRecoveryCode(code: string): Promise<PublicSession> {
+      const p = livePending('mfa');
+      if (!p) throw new AxiomAuthError('mfa_required', 0);
+      const { data } = await call('POST', '/v1/mfa/verify', ticketBody(p, { recovery_code: code }, true));
+      return establish(data);
+    },
+
+    async sendSmsCode(factorId: string): Promise<{ resendAfterSeconds: number }> {
+      const p = livePending('mfa');
+      if (!p) throw new AxiomAuthError('mfa_required', 0);
+      const { data } = await call('POST', '/v1/mfa/sms/send', ticketBody(p, { factor_id: factorId }, false));
+      return { resendAfterSeconds: isRecord(data) && typeof data.resend_after === 'number' ? data.resend_after : 60 };
+    },
+
+    async verifyMfaWithPasskey(): Promise<PublicSession> {
+      const p = livePending('mfa');
+      if (!p) throw new AxiomAuthError('mfa_required', 0);
+      const { challenge, options: publicKey } = ceremony((await call('POST', '/v1/mfa/webauthn/options', ticketBody(p, {}, false))).data);
+      const credential = await assertion(publicKey);
+      const { data } = await call('POST', '/v1/mfa/webauthn/verify', ticketBody(p, { challenge, credential }, true));
+      return establish(data);
+    },
+
+    async signInWithPasskey(opts?: { tenant?: string }): Promise<PublicSession> {
+      pending = null;
+      const { challenge, options: publicKey } = ceremony((await call('POST', '/v1/passkeys/options', {})).data);
+      const credential = await assertion(publicKey);
+      const body: Record<string, unknown> = { challenge, credential };
+      if (opts?.tenant !== undefined) body.tenant = opts.tenant;
+      const { data } = await call('POST', '/v1/sign-in/passkey', withAudience(body));
+      return establish(data);
+    },
+
+    stepUp(opts: { acr?: Acr; method: StepUpMethod; password?: string; code?: string; factorId?: string }): Promise<PublicSession> {
+      if (!opts || !STEP_UP_METHODS.has(opts.method) || (opts.acr !== undefined && !(opts.acr in ACR_RANK))) {
+        return Promise.reject(new AxiomAuthError('invalid_request', 0));
+      }
+      if (!held) return Promise.reject(new AxiomAuthError('invalid_token', 0));
+      return reauthenticate(async (presented, token) => {
+        const body: Record<string, unknown> = { refresh_token: presented.refreshToken, method: opts.method };
+        if (opts.acr !== undefined) body.acr = opts.acr;
+        if (opts.method === 'password') {
+          if (typeof opts.password !== 'string') throw new AxiomAuthError('invalid_request', 0);
+          body.password = opts.password;
+        } else if (opts.method === 'recovery') {
+          if (typeof opts.code !== 'string') throw new AxiomAuthError('invalid_request', 0);
+          body.recovery_code = opts.code;
+        } else if (opts.method === 'passkey') {
+          const { challenge, options: publicKey } = ceremony((await call('POST', '/v1/reauthenticate/webauthn/options', {}, token)).data);
+          body.challenge = challenge;
+          body.credential = await assertion(publicKey);
+        } else {
+          if (typeof opts.code !== 'string') throw new AxiomAuthError('invalid_request', 0);
+          let factorId = opts.factorId;
+          if (factorId === undefined) {
+            // The one active factor of that type; more than one needs `factorId`.
+            const { data } = await call('GET', '/v1/factors', undefined, token);
+            const list = isRecord(data) && Array.isArray(data.factors) ? data.factors : [];
+            const matches = list.filter((f) => isRecord(f) && f.type === opts.method && f.status === 'active' && f.usable !== false && typeof f.id === 'string');
+            if (matches.length !== 1) throw new AxiomAuthError('invalid_request', 0);
+            factorId = (matches[0] as Record<string, unknown>).id as string;
+          }
+          body.factor_id = factorId;
+          body.code = opts.code;
+        }
+        if (options.audience !== undefined) body.audience = options.audience;
+        return (await call('POST', '/v1/reauthenticate', body, token)).data;
+      });
+    },
+
+    async listFactors() {
+      const { data } = await call('GET', '/v1/factors', undefined, await bearer());
+      if (!isRecord(data) || !Array.isArray(data.factors)) throw new AxiomAuthError('unavailable', 0);
+      const factors = data.factors.map(factorOf).filter((f): f is Factor => f !== null);
+      const out: { factors: Factor[]; recoveryCodesRemaining: number; phone?: { masked: string } } = {
+        factors,
+        recoveryCodesRemaining: typeof data.recovery_codes_remaining === 'number' ? data.recovery_codes_remaining : 0,
+      };
+      if (isRecord(data.phone) && typeof data.phone.masked === 'string') out.phone = { masked: data.phone.masked };
+      return out;
+    },
+
+    async enrollTotp(label: string): Promise<TotpEnrollment> {
+      const actor = await enrollActor();
+      const body: Record<string, unknown> = actor.ticket ? ticketBody(actor.ticket, { label }, false) : { label };
+      const { data } = await call('POST', '/v1/factors/totp', body, actor.token);
+      if (!isRecord(data) || typeof data.factor_id !== 'string' || typeof data.secret !== 'string' || typeof data.otpauth_uri !== 'string') {
+        throw new AxiomAuthError('unavailable', 0);
+      }
+      // Returned to the trusted UI once; never cached here.
+      return { factorId: data.factor_id, secret: data.secret, otpauthUri: data.otpauth_uri };
+    },
+
+    async confirmTotp(factorId: string, code: string): Promise<{ recoveryCodes?: string[] }> {
+      if (typeof factorId !== 'string' || !/^[0-9a-f-]{36}$/.test(factorId)) throw new AxiomAuthError('invalid_request', 0);
+      const actor = await enrollActor();
+      const body: Record<string, unknown> = actor.ticket ? ticketBody(actor.ticket, { code }, false) : { code };
+      const { data } = await call('POST', '/v1/factors/totp/' + encodeURIComponent(factorId) + '/confirm', body, actor.token);
+      const out = await confirmation(data);
+      return out.recoveryCodes !== undefined ? { recoveryCodes: out.recoveryCodes } : {};
+    },
+
+    async registerPasskey(label: string): Promise<Factor & { recoveryCodes?: string[] }> {
+      const actor = await enrollActor();
+      const optionsBody: Record<string, unknown> = actor.ticket ? ticketBody(actor.ticket, { label }, false) : { label };
+      const { challenge, options: publicKey } = ceremony((await call('POST', '/v1/factors/passkeys/options', optionsBody, actor.token)).data);
+      const credential = await attestation(publicKey);
+      const body: Record<string, unknown> = { challenge, label, credential };
+      if (actor.ticket) ticketBody(actor.ticket, body, false);
+      const { data } = await call('POST', '/v1/factors/passkeys', body, actor.token);
+      const out = await confirmation(data);
+      if (out.factor === null) throw new AxiomAuthError('unavailable', 0);
+      return out.recoveryCodes !== undefined ? { ...out.factor, recoveryCodes: out.recoveryCodes } : out.factor;
+    },
+
+    async removeFactor(factorId: string): Promise<void> {
+      if (typeof factorId !== 'string' || !/^[0-9a-f-]{36}$/.test(factorId)) throw new AxiomAuthError('invalid_request', 0);
+      await call('DELETE', '/v1/factors/' + encodeURIComponent(factorId), undefined, await bearer());
+    },
+
+    async regenerateRecoveryCodes(): Promise<string[]> {
+      const { data } = await call('POST', '/v1/recovery-codes', {}, await bearer());
+      const codes = isRecord(data) ? stringList(data.recovery_codes) : undefined;
+      if (codes === undefined) throw new AxiomAuthError('unavailable', 0);
+      return codes;
+    },
+
+    async addPhone(phone: string, opts?: { captchaToken?: string }): Promise<{ challengeId: string }> {
+      const { data } = await call('POST', '/v1/phone', captcha({ phone }, opts), await bearer());
+      if (!isRecord(data) || typeof data.challenge_id !== 'string') throw new AxiomAuthError('unavailable', 0);
+      return { challengeId: data.challenge_id };
+    },
+
+    async verifyPhone(challengeId: string, code: string): Promise<void> {
+      await call('POST', '/v1/phone/verify', { challenge_id: challengeId, code }, await bearer());
+    },
+
+    async enableSmsFactor(): Promise<Factor> {
+      const { data } = await call('POST', '/v1/factors/sms', {}, await bearer());
+      const factor = isRecord(data) ? factorOf(data.factor) : null;
+      if (factor === null) throw new AxiomAuthError('unavailable', 0);
+      return factor;
+    },
+
+    async listConsents() {
+      const { data } = await call('GET', '/v1/consents', undefined, await bearer());
+      if (!isRecord(data) || !Array.isArray(data.consents)) throw new AxiomAuthError('unavailable', 0);
+      const out: { clientId: string; name: string; scopes: string[] }[] = [];
+      for (const c of data.consents) {
+        if (isRecord(c) && typeof c.client_id === 'string' && typeof c.name === 'string') {
+          out.push({ clientId: c.client_id, name: c.name, scopes: stringList(c.scopes) ?? [] });
+        }
+      }
+      return out;
+    },
+
+    async revokeConsent(clientId: string): Promise<void> {
+      if (typeof clientId !== 'string' || !/^axcl_[A-Za-z0-9_-]{22}$/.test(clientId)) throw new AxiomAuthError('invalid_request', 0);
+      await call('DELETE', '/v1/consents/' + clientId, undefined, await bearer());
     },
 
     toJSON() {
