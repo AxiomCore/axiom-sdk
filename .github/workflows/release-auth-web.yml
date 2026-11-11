@@ -1,0 +1,143 @@
+name: Publish @axiomcore/auth-web
+run-name: auth-web-${{ inputs.version }}-${{ inputs.request_id || 'manual' }}
+
+# Deliberately manual: no push or tag implicitly publishes the package.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact version committed in web/auth/package.json
+        required: true
+        type: string
+      request_id:
+        description: Unique release-plane handoff ID (leave blank for manual releases)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify version, test and pack
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          python3 -B scripts/check_auth_web_release.py verify-input "$VERSION"
+          if npm view "@axiomcore/auth-web@$VERSION" version >/dev/null 2>&1; then
+            echo "@axiomcore/auth-web@$VERSION is already published; versions are immutable" >&2
+            exit 1
+          fi
+          cd web/auth
+          npm run check
+          npm test
+          archives="$RUNNER_TEMP/auth-web-release/archives"
+          mkdir -p "$archives"
+          npm pack --pack-destination "$archives" --ignore-scripts
+      - name: Inspect the final package bytes
+        run: |
+          scanner_archive="$RUNNER_TEMP/gitleaks.tar.gz"
+          curl --fail --silent --show-error --location https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz --output "$scanner_archive"
+          printf '%s  %s\n' '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb' "$scanner_archive" | sha256sum --check --status
+          tar -xzf "$scanner_archive" -C "$RUNNER_TEMP" gitleaks
+          archives="$RUNNER_TEMP/auth-web-release/archives"
+          receipts="$RUNNER_TEMP/auth-web-release/inspections"
+          mkdir -p "$receipts"
+          for archive in "$archives"/*.tgz; do
+            python3 -B scripts/check_auth_web_release.py inspect --artifact "$archive" --scanner "$RUNNER_TEMP/gitleaks" --receipt "$receipts/$(basename "$archive").json"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: auth-web-inspection
+          path: ${{ runner.temp }}/auth-web-release/inspections/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: auth-web-package
+          path: ${{ runner.temp }}/auth-web-release/archives/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    environment: package-release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: auth-web-package
+          path: ${{ runner.temp }}/auth-web-release/archives
+      - uses: actions/download-artifact@v4
+        with:
+          name: auth-web-inspection
+          path: ${{ runner.temp }}/auth-web-release/inspections
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+      - name: Publish reviewed archive
+        env:
+          VERSION: ${{ inputs.version }}
+          # Empty once npm trusted publishing is configured for this workflow. Only the very first
+          # publish (the package does not exist yet, so npm cannot hold a trusted publisher) needs a
+          # short-lived granular token in the package-release environment; delete it afterwards.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
+        run: |
+          python3 -B scripts/check_auth_web_release.py verify-input "$VERSION"
+          archives="$RUNNER_TEMP/auth-web-release/archives"
+          receipts="$RUNNER_TEMP/auth-web-release/inspections"
+          archive="$archives/axiomcore-auth-web-$VERSION.tgz"
+          python3 -B scripts/check_auth_web_release.py verify-receipt --artifact "$archive" --receipt "$receipts/$(basename "$archive").json"
+          npm install -g npm@11.5.1
+          npm publish "$archive" --provenance --access public --ignore-scripts
+
+  mirror:
+    needs: [build, publish]
+    runs-on: ubuntu-24.04
+    environment: package-release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: auth-web-package
+          path: ${{ runner.temp }}/auth-web-release/archives
+      - uses: actions/download-artifact@v4
+        with:
+          name: auth-web-inspection
+          path: ${{ runner.temp }}/auth-web-release/inspections
+      - name: Mirror public archive into AxiomCore Releases
+        env:
+          GH_TOKEN: ${{ secrets.AXIOMCORE_RELEASE_ASSET_TOKEN }}
+          VERSION: ${{ inputs.version }}
+          SDK_COMMIT: ${{ github.sha }}
+        run: |
+          test -n "$GH_TOKEN"
+          archives="$RUNNER_TEMP/auth-web-release/archives"
+          receipts="$RUNNER_TEMP/auth-web-release/inspections"
+          archive="$archives/axiomcore-auth-web-$VERSION.tgz"
+          python3 -B scripts/check_auth_web_release.py verify-receipt --artifact "$archive" --receipt "$receipts/$(basename "$archive").json"
+          tag="auth-web-v$VERSION"
+          if ! gh release view "$tag" --repo AxiomCore/AxiomCore >/dev/null 2>&1; then
+            gh release create "$tag" --repo AxiomCore/AxiomCore --target main \
+              --title "@axiomcore/auth-web $VERSION" \
+              --notes "Package source: https://github.com/AxiomCore/axiom-sdk/tree/$SDK_COMMIT/web/auth"
+          fi
+          gh release upload "$tag" "$archive" --repo AxiomCore/AxiomCore
