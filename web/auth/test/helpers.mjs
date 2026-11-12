@@ -9,6 +9,20 @@ export const REDIRECT_URI = ORIGIN + '/auth/callback';
 export const LOGOUT_URI = ORIGIN + '/signed-out';
 export const START = Date.UTC(2026, 9, 26, 12, 0, 0);
 
+// Real randomness, but SHA-256 without WebCrypto's thread-pool hop, so flush() reliably
+// covers PKCE challenge derivation on slow runners. Same bytes as crypto.subtle.digest.
+const testCrypto = {
+  getRandomValues: (array) => globalThis.crypto.getRandomValues(array),
+  randomUUID: () => globalThis.crypto.randomUUID(),
+  subtle: {
+    async digest(algorithm, data) {
+      if (algorithm !== 'SHA-256') throw new Error('unsupported digest ' + algorithm);
+      const out = createHash('sha256').update(data).digest();
+      return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength);
+    },
+  },
+};
+
 export const flush = async () => {
   for (let i = 0; i < 30; i++) await new Promise((resolve) => setImmediate(resolve));
 };
@@ -128,7 +142,7 @@ export function makeBrowser({ href = ORIGIN + '/', localStorage = new FakeStorag
         for (const fn of listeners) fn();
       },
     },
-    crypto: globalThis.crypto,
+    crypto: testCrypto,
   };
   return browser;
 }
