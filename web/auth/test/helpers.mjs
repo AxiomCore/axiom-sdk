@@ -13,6 +13,17 @@ export const flush = async () => {
   for (let i = 0; i < 30; i++) await new Promise((resolve) => setImmediate(resolve));
 };
 
+// Hosted sign-in navigates only after WebCrypto derives the PKCE challenge on the thread pool,
+// which can take longer than a fixed number of turns on a slow runner.
+export async function nextAssignment(browser, count = 1, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  while (browser.location.assigned.length < count) {
+    if (Date.now() > deadline) throw new Error('hosted sign-in did not navigate');
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+  return browser.location.assigned[count - 1];
+}
+
 const b64u = (value) => Buffer.from(typeof value === 'string' ? value : JSON.stringify(value)).toString('base64url');
 
 export function s256(verifier) {

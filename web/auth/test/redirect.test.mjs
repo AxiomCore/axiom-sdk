@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FakeStorage, ISSUER, ORIGIN, REDIRECT_URI, flush, makeBrowser, makeClock, setup, s256 } from './helpers.mjs';
+import { FakeStorage, ISSUER, ORIGIN, REDIRECT_URI, flush, makeBrowser, makeClock, nextAssignment, setup, s256 } from './helpers.mjs';
 
 async function startHosted(ctx, opts) {
+  const before = ctx.browser.location.assigned.length;
   ctx.auth.signInHosted(opts);
-  await flush();
-  return ctx.browser.location.assigned.at(-1);
+  return nextAssignment(ctx.browser, before + 1);
 }
 
 function callbackUrl(params, base = REDIRECT_URI) {

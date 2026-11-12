@@ -1,14 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ISSUER, ORIGIN, REDIRECT_URI, flush, setup } from './helpers.mjs';
+import { ISSUER, ORIGIN, REDIRECT_URI, flush, nextAssignment, setup } from './helpers.mjs';
 
 // Runs a full hosted sign-in with `returnTo` and reports what the transaction stored and
 // what handleRedirect returned.
 async function roundTrip(returnTo) {
   const ctx = setup();
   ctx.auth.signInHosted({ returnTo });
-  await flush();
-  const start = ctx.browser.location.assigned[0];
+  const start = await nextAssignment(ctx.browser);
   const { code, state } = ctx.issuer.grantFor(start);
   const stored = JSON.parse(ctx.browser.localStorage.getItem('axiom-auth:tx:' + state)).returnTo;
   const u = new URL(REDIRECT_URI);
