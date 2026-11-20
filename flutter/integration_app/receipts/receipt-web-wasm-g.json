@@ -1,7 +1,7 @@
 {
   "platform": "web",
   "baseUrl": "http://127.0.0.1:8801",
-  "pass": 54,
+  "pass": 68,
   "fail": 6,
   "skip": 23,
   "checks": [
@@ -10,21 +10,21 @@
       "feature": "unary",
       "outcome": "PASS",
       "message": "",
-      "ms": 74
+      "ms": 23
     },
     {
       "name": "unary.get_optional_query_omitted",
       "feature": "unary",
       "outcome": "PASS",
       "message": "",
-      "ms": 62
+      "ms": 30
     },
     {
       "name": "unary.post_json",
       "feature": "unary",
       "outcome": "PASS",
       "message": "",
-      "ms": 31
+      "ms": 15
     },
     {
       "name": "unary.put_json",
@@ -38,28 +38,28 @@
       "feature": "unary",
       "outcome": "PASS",
       "message": "",
-      "ms": 63
+      "ms": 15
     },
     {
       "name": "unary.bytes_body",
       "feature": "unary",
       "outcome": "PASS",
       "message": "",
-      "ms": 16
+      "ms": 19
     },
     {
       "name": "types.scalars",
       "feature": "models",
       "outcome": "PASS",
       "message": "",
-      "ms": 16
+      "ms": 18
     },
     {
       "name": "types.collections_nested_optional",
       "feature": "models",
       "outcome": "PASS",
       "message": "",
-      "ms": 79
+      "ms": 16
     },
     {
       "name": "types.enum_field",
@@ -73,7 +73,7 @@
       "feature": "generator",
       "outcome": "SKIP",
       "message": "pending: generator unit (enum rule emitted as String, not a Dart enum)",
-      "ms": 1
+      "ms": 0
     },
     {
       "name": "types.union",
@@ -87,14 +87,14 @@
       "feature": "failures",
       "outcome": "PASS",
       "message": "",
-      "ms": 77
+      "ms": 40
     },
     {
       "name": "failure.typed_409_payload",
       "feature": "failures",
       "outcome": "PASS",
       "message": "",
-      "ms": 18
+      "ms": 16
     },
     {
       "name": "failure.typed_class",
@@ -108,42 +108,42 @@
       "feature": "failures",
       "outcome": "PASS",
       "message": "",
-      "ms": 13
+      "ms": 14
     },
     {
       "name": "cache.network_only",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 79
+      "ms": 31
     },
     {
       "name": "cache.cache_first",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 75
+      "ms": 32
     },
     {
       "name": "cache.network_first",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 36
+      "ms": 31
     },
     {
       "name": "cache.stale_while_revalidate",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 55
+      "ms": 31
     },
     {
       "name": "cache.identity_invalidates",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 28
+      "ms": 33
     },
     {
       "name": "cache.forced_refresh",
@@ -171,7 +171,7 @@
       "feature": "retry",
       "outcome": "PASS",
       "message": "",
-      "ms": 70
+      "ms": 14
     },
     {
       "name": "retry.on_503",
@@ -185,13 +185,13 @@
       "feature": "auth",
       "outcome": "PASS",
       "message": "",
-      "ms": 20
+      "ms": 16
     },
     {
       "name": "auth.bearer_token",
       "feature": "auth",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"unauthenticated\",\"message\":\"verified identity required\",\"path\":\"authorization\",\"status\":401}} (Code: Instance of 'minified:Class866')",
+      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"unauthenticated\",\"message\":\"verified identity required\",\"path\":\"authorization\",\"status\":401}} (Code: Instance of 'minified:Class871')",
       "ms": 16
     },
     {
@@ -199,21 +199,21 @@
       "feature": "auth",
       "outcome": "PASS",
       "message": "",
-      "ms": 17
+      "ms": 16
     },
     {
       "name": "auth.api_key_header_wrong_is_401",
       "feature": "auth",
       "outcome": "PASS",
       "message": "",
-      "ms": 16
+      "ms": 15
     },
     {
       "name": "auth.api_key_query",
       "feature": "auth",
       "outcome": "PASS",
       "message": "",
-      "ms": 15
+      "ms": 17
     },
     {
       "name": "auth.namespace_global_token",
@@ -248,14 +248,14 @@
       "feature": "streams",
       "outcome": "PASS",
       "message": "",
-      "ms": 63
+      "ms": 15
     },
     {
       "name": "stream.websocket_echo",
       "feature": "streams",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.runtime::ErrorCategory.network] {\"error\": \"WebSocket Error\"} (Code: Instance of 'minified:Class861')",
-      "ms": 15
+      "message": "expected data, got error [ErrorStage.runtime::ErrorCategory.network] {\"error\": \"WebSocket Error\"} (Code: Instance of 'minified:Class866')",
+      "ms": 16
     },
     {
       "name": "stream.typed_channel",
@@ -332,7 +332,7 @@
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 14
+      "ms": 15
     },
     {
       "name": "c.version_handshake",
@@ -360,49 +360,49 @@
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 60
+      "ms": 15
     },
     {
       "name": "c.cancel_websocket",
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 306
+      "ms": 300
     },
     {
       "name": "c.call_options_timeout",
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 16
+      "ms": 15
     },
     {
       "name": "c.runtime_cache_first",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 71
+      "ms": 31
     },
     {
       "name": "c.forced_refresh_header",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 24
+      "ms": 31
     },
     {
       "name": "c.invalidate_cache_identity",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 95
+      "ms": 48
     },
     {
       "name": "c.clear_cache",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 112
+      "ms": 63
     },
     {
       "name": "c.set_get_query_data",
@@ -414,9 +414,9 @@
     {
       "name": "c.error_listener",
       "feature": "runtime",
-      "outcome": "FAIL",
-      "message": "endpointId: expected <1404635741>, got <1256260924>",
-      "ms": 15
+      "outcome": "PASS",
+      "message": "",
+      "ms": 31
     },
     {
       "name": "c.typed_failure_fields",
@@ -451,90 +451,90 @@
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 2349
+      "ms": 1263
     },
     {
       "name": "c.reset_session",
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 16
+      "ms": 15
     },
     {
       "name": "c.shutdown_reinitialize",
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 33
+      "ms": 32
     },
     {
       "name": "gen.enum_type",
       "feature": "generator",
       "outcome": "PASS",
       "message": "",
-      "ms": 19
+      "ms": 16
     },
     {
       "name": "gen.model_value_semantics",
       "feature": "generator",
       "outcome": "PASS",
       "message": "",
-      "ms": 46
+      "ms": 17
     },
     {
       "name": "gen.typed_failure_when",
       "feature": "failures",
       "outcome": "PASS",
       "message": "",
-      "ms": 29
+      "ms": 30
     },
     {
       "name": "gen.typed_failure_unauthorized",
       "feature": "failures",
       "outcome": "PASS",
       "message": "",
-      "ms": 16
+      "ms": 15
     },
     {
       "name": "gen.body_multi_field",
       "feature": "unary",
       "outcome": "PASS",
       "message": "",
-      "ms": 38
+      "ms": 16
     },
     {
       "name": "gen.call_options_refresh",
       "feature": "cache",
       "outcome": "FAIL",
       "message": "source with cacheMode.refresh: expected <AxiomSource.network>, got <AxiomSource.cache>",
-      "ms": 25
+      "ms": 30
     },
     {
       "name": "gen.mutation_invalidates_active_query",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 74
+      "ms": 48
     },
     {
       "name": "gen.sse_stream",
       "feature": "streams",
       "outcome": "PASS",
       "message": "",
-      "ms": 21
+      "ms": 15
     },
     {
       "name": "gen.chunked_stream",
       "feature": "streams",
       "outcome": "PASS",
       "message": "",
-      "ms": 15
+      "ms": 16
     },
     {
       "name": "gen.ws_channel",
       "feature": "streams",
       "outcome": "FAIL",
-      "message": "channel error: [ErrorStage.runtime::ErrorCategory.network] {\"error\": \"WebSocket Error\"} (Code: Instance of 'minified:Class861')",
+      "message": "channel error: [ErrorStage.runtime::ErrorCategory.network] {\"error\": \"WebSocket Error\"} (Code: Instance of 'minified:Class866')",
       "ms": 16
     },
     {
@@ -555,8 +555,8 @@
       "name": "auth_f.binding_authorizes_calls",
       "feature": "auth_f",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"unauthenticated\",\"message\":\"verified identity required\",\"path\":\"authorization\",\"status\":401}} (Code: Instance of 'minified:Class866')",
-      "ms": 46
+      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"unauthenticated\",\"message\":\"verified identity required\",\"path\":\"authorization\",\"status\":401}} (Code: Instance of 'minified:Class871')",
+      "ms": 15
     },
     {
       "name": "auth_f.provider_answers_runtime",
@@ -570,7 +570,7 @@
       "feature": "auth_f",
       "outcome": "PASS",
       "message": "",
-      "ms": 1
+      "ms": 0
     },
     {
       "name": "auth_f.restore_from_platform_storage",
@@ -585,6 +585,104 @@
       "outcome": "SKIP",
       "message": "set AXIOM_AUTH_ISSUER, AXIOM_AUTH_EMAIL, AXIOM_AUTH_PASSWORD",
       "ms": 0
+    },
+    {
+      "name": "g.signed_load_trust_signed",
+      "feature": "contract-trust",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 28
+    },
+    {
+      "name": "g.locked_load_right_sha256",
+      "feature": "contract-trust",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 15
+    },
+    {
+      "name": "g.locked_load_wrong_sha256_rejected",
+      "feature": "contract-trust",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 0
+    },
+    {
+      "name": "g.tampered_bytes_rejected",
+      "feature": "contract-trust",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 12
+    },
+    {
+      "name": "g.wrong_key_rejected",
+      "feature": "contract-trust",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 2
+    },
+    {
+      "name": "g.auth_metadata_in_contract",
+      "feature": "auth-metadata",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 11
+    },
+    {
+      "name": "g.auth_set_token_injects_bearer",
+      "feature": "auth-metadata",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 37
+    },
+    {
+      "name": "g.auth_set_token_injects_api_key_header",
+      "feature": "auth-metadata",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 15
+    },
+    {
+      "name": "g.auth_set_token_injects_api_key_query",
+      "feature": "auth-metadata",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 16
+    },
+    {
+      "name": "g.auth_provider_injects_token",
+      "feature": "auth-metadata",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 16
+    },
+    {
+      "name": "g.websocket_echo_web_session",
+      "feature": "streams",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 511
+    },
+    {
+      "name": "g.websocket_initial_message_web_session",
+      "feature": "streams",
+      "outcome": "FAIL",
+      "message": "no reply in 5 s: runtime does not send the initial WebSocket message (engine.rs handle_websocket ignores req.payload); upgrade + auth succeeded",
+      "ms": 5008
+    },
+    {
+      "name": "g.observability_trace_export",
+      "feature": "observability",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 5113
+    },
+    {
+      "name": "g.traceparent_forwarded",
+      "feature": "observability",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 43
     }
   ],
   "build": {
