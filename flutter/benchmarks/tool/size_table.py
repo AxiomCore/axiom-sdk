@@ -133,12 +133,16 @@ def apk_rows(outdir):
         with zipfile.ZipFile(apk) as z:
             for i in z.infolist():
                 base = os.path.basename(i.filename)
-                key = {"libaxiom_runtime.so": "axiom_so", "libapp.so": "libapp_so", "libflutter.so": "libflutter_so"}.get(base)
+                key = {"libaxiom_runtime.so": "axiom_so", "libaxiom_runtime_full.so": "axiom_full_so",
+                       "libapp.so": "libapp_so", "libflutter.so": "libflutter_so"}.get(base)
                 if key and i.filename.startswith("lib/"):
                     row[f"{key}_in_apk"] = i.compress_size
                     row[f"{key}_raw"] = i.file_size
-                    if key == "axiom_so":
-                        row["axiom_so_gzip9"] = gz(z.read(i))
+                    if key in ("axiom_so", "axiom_full_so"):
+                        row[f"{key}_gzip9"] = gz(z.read(i))
+                        # Both Axiom runtimes together (the extensions add-on ships the full one).
+                        row["runtime_raw"] = row.get("runtime_raw", 0) + i.file_size
+                        row["runtime_gzip9"] = row.get("runtime_gzip9", 0) + row[f"{key}_gzip9"]
                 if "packages/axiom_flutter/lib/assets/wasm/" in i.filename:
                     row["axiom_web_assets_in_apk"] = row.get("axiom_web_assets_in_apk", 0) + i.compress_size
         rows[abi] = row

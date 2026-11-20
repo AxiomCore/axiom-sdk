@@ -319,7 +319,7 @@ def _size_table(st):
             continue
         for abi, d in (x.get("apk_delta_vs_baseline") or {}).items():
             a = x["apk"][abi]
-            rows.append([f"{label}, Android {abi}", mb(d), mb(a.get("axiom_so_raw")), mb(a.get("axiom_so_gzip9"))])
+            rows.append([f"{label}, Android {abi}", mb(d), mb(a.get("runtime_raw", a.get("axiom_so_raw"))), mb(a.get("runtime_gzip9", a.get("axiom_so_gzip9")))])
         wd = x.get("web_delta_vs_baseline")
         if wd:
             rows.append([f"{label}, web", f"{mb(wd['js_wasm_raw'])} ({mb(wd['js_wasm_gzip'])} gzip, {mb(wd['js_wasm_brotli'])} brotli)",
