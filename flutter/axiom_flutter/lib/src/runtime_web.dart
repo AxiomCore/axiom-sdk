@@ -398,6 +398,14 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   /// 0.150.1 (the hook is not installed). Set before initialize().
   static bool externalBodies = true;
 
+  /// Benchmark hook: turns the C1.1 hand-over on or off for later calls
+  /// (the runtime looks the global up per response).
+  static void debugSetExternalBodies(bool on) {
+    externalBodies = on;
+    final rt = _instance;
+    if (rt != null && rt._pump != null) rt._setupBodyHook();
+  }
+
   /// Test hook: bodies received through `axiom_web_body` so far.
   static int debugExternalBodyCount = 0;
 

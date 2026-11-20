@@ -24,6 +24,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'axiom_generated/axiom_sdk.dart';
 import 'axiom_generated/models.dart' as ax;
 import 'bench_axiom_setup.dart';
+import 'bench_web_stub.dart' if (dart.library.js_interop) 'bench_web.dart';
 
 export 'bench_axiom_setup.dart' show benchBaseUrl;
 
@@ -133,6 +134,8 @@ class BenchRunner {
       }
     }
 
+    // Web A/B (unit webspeed): `&fast=0` turns the C3.1 fast start off.
+    if (kIsWeb && Uri.base.queryParameters['fast'] == '0') benchSetFastStart(false);
     for (final c in ['axiom', 'dio', 'http']) {
       if (sel.contains('cold:$c')) await step('cold:$c', () => cold(c));
     }
@@ -141,6 +144,7 @@ class BenchRunner {
     if (all || sel.contains('latency')) await step('latency', () async => latency(await getSdk()));
     if (all || sel.contains('cache')) await step('cache', () async => cache(await getSdk()));
     if (all || sel.contains('decode')) await step('decode', decode);
+    if (sel.contains('webspeed')) await step('webspeed', () async => webspeedAb(await getSdk()));
     if (all || sel.contains('ws')) await step('ws', () async => ws(await getSdk()));
     emit({..._base('done'), 'ran': ran, 'base_url': benchBaseUrl, 'calls': benchCalls});
   }
@@ -168,12 +172,61 @@ class BenchRunner {
     emit({
       ..._base('cold'),
       'client': client,
+      'fast_start': Uri.base.queryParameters['fast'] != '0',
+      'fast_start_calls': benchFastStartCount(),
       'status': items == 1 ? 'ok' : 'error',
       'first_data_ms': _r(_ms(sw)),
       'init_ms': _r(initMs),
       'since_main_ms': _r(_ms(mainStart)),
       'method': 'fresh launch; timer starts after runApp, before client construction; one listItems(n:1)',
     });
+  }
+
+  // ---- web C1.1 A/B in one page: body hand-over on vs off, interleaved ----
+  // Rounds of [batch] calls per arm, arm order alternating, so box load hits
+  // every arm alike. http is a third arm for reference.
+  Future<void> webspeedAb(AxiomSdk sdk) async {
+    final httpApi = hc.HttpBenchApi(benchBaseUrl);
+    const batch = 20, rounds = 10, warmup = 20;
+    for (final n in [1000, 10000]) {
+      final arms = <String, List<double>>{'c11_on': [], 'c11_off': [], 'http': []};
+      Future<void> call(String arm) async {
+        final sw = Stopwatch()..start();
+        final got = arm == 'http'
+            ? (await httpApi.listItems(n)).items.length
+            : (await axFresh(sdk.bench.listItems(n: n))).items.length;
+        sw.stop();
+        if (got != n) throw StateError('$arm: $got of $n');
+        arms[arm]!.add(_ms(sw));
+      }
+      benchSetExternalBodies(true);
+      for (var i = 0; i < warmup; i++) {
+        await call('c11_on');
+      }
+      arms['c11_on']!.clear();
+      final ext0 = benchExternalCount();
+      for (var r = 0; r < rounds; r++) {
+        final order = r.isEven ? ['c11_on', 'c11_off', 'http'] : ['http', 'c11_off', 'c11_on'];
+        for (final arm in order) {
+          if (arm != 'http') benchSetExternalBodies(arm == 'c11_on');
+          for (var i = 0; i < batch; i++) {
+            await call(arm);
+          }
+        }
+      }
+      benchSetExternalBodies(true);
+      for (final a in arms.entries) {
+        emit({
+          ..._base('webspeed'),
+          'case': 'large_list_$n',
+          'client': a.key,
+          'status': 'ok',
+          'external_bodies': benchExternalCount() - ext0,
+          ...stats(a.value),
+        });
+      }
+    }
+    httpApi.close();
   }
 
   // ---- per-call latency ----
