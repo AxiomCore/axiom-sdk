@@ -12,6 +12,14 @@ topics:
   - ffi
   - codegen
 
+# Platforms listed on pub.dev. Web runs the bundled wasm runtime through a
+# conditional import, so it needs no plugin registration.
+platforms:
+  android:
+  ios:
+  macos:
+  web:
+
 environment:
   sdk: ^3.8.0
   flutter: ">=1.17.0"

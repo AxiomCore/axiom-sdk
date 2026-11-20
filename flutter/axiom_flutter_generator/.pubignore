@@ -1,0 +1,28 @@
+# A .pubignore replaces .gitignore for publishing in this folder, so it
+# repeats the .gitignore rules before the publish-only exclusions.
+.DS_Store
+*.class
+*.log
+*.pyc
+*.swp
+*.iml
+*.ipr
+*.iws
+.idea/
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+/pubspec.lock
+**/doc/api/
+build/
+.summary_files/
+pubspec_overrides.yaml
+receipts/
+
+# Golden tests read contracts and expected output from the repository.
+test/golden/
