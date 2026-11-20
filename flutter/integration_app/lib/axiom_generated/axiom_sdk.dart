@@ -100,63 +100,69 @@ class FixtureModule {
     );
   }
 
-  AxiomQuery<models.Stamp> cacheCacheFirst({required String xFixtureNonce}) {
-    final argsMap = <String, dynamic>{'x-fixture-nonce': xFixtureNonce};
+  AxiomQuery<models.Stamp> cacheCacheFirst({required String nonce}) {
+    final argsMap = <String, dynamic>{'nonce': nonce};
+    final queryParams = <String, dynamic>{'nonce': nonce};
     return _runtime.send<models.Stamp>(
       namespace: _namespace,
       endpointId: 3177318534,
       method: 'GET',
       path: '/cache/cache-first',
       args: argsMap,
+      queryParams: queryParams,
       decoder: (json) => models.Stamp.fromJson(json),
     );
   }
 
-  AxiomQuery<models.Stamp> cacheNetworkFirst({required String xFixtureNonce}) {
-    final argsMap = <String, dynamic>{'x-fixture-nonce': xFixtureNonce};
+  AxiomQuery<models.Stamp> cacheNetworkFirst({required String nonce}) {
+    final argsMap = <String, dynamic>{'nonce': nonce};
+    final queryParams = <String, dynamic>{'nonce': nonce};
     return _runtime.send<models.Stamp>(
       namespace: _namespace,
       endpointId: 1010416358,
       method: 'GET',
       path: '/cache/network-first',
       args: argsMap,
+      queryParams: queryParams,
       decoder: (json) => models.Stamp.fromJson(json),
     );
   }
 
-  AxiomQuery<models.Stamp> cacheNetworkOnly({required String xFixtureNonce}) {
-    final argsMap = <String, dynamic>{'x-fixture-nonce': xFixtureNonce};
+  AxiomQuery<models.Stamp> cacheNetworkOnly({required String nonce}) {
+    final argsMap = <String, dynamic>{'nonce': nonce};
+    final queryParams = <String, dynamic>{'nonce': nonce};
     return _runtime.send<models.Stamp>(
       namespace: _namespace,
       endpointId: 837292962,
       method: 'GET',
       path: '/cache/network-only',
       args: argsMap,
+      queryParams: queryParams,
       decoder: (json) => models.Stamp.fromJson(json),
     );
   }
 
-  AxiomQuery<models.Stamp> cacheStale({required String xFixtureNonce}) {
-    final argsMap = <String, dynamic>{'x-fixture-nonce': xFixtureNonce};
+  AxiomQuery<models.Stamp> cacheStale({required String nonce}) {
+    final argsMap = <String, dynamic>{'nonce': nonce};
+    final queryParams = <String, dynamic>{'nonce': nonce};
     return _runtime.send<models.Stamp>(
       namespace: _namespace,
       endpointId: 929374064,
       method: 'GET',
       path: '/cache/stale-while-revalidate',
       args: argsMap,
+      queryParams: queryParams,
       decoder: (json) => models.Stamp.fromJson(json),
     );
   }
 
   AxiomQuery<models.Stamp> cachedItem({
     required String id,
-    required String xFixtureNonce,
+    required String nonce,
   }) {
-    final argsMap = <String, dynamic>{
-      'id': id,
-      'x-fixture-nonce': xFixtureNonce,
-    };
+    final argsMap = <String, dynamic>{'id': id, 'nonce': nonce};
     final pathParams = <String, dynamic>{'id': id};
+    final queryParams = <String, dynamic>{'nonce': nonce};
     return _runtime.send<models.Stamp>(
       namespace: _namespace,
       endpointId: 1498157384,
@@ -164,6 +170,7 @@ class FixtureModule {
       path: '/cache/items/{id}',
       args: argsMap,
       pathParams: pathParams,
+      queryParams: queryParams,
       decoder: (json) => models.Stamp.fromJson(json),
     );
   }
@@ -292,14 +299,12 @@ class FixtureModule {
 
   AxiomQuery<models.Stamp> touchItem({
     required String id,
-    required String xFixtureNonce,
+    required String nonce,
     Map<String, dynamic>? body,
   }) {
-    final argsMap = <String, dynamic>{
-      'id': id,
-      'x-fixture-nonce': xFixtureNonce,
-    };
+    final argsMap = <String, dynamic>{'id': id, 'nonce': nonce};
     final pathParams = <String, dynamic>{'id': id};
+    final queryParams = <String, dynamic>{'nonce': nonce};
     return _runtime.sendMutation<models.Stamp>(
       namespace: _namespace,
       endpointId: 4036857016,
@@ -307,6 +312,7 @@ class FixtureModule {
       path: '/cache/items/{id}/touch',
       args: argsMap,
       pathParams: pathParams,
+      queryParams: queryParams,
       body: body,
       decoder: (json) => models.Stamp.fromJson(json),
     );

@@ -12,32 +12,32 @@ Future<AxiomState<T>> _second<T>(AxiomQuery<T> Function() make) async {
 final cacheChecks = <CheckDef>[
   CheckDef('cache.network_only', 'cache', (c) async {
     final n = 'no-${DateTime.now().microsecondsSinceEpoch}';
-    final s = await _second(() => c.api.cacheNetworkOnly(xFixtureNonce: n));
+    final s = await _second(() => c.api.cacheNetworkOnly(nonce: n));
     expectEq(s.data?.key, n, 'key');
     expectEq(s.source, AxiomSource.network, 'source of 2nd call');
   }),
   CheckDef('cache.cache_first', 'cache', (c) async {
     final n = 'cf-${DateTime.now().microsecondsSinceEpoch}';
-    final s = await _second(() => c.api.cacheCacheFirst(xFixtureNonce: n));
+    final s = await _second(() => c.api.cacheCacheFirst(nonce: n));
     expectEq(s.data?.key, n, 'key');
     expectEq(s.source, AxiomSource.cache, 'source of 2nd call');
   }),
   CheckDef('cache.network_first', 'cache', (c) async {
     final n = 'nf-${DateTime.now().microsecondsSinceEpoch}';
-    final s = await _second(() => c.api.cacheNetworkFirst(xFixtureNonce: n));
+    final s = await _second(() => c.api.cacheNetworkFirst(nonce: n));
     expectEq(s.data?.key, n, 'key');
   }),
   CheckDef('cache.stale_while_revalidate', 'cache', (c) async {
     final n = 'swr-${DateTime.now().microsecondsSinceEpoch}';
-    final s = await _second(() => c.api.cacheStale(xFixtureNonce: n));
+    final s = await _second(() => c.api.cacheStale(nonce: n));
     expectEq(s.data?.key, n, 'key');
     expectEq(s.source, AxiomSource.cache, 'first emitted source of 2nd call');
   }),
   CheckDef('cache.identity_invalidates', 'cache', (c) async {
     final n = 'ci-${DateTime.now().microsecondsSinceEpoch}';
-    await data(c.api.cachedItem(id: 'x', xFixtureNonce: n));
-    await data(c.api.touchItem(id: 'x', xFixtureNonce: n));
-    final s = await settle(c.api.cachedItem(id: 'x', xFixtureNonce: n));
+    await data(c.api.cachedItem(id: 'x', nonce: n));
+    await data(c.api.touchItem(id: 'x', nonce: n));
+    final s = await settle(c.api.cachedItem(id: 'x', nonce: n));
     expectEq(s.source, AxiomSource.network, 'source after invalidates(fixture.item)');
   }),
   CheckDef('cache.forced_refresh', 'cache', (c) async {

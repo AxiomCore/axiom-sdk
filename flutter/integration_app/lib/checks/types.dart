@@ -7,7 +7,8 @@ final typeChecks = <CheckDef>[
     expectEq(s.s, 'hello', 'String');
     expectEq(s.b, true, 'Bool');
     expectEq(s.i32, 2147483647, 'Int32');
-    expectEq(s.i64, 9007199254740993, 'Int64 exact');
+    // Compared as text: dart2js cannot hold 2^53+1 exactly, which is what this proves on web.
+    expectEq('${s.i64}', '9007199254740993', 'Int64 exact');
     expectEq(s.f32, 1.5, 'Float32');
     expectEq(s.f64, 3.141592653589793, 'Float64');
     expectEq(s.bytes.toList().toString(), '[1, 2, 3]', 'Bytes');
