@@ -23,9 +23,10 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'axiom_generated/axiom_sdk.dart';
 import 'axiom_generated/models.dart' as ax;
+import 'bench_axiom_setup.dart';
 
-const String benchBaseUrl =
-    String.fromEnvironment('BENCH_BASE_URL', defaultValue: 'http://127.0.0.1:8851');
+export 'bench_axiom_setup.dart' show benchBaseUrl;
+
 const String _benchDefine = String.fromEnvironment('BENCH', defaultValue: 'all');
 
 /// On web `?bench=` in the page URL overrides the define, so one build serves every run.
@@ -74,14 +75,6 @@ Map<String, Object?> stats(List<double> ms) {
 double _r(double v) => (v * 1000).roundToDouble() / 1000;
 
 double _ms(Stopwatch sw) => sw.elapsedMicroseconds / 1000.0;
-
-Future<AxiomSdk> createBenchSdk() => AxiomSdk.create(
-      config: const AxiomConfig(
-        contracts: {
-          'bench': AxiomContractConfig(baseUrl: benchBaseUrl, assetPath: 'assets/axiom/bench.axiom'),
-        },
-      ),
-    );
 
 /// Waits for the first data (or error) of an Axiom query and returns the state.
 Future<AxiomState<T>> settle<T>(AxiomQuery<T> q) => q.stream
