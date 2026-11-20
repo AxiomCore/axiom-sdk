@@ -852,7 +852,15 @@ class AxiomRuntimeIo implements AxiomRuntime {
 
   @override
   Future<void> init([String? dbPath]) {
-    return _initFuture ??= _start(dbPath);
+    final pending = _initFuture;
+    if (pending != null) return pending;
+    final started = _start(dbPath);
+    _initFuture = started;
+    // A failed start is not cached: the next init()/initialize() retries.
+    started.catchError((Object _) {
+      if (identical(_initFuture, started)) _initFuture = null;
+    });
+    return started;
   }
 
   Future<void> _start(String? dbPath) async {
@@ -891,7 +899,30 @@ class AxiomRuntimeIo implements AxiomRuntime {
       Isolate.current,
     ], debugName: 'axiom-runtime-events');
     final resolvedDb = await _resolveDbPath(dbPath);
-    using((Arena arena) => _initFfi(_toAxiomString(resolvedDb, arena)));
+    // Re-initialisation (after shutdown(), or a hot restart): abort tasks of
+    // the previous engine first so they drop its cache handles before the
+    // new engine opens the same database directory.
+    _resetSessionFfi?.call();
+    final status = using(
+      (Arena arena) => _initFfi(_toAxiomString(resolvedDb, arena)),
+    );
+    if (status != FfiError.success) {
+      _eventControl?.send('shutdown');
+      try {
+        await ready.future.timeout(const Duration(seconds: 2));
+        _eventControl?.send('shutdown');
+      } catch (_) {
+        _eventIsolate?.kill(priority: Isolate.immediate);
+      }
+      mainIsolatePort.close();
+      _eventIsolate = null;
+      _eventControl = null;
+      _mainPort = null;
+      throw StateError(
+        'axiom_initialize failed (status $status, ${FfiError.name(status)}, '
+        'db path "$resolvedDb")',
+      );
+    }
     await ready.future;
     _initialized = true;
   }
@@ -1205,6 +1236,13 @@ class AxiomRuntimeIo implements AxiomRuntime {
     }
     final future = _initialize(config, assetLoader);
     _initResultFuture = future;
+    // A failed initialize is not cached (F15): the next call retries.
+    // Contracts that already loaded are idempotent to load again.
+    future.then((r) {
+      if (!r.ok && identical(_initResultFuture, future)) {
+        _initResultFuture = null;
+      }
+    });
     return future;
   }
 
