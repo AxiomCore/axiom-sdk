@@ -46,6 +46,7 @@ import 'internal/sse.dart';
 import 'internal/query_key.dart';
 import 'internal/tracing.dart';
 import 'internal/contract_load_status.dart';
+import 'internal/web_json.dart';
 
 AxiomRuntime getRuntime() => AxiomRuntimeWeb();
 
@@ -248,6 +249,24 @@ class _ContractMeta {
   /// endpoint name -> id.
   final Map<String, int> endpointIds = {};
 
+  /// C3.1: endpoints a plain `fetch` can serve exactly like the runtime
+  /// before the wasm is ready: GET, no auth, network_only cache, no retry
+  /// policy, no streaming, no response validator, not void, not a mutation.
+  final Set<int> fastGet = {};
+
+  /// Endpoints whose responses get the runtime's JSON syntax check.
+  final Set<int> validated = {};
+
+  /// The contract has a cookie-session auth method (the runtime then sends
+  /// credentials on every call of the namespace).
+  bool cookieSession = false;
+
+  /// Some endpoint declares auth (any kind).
+  bool anyAuth = false;
+
+  /// Parsed without errors (fast start needs the full picture).
+  bool complete = false;
+
   Set<String> get allAuthMethods => {for (final m in authMethods.values) ...m};
 
   static _ContractMeta parse(Uint8List bytes) {
@@ -255,6 +274,11 @@ class _ContractMeta {
     try {
       final root = jsonDecode(utf8.decode(bytes, allowMalformed: true));
       if (root is! Map) return meta;
+      final validators = root['validators'];
+      final validatorNames = validators is Map
+          ? validators.keys.map((k) => '$k').toSet()
+          : <String>{};
+      final candidates = <int>{};
       final endpoints = root['endpoints'];
       if (endpoints is List) {
         for (final e in endpoints) {
@@ -264,6 +288,7 @@ class _ContractMeta {
           final name = e['name'];
           if (name is String) meta.endpointIds[name] = id;
           final auth = e['auth'];
+          if (auth != null) meta.anyAuth = true;
           if (auth is Map && auth['methods'] is List) {
             final names = <String>[];
             for (final m in auth['methods'] as List) {
@@ -272,10 +297,40 @@ class _ContractMeta {
               final location = m['location'];
               final type = m['type'];
               // Cookie sessions are handled by the browser, not by tokens.
-              if (type == 'session' && location == 'cookie') continue;
+              // Same predicate as the runtime (engine.rs
+              // is_cookie_session_method): type "session" in any case, and a
+              // missing location counts as cookie.
+              if (type is String &&
+                  type.toLowerCase() == 'session' &&
+                  (location == null ||
+                      (location is String &&
+                          location.toLowerCase() == 'cookie'))) {
+                meta.cookieSession = true;
+                continue;
+              }
               if (n is String && n.isNotEmpty) names.add(n);
             }
             meta.authMethods[id] = names;
+          }
+          final validated = e['validation_enabled'] == true;
+          if (validated) meta.validated.add(id);
+          final cache = e['cache_policy'];
+          final ret = e['return_type'];
+          final retKind = ret is Map ? ret['kind'] : null;
+          final hasValidator =
+              retKind == 'named' && validatorNames.contains('${ret['value']}');
+          if (e['method'] == 'GET' &&
+              auth == null &&
+              // Validated bodies need the runtime's own JSON check (M1).
+              !validated &&
+              (cache == null ||
+                  (cache is Map && cache['strategy'] == 'network_only')) &&
+              e['retry_policy'] == null &&
+              e['streaming'] == null &&
+              retKind is String &&
+              retKind != 'void' &&
+              !(validated && hasValidator)) {
+            candidates.add(id);
           }
         }
       }
@@ -288,8 +343,18 @@ class _ContractMeta {
           if (id != null && identity is String) {
             meta.cacheIdentity[id] = identity;
           }
+          final kind = op['operation_kind'] ?? op['operationKind'];
+          if (id != null && kind != null && kind != 'query') {
+            candidates.remove(id);
+          }
         }
       }
+      // Review B3: a namespace with any auth declaration (cookie session or
+      // anything the Dart side does not reproduce) gets no fast start.
+      if (!meta.cookieSession && !meta.anyAuth) {
+        meta.fastGet.addAll(candidates);
+      }
+      meta.complete = true;
     } catch (_) {
       // Non-JSON or unknown contract encoding: no metadata, runtime still
       // validates the contract itself.
@@ -336,6 +401,53 @@ class AxiomRuntimeWeb implements AxiomRuntime {
 
   @override
   bool debug = false;
+
+  /// C1.1: response bodies the runtime handed over as the browser's own
+  /// ArrayBuffer (`axiom_web_body`), by request id, until their
+  /// NetworkSuccess event arrives. Value: (buffer, flags).
+  final _externalBodies = <int, (JSArrayBuffer, int)>{};
+
+  /// Bodies already parsed in [_onEvent] (JSON syntax check), so the decoder
+  /// does not parse them again.
+  static final Expando<_Parsed> _parsedBodies = Expando('axiomParsedBody');
+
+  /// When false the runtime copies every body through wasm memory as before
+  /// 0.150.1 (the hook is not installed). Set before initialize().
+  static bool externalBodies = true;
+
+  /// Benchmark hook: turns the C1.1 hand-over on or off for later calls
+  /// (the runtime looks the global up per response).
+  static void debugSetExternalBodies(bool on) {
+    externalBodies = on;
+    final rt = _instance;
+    if (rt != null && rt._pump != null) rt._setupBodyHook();
+  }
+
+  /// Test hook: bodies received through `axiom_web_body` so far.
+  static int debugExternalBodyCount = 0;
+
+  /// C3.1 fast start, OPT-IN (`--dart-define=AXIOM_WEB_FAST_START=true`):
+  /// initialize() returns once the contract assets are read when no contract
+  /// needs verification, and eligible GETs run as a plain `fetch` until the
+  /// wasm is ready. Caveat: the contract has then not been accepted by the
+  /// runtime yet (header/version checks run when the wasm is up); if that
+  /// fails later, the failure goes to onError, initResult is replaced and
+  /// every queued and later call fails with it. Default: initialize() waits
+  /// for the runtime (review B2).
+  static bool fastStart = const bool.fromEnvironment(
+    'AXIOM_WEB_FAST_START',
+    defaultValue: false,
+  );
+
+  /// Test hook: calls served by the fast-start fetch so far.
+  static int debugFastStartCount = 0;
+
+  /// Completes when the runtime finished starting in the background (fast
+  /// start only); null when initialize() waited for it.
+  Future<void>? _runtimeReady;
+  Object? _runtimeStartError;
+  final _fastBaseUrls = <String, String>{};
+  final _fastAborts = <int, web.AbortController>{};
 
   /// Test hook (integration checks only): when set, the next dispatch in
   /// [callStream] fails synchronously as if the wasm call threw.
@@ -426,6 +538,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   void _start(String? dbPath) {
     _setupWebCallback();
     _setupNotify();
+    _setupBodyHook();
     _pump?.cancel();
     // Event-driven runtimes (axiom_wasm_host_notify_version) call
     // `axiom_web_notify` when a response is queued, so the timer is only a
@@ -451,7 +564,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   }
 
   @override
-  bool get isInitialized => _pump != null;
+  bool get isInitialized => _pump != null || _runtimeReady != null;
 
   @override
   AxiomInitResult? get initResult => _initResult;
@@ -504,6 +617,9 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   ) async {
     final sw = Stopwatch()..start();
     debug = config.debug;
+    _runtimeStartError = null;
+    final fast = await _tryFastStart(config, assetLoader, sw);
+    if (fast != null) return fast;
     try {
       await _ensureLoaded();
     } catch (e) {
@@ -577,6 +693,272 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     return result;
   }
 
+  /// C3.1: start without waiting for the wasm when nothing must be verified
+  /// first. Returns null to use the normal start-up. Never used when
+  /// `requireSignedContracts` is set or any contract has a signature, public
+  /// key or sha256 lock: those are checked by the runtime before any call.
+  Future<AxiomInitResult?> _tryFastStart(
+    AxiomConfig config,
+    AxiomAssetLoader? assetLoader,
+    Stopwatch sw,
+  ) async {
+    if (!fastStart || _wasmOrNull != null || _runtimeReady != null) {
+      return null;
+    }
+    if (config.requireSignedContracts || config.contracts.isEmpty) return null;
+    for (final c in config.contracts.values) {
+      if (c.isLocked ||
+          (c.signature ?? '').isNotEmpty ||
+          (c.publicKey ?? '').isNotEmpty) {
+        return null;
+      }
+    }
+    final load =
+        assetLoader ??
+        (String path) async =>
+            (await rootBundle.load(path)).buffer.asUint8List();
+    final assets = <String, (String, Uint8List, _ContractMeta)>{};
+    try {
+      for (final entry in config.contracts.entries) {
+        final baseUrl = config.resolveBaseUrl(entry.key);
+        final bytes = await load(entry.value.assetPath);
+        final meta = _ContractMeta.parse(bytes);
+        if (!meta.complete) return null; // let the runtime report it
+        assets[entry.key] = (baseUrl, bytes, meta);
+      }
+    } catch (_) {
+      return null; // normal start-up reports the error
+    }
+    // Start the wasm download and compile only now: started earlier it
+    // competes with the contract asset read that initialize() waits for.
+    final loading = _ensureLoaded();
+    loading.ignore();
+    final results = <String, AxiomContractLoadResult>{};
+    assets.forEach((ns, a) {
+      _contracts[ns] = a.$3;
+      _fastBaseUrls[ns] = a.$1;
+      results[ns] = AxiomContractLoadResult(
+        namespace: ns,
+        baseUrl: a.$1,
+        status: -1,
+        trust: AxiomContractTrust.unsigned,
+      );
+    });
+    final ready = Completer<void>();
+    _runtimeReady = ready.future;
+    () async {
+      try {
+        await loading;
+        final info = runtimeInfo;
+        if (!info.isCompatible) throw AxiomVersionMismatch(info);
+        if (_pump == null) _start(config.dbPath);
+        final loadResults = <String, AxiomContractLoadResult>{};
+        Object? firstError;
+        assets.forEach((ns, a) {
+          final r = tryLoadContract(
+            namespace: ns,
+            baseUrl: a.$1,
+            contractBytes: a.$2,
+          );
+          if (r.error != null) firstError ??= r.error;
+          loadResults[ns] = r;
+          // Per-method tokens set while the runtime was loading.
+          _methodTokens[ns]?.forEach((m, t) => _setToken(ns, m, t));
+        });
+        _initResult = AxiomInitResult(
+          ok: firstError == null,
+          error: firstError,
+          runtimeInfo: info,
+          contracts: loadResults,
+          duration: sw.elapsed,
+        );
+        if (firstError != null) _runtimeStartError = firstError;
+      } catch (e) {
+        _runtimeStartError = e;
+      }
+      final failed = _runtimeStartError;
+      if (failed != null) {
+        _errors.add(
+          AxiomErrorEvent(
+            AxiomError(
+              stage: ErrorStage.runtime,
+              category: ErrorCategory.runtime,
+              code: const UnknownCode('RuntimeStartFailed'),
+              message: 'Axiom runtime failed to start after fast start: $failed',
+              retryable: false,
+            ),
+          ),
+        );
+      }
+      if (failed != null && _initResult?.ok != false) {
+        _initResult = AxiomInitResult(
+          ok: false,
+          error: failed,
+          duration: sw.elapsed,
+        );
+      }
+      // From here on calls take the normal path (also after a shutdown()).
+      _runtimeReady = null;
+      ready.complete();
+    }();
+    final result = AxiomInitResult(
+      ok: true,
+      runtimeInfo: AxiomRuntimeInfo.expected,
+      contracts: results,
+      duration: sw.elapsed,
+    );
+    _initResult = result;
+    return result;
+  }
+
+  /// Test hook: fast-start eligible endpoint ids for raw contract bytes.
+  static Set<int> debugFastGetForContract(Uint8List bytes) =>
+      _ContractMeta.parse(bytes).fastGet;
+
+  /// Test hook: endpoint ids of [namespace] the fast-start fetch may serve.
+  Set<int> debugFastGetEndpoints(String namespace) => {
+    ...?_contracts[namespace]?.fastGet,
+  };
+
+  /// True when [callStream] can serve this call with a plain fetch now.
+  bool _fastEligible(
+    String namespace,
+    int endpointId,
+    String method,
+    Uint8List requestBytes,
+    Map<String, String> headers,
+    int? timeoutMs,
+  ) {
+    final meta = _contracts[namespace];
+    return meta != null &&
+        method == 'GET' &&
+        requestBytes.isEmpty &&
+        timeoutMs == null &&
+        _fastBaseUrls.containsKey(namespace) &&
+        meta.fastGet.contains(endpointId) &&
+        !headers.keys.any(
+          (k) => k.toLowerCase() == axiomCacheModeHeader.toLowerCase(),
+        );
+  }
+
+  static Uint8List _json(Map<String, Object?> m) =>
+      Uint8List.fromList(utf8.encode(jsonEncode(m)));
+
+  /// Delivers an error event + Complete exactly like the runtime does.
+  void _fastFail(int id, int code, Map<String, Object?> error) {
+    _onEvent(id, EventType.error, code, Uint8List(0), _json(error));
+    _onEvent(id, EventType.complete, code, Uint8List(0), Uint8List(0));
+  }
+
+  /// The runtime's wasm transport and engine steps for an eligible GET
+  /// (http.rs execute, engine.rs fetch_network), done with `fetch`.
+  void _fastFetch(
+    int id,
+    String namespace,
+    int endpointId,
+    String path,
+    Map<String, String> headers,
+  ) {
+    debugFastStartCount++;
+    final abort = web.AbortController();
+    _fastAborts[id] = abort;
+    final url = '${_fastBaseUrls[namespace]}$path';
+    final h = web.Headers();
+    headers.forEach((k, v) {
+      try {
+        h.append(k, v);
+      } catch (_) {}
+    });
+    // Like runtime calls (http.rs: headers.set, replaces a caller value).
+    h.set('traceparent', AxiomTracing.generateTraceparent());
+    final init = web.RequestInit(
+      method: 'GET',
+      headers: h,
+      credentials: 'omit',
+      signal: abort.signal,
+    );
+    final validated =
+        _contracts[namespace]?.validated.contains(endpointId) ?? false;
+    () async {
+      final web.Response resp;
+      try {
+        resp = await web.window.fetch(url.toJS, init).toDart;
+      } catch (e) {
+        if (_fastAborts.remove(id) == null) return; // cancelled
+        _fastFail(id, FfiError.networkError, {
+          'stage': 'NetworkSend',
+          'category': 'Network',
+          'code': 'NetworkConnectionFailed',
+          'message': 'Network Error',
+          'retryable': true,
+          'details': null,
+          'source': '$e',
+        });
+        return;
+      }
+      final JSArrayBuffer buffer;
+      try {
+        buffer = await resp.arrayBuffer().toDart;
+      } catch (e) {
+        if (_fastAborts.remove(id) == null) return;
+        _fastFail(id, FfiError.networkError, {
+          'stage': 'NetworkReceive',
+          'category': 'Network',
+          'code': 'NetworkConnectionFailed',
+          'message': 'Connection cut during body read',
+          'retryable': true,
+          'details': null,
+          'source': '$e',
+        });
+        return;
+      }
+      if (_fastAborts.remove(id) == null) return;
+      final status = resp.status;
+      if (status >= 300) {
+        final text = utf8.decode(
+          buffer.toDart.asUint8List(),
+          allowMalformed: true,
+        );
+        final details = text.length > 8192 ? text.substring(0, 8192) : text;
+        String? message;
+        try {
+          final v = jsonDecode(details);
+          final m = v is Map ? v['message'] : null;
+          if (m is String && m.trim().isNotEmpty) message = m;
+        } catch (_) {}
+        message ??= details.trim().isNotEmpty
+            ? details.trim()
+            : 'Request failed ($status)';
+        _fastFail(
+          id,
+          status == 401 || status == 403
+              ? FfiError.authError
+              : status >= 500
+              ? FfiError.serverError
+              : FfiError.requestFailed,
+          {
+            'stage': 'NetworkReceive',
+            'category': 'Server',
+            'code': {'HttpStatus': status},
+            'message': message,
+            'retryable': false,
+            'details': details.isEmpty ? null : details,
+            'source': null,
+          },
+        );
+        return;
+      }
+      if (!_requests.containsKey(id)) return;
+      _externalBodies[id] = (
+        buffer,
+        (validated ? _bodyCheckJson : 0) |
+            (status == 204 || status == 205 ? _bodyEmptyOk : 0),
+      );
+      _onEvent(id, EventType.networkSuccess, 0, Uint8List(0), Uint8List(0));
+      _onEvent(id, EventType.complete, 0, Uint8List(0), Uint8List(0));
+    }();
+  }
+
   // ---------------------------------------------------------------------------
   // Event callback
   // ---------------------------------------------------------------------------
@@ -616,6 +998,57 @@ class AxiomRuntimeWeb implements AxiomRuntime {
             .toJS;
   }
 
+  /// The runtime (builds with `axiom_wasm_body_external_version`) calls
+  /// `axiom_web_body(id, arrayBuffer, flags)` for a successful JSON body it
+  /// does not need to keep, then sends NetworkSuccess with no bytes.
+  void _setupBodyHook() {
+    if (!externalBodies) {
+      globalContext.delete('axiom_web_body'.toJS);
+      return;
+    }
+    globalContext['axiom_web_body'] =
+        ((JSNumber reqId, JSArrayBuffer buffer, JSNumber flags) {
+              final id = reqId.toDartInt;
+              if (_requests.containsKey(id)) {
+                _externalBodies[id] = (buffer, flags.toDartInt);
+                debugExternalBodyCount++;
+              }
+            })
+            .toJS;
+  }
+
+  static const int _bodyCheckJson = 1;
+  static const int _bodyEmptyOk = 2;
+
+  static bool _allWhitespace(Uint8List b) {
+    for (final c in b) {
+      if (c != 0x20 && c != 0x0a && c != 0x0d && c != 0x09) return false;
+    }
+    return true;
+  }
+
+  /// Same error the runtime raises when the JSON syntax check fails
+  /// (engine.rs stage_validate_response, `not_json`).
+  static AxiomError _notJsonError(Object e) {
+    final source = e is FormatException ? e.message : e.toString();
+    return _decodeError(
+      FfiError.responseDeserializationFailed,
+      Uint8List.fromList(
+        utf8.encode(
+          jsonEncode({
+            'stage': 'ValidationResponse',
+            'category': 'Validation',
+            'code': 'JsonParseError',
+            'message': 'Server response is not valid JSON',
+            'retryable': false,
+            'details': null,
+            'source': source,
+          }),
+        ),
+      ),
+    );
+  }
+
   bool _drainScheduled = false;
 
   void _drain() {
@@ -653,7 +1086,14 @@ class AxiomRuntimeWeb implements AxiomRuntime {
             .toJS;
   }
 
-  void _onEvent(int id, int evt, int errCode, Uint8List data, Uint8List err) {
+  void _onEvent(
+    int id,
+    int evt,
+    int errCode,
+    Uint8List data,
+    Uint8List err, {
+    AxiomError? preset,
+  }) {
     // ignore: parameter_assignments
     final req = _requests[id];
     if (req == null) return;
@@ -689,7 +1129,8 @@ class AxiomRuntimeWeb implements AxiomRuntime {
         );
         return;
       case EventType.error:
-        var error = _decodeError(errCode, err);
+        _externalBodies.remove(id);
+        var error = preset ?? _decodeError(errCode, err);
         if (req.timedOut && error.isCancelled) {
           error = AxiomError(
             stage: ErrorStage.networkSend,
@@ -712,6 +1153,30 @@ class AxiomRuntimeWeb implements AxiomRuntime {
         if (!controller.isClosed) controller.add(AxiomState.error(error));
         return;
       default:
+        _Parsed? parsed;
+        final external = evt == EventType.networkSuccess && data.isEmpty
+            ? _externalBodies.remove(id)
+            : null;
+        if (external != null) {
+          final (buffer, flags) = external;
+          data = buffer.toDart.asUint8List();
+          if (flags & _bodyCheckJson != 0 &&
+              !(flags & _bodyEmptyOk != 0 && _allWhitespace(data))) {
+            try {
+              parsed = _Parsed(AxiomWebJson.decode(buffer));
+            } catch (e) {
+              _onEvent(
+                id,
+                EventType.error,
+                FfiError.responseDeserializationFailed,
+                Uint8List(0),
+                Uint8List(0),
+                preset: _notJsonError(e),
+              );
+              return;
+            }
+          }
+        }
         if (data.isEmpty && evt != EventType.networkSuccess) return;
         if (AxiomSseParser.looksLike(data)) {
           // A whole event-stream body delivered as one response.
@@ -721,6 +1186,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
           );
           if (events.isNotEmpty) data = events.last;
         }
+        if (parsed != null) _parsedBodies[data] = parsed;
         if (!controller.isClosed) {
           controller.add(
             AxiomState.success(
@@ -773,6 +1239,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   }
 
   void _finish(int id) {
+    _externalBodies.remove(id);
     final req = _requests.remove(id);
     if (req == null) return;
     req.timeout?.cancel();
@@ -1180,6 +1647,53 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       }
     }
 
+    final ready = _runtimeReady;
+    if (ready != null) {
+      // C3.1: the runtime is still loading.
+      if (_fastEligible(
+        namespace,
+        endpointId,
+        method,
+        requestBytes,
+        merged,
+        timeoutMs,
+      )) {
+        _fastFetch(id, namespace, endpointId, fPath, merged);
+      } else {
+        ready.then((_) {
+          if (_pump == null) {
+            _failDispatch(
+              id,
+              FfiError.runtimeTooOld,
+              'Axiom runtime failed to start: $_runtimeStartError',
+            );
+          } else {
+            _dispatchWithAuth(namespace, endpointId, dispatch);
+          }
+        });
+      }
+      return AxiomStreamResponse(id, controller.stream);
+    }
+    final startError = _runtimeStartError;
+    if (startError != null) {
+      // Fast start failed later (review B2): every call fails with it until
+      // initialize() succeeds again.
+      _failDispatch(
+        id,
+        FfiError.runtimeTooOld,
+        'Axiom runtime failed to start: $startError',
+      );
+      return AxiomStreamResponse(id, controller.stream);
+    }
+    _dispatchWithAuth(namespace, endpointId, dispatch);
+    return AxiomStreamResponse(id, controller.stream);
+  }
+
+  void _dispatchWithAuth(
+    String namespace,
+    int endpointId,
+    void Function() dispatch,
+  ) {
     final provider = _authProvider;
     final methods = _contracts[namespace]?.authMethods[endpointId] ?? const [];
     if (provider != null &&
@@ -1201,7 +1715,6 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     } else {
       dispatch();
     }
-    return AxiomStreamResponse(id, controller.stream);
   }
 
   @override
@@ -1363,8 +1876,11 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       );
     }
     try {
+      final parsed = _parsedBodies[state.data!];
       return AxiomState<T>.success(
-        AxiomCodec.decode(state.data!, decoder),
+        parsed != null
+            ? decoder(parsed.value)
+            : AxiomCodec.decode(state.data!, decoder),
         state.source,
         isFetching: state.isFetching,
         isStreaming: state.isStreaming,
@@ -1467,6 +1983,9 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   // ---------------------------------------------------------------------------
 
   void _setToken(String namespace, String methodName, String token) {
+    // Fast start (C3.1): runtime still loading. The token is kept in
+    // _methodTokens and applied by _reapplyTokens when the contract loads.
+    if (_pump == null && _runtimeReady != null) return;
     final n = _alloc(namespace), m = _alloc(methodName), t = _alloc(token);
     _wasm.axiomSetAuthToken(n.ptr, n.len, m.ptr, m.len, t.ptr, t.len);
     _free(n);
@@ -1632,6 +2151,20 @@ class AxiomRuntimeWeb implements AxiomRuntime {
 
   @override
   bool cancel(int requestId) {
+    final fast = _fastAborts.remove(requestId);
+    if (fast != null) {
+      fast.abort();
+      _fastFail(requestId, FfiError.cancelled, {
+        'stage': 'Runtime',
+        'category': 'Runtime',
+        'code': 'Cancelled',
+        'message': 'Request cancelled by host',
+        'retryable': false,
+        'details': null,
+        'source': null,
+      });
+      return true;
+    }
     final w = _wasmOrNull;
     if (w == null || requestId <= 0) return false;
     try {
@@ -1961,4 +2494,10 @@ class AxiomRuntimeWeb implements AxiomRuntime {
 class _WebAlloc {
   final int ptr, len;
   const _WebAlloc(this.ptr, this.len);
+}
+
+/// A body parsed by the JSON syntax check (value may be null).
+class _Parsed {
+  _Parsed(this.value);
+  final Object? value;
 }
