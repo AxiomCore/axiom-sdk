@@ -621,8 +621,9 @@ class SdkWriter {
       });
     } else if (rawModels is List) {
       for (final v in rawModels) {
-        if (v is Map && v['name'] is String)
+        if (v is Map && v['name'] is String) {
           entries[v['name'] as String] = v.cast<String, dynamic>();
+        }
       }
     }
     final endpoints = {for (final e in _endpoints(c)) e.name: e};
@@ -791,8 +792,9 @@ class SdkWriter {
       headers.forEach(
         (k, v) => b.writeln('      ${GeneratorUtils.str(k)}: ${str(v)},'),
       );
-      if (e.isMutation && e.idempotent)
+      if (e.isMutation && e.idempotent) {
         b.writeln("      'Idempotency-Key': _newIdempotencyKey(),");
+      }
       b.writeln('    };');
     }
     final call = e.isMutation ? 'sendMutation' : 'send';
