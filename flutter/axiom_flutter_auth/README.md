@@ -8,7 +8,7 @@ Axiom call carries a fresh access token.
 ## Install
 
 ```sh
-flutter pub add axiom_flutter:^0.150.0 axiom_flutter_auth:^0.150.0
+flutter pub add axiom_flutter:^0.150.1 axiom_flutter_auth:^0.150.1
 ```
 
 Both packages are released together with the same version number.

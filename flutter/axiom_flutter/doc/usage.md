@@ -1,20 +1,20 @@
-# Using axiom_flutter: the steps today
+# Using axiom_flutter 0.150.1: the steps end to end
 
 This page lists what a Flutter developer does, in order, to call an AxiomCore
-backend from a Flutter app with `axiom_flutter` 0.150.x and Axiom CLI 0.156.0.
+backend from a Flutter app with `axiom_flutter` 0.150.1 and Axiom CLI 0.156.0.
 The full tutorial with explanations is the
 [Flutter quickstart](https://docs.axiomcore.dev/getting-started/quickstart-flutter);
 the reference is [Flutter and Dart](https://docs.axiomcore.dev/sdks/flutter).
 
 How these steps were checked (20 Nov 2026, Debian 12 x86_64, Flutter 3.32.0,
-`axiom` 0.156.0, `axiom_flutter` and `axiom_flutter_generator` from branch
-`flutter/perf` through `pubspec_overrides.yaml`): steps 1 to 6 were run as
-written. The backend answered `curl`; `axiom pull` succeeded; every Dart block
-on this page analyzes with no issues; `flutter build web --release` and
-`flutter build apk --release --split-per-abi` succeeded (the APK build fails
-with a manifest merger error until step 5 sets `minSdk = 24`). The app was not
-run on a device, emulator or browser for this page; the quickstart's device
-runs are recorded with the 0.150.0 release.
+`axiom` 0.156.0; `axiom_flutter`, `axiom_flutter_generator`,
+`axiom_flutter_auth` and `axiom_flutter_extensions` 0.150.1 from branch
+`flutter/perf` 6a48226 through `pubspec_overrides.yaml`, because 0.150.1 is not
+on pub.dev yet): steps 1 to 6 were run as written, and every Dart block on this
+page analyzes with no issues. The backend answered `curl`, `axiom pull`
+succeeded, and `flutter build web --release` and
+`flutter build apk --release --split-per-abi` succeeded. The app was not run on
+a device, emulator or browser for this page.
 
 ## 0. Tools
 
@@ -100,7 +100,7 @@ cd ..   # talks/
 flutter create --platforms android,ios,macos,web talks_app
 cd talks_app
 rm test/widget_test.dart   # refers to the counter app's MyApp, which step 6 replaces
-flutter pub add axiom_flutter:^0.150.0 dev:axiom_flutter_generator:^0.150.0
+flutter pub add axiom_flutter:^0.150.1 dev:axiom_flutter_generator:^0.150.1
 ```
 
 Add the packages **before** the first pull: when they are missing, CLI
@@ -237,9 +237,31 @@ sdk.runtime.setAuthProvider((namespace, methodName) async => myAuth.token());
 await sdk.runtime.resetSession();
 ```
 
-For managed sign-in (password, email code, social, MFA, refresh), add
-`axiom_flutter_auth` and attach it with
-`AxiomAuthBinding.attach(auth, namespaces: ['talks'])`; see its README.
+For managed sign-in (password, email code, social, MFA, token refresh) add the
+auth package:
+
+```bash
+flutter pub add axiom_flutter_auth:^0.150.1
+```
+
+```dart
+import 'package:axiom_flutter_auth/axiom_flutter_auth.dart';
+
+final auth = createAxiomAuth(AxiomAuthOptions(
+  issuer: 'https://<project>.axiomcore.dev/...', // [auth.environments.<env>].issuer
+  redirectUri: 'com.example.app:/auth/callback', // listed in redirect_urls
+  storage: platformStorage(), // Keychain/Keystore; sessionStorage on web
+));
+
+Future<void> startAuth() async {
+  // The access token goes only to the listed namespaces.
+  AxiomAuthBinding.attach(auth, runtime: sdk.runtime, namespaces: ['talks']);
+  await auth.restore();
+}
+```
+
+The [`flutter-auth`](https://github.com/AxiomCore/examples/tree/main/flutter-auth) example runs this flow against a
+local `axiom auth emulate` issuer.
 
 ## 8. Cache
 
@@ -260,33 +282,92 @@ The cache is stored in the app support directory on Android, iOS and macOS and
 in `localStorage` on the web (`AxiomConfig.dbPath` overrides the native
 location). It is not a credential store.
 
-## 9. Lean runtime and the extensions add-on
+Two Dart-side settings on `AxiomConfig` (native platforms):
 
-From 0.150.1, `axiom_flutter` bundles the **lean** runtime on Android and the
-web: everything above works, but executable AxiomCore extensions
-(`loadExtension`, `invokeExtension`, `extensionLifecycle`, `extensionAudit`)
-are not compiled in. Apps that use extensions on Android add the add-on:
+- `objectCacheMaxEntries` (default `0`, off): reuse decoded models when the
+  runtime returns the same bytes. Enable it only if your app treats models as
+  immutable; a hit returns the same instance to every caller.
+- `decodeIsolateThreshold` (default 256 KB): bodies of this size or more are
+  JSON-parsed on a background isolate; `fromJson` stays on the calling
+  isolate. `0` parses everything inline.
+
+## 9. Validation
+
+The runtime validates every response against the contract. The default policy
+`auto` validates bodies under 64 KiB in full and bodies of 64 KiB or more on a
+sample (envelope, list lengths, first and last items of large lists).
+`state.validation` tells you which ran. To validate everything:
+
+```dart
+// The whole app (replace the create() call of step 6):
+sdk = await AxiomSdk.create(
+  baseUrlOverrides: {'talks': backendUrl()},
+  config: AxiomDefaultConfig.config.copyWith(
+    validation: AxiomValidationPolicy.full,
+  ),
+);
+
+// One call:
+sdk.talks.listTalks(
+  options: const AxiomCallOptions(validation: AxiomValidationPolicy.full),
+);
+```
+
+On iOS and macOS the published runtime 0.148.6 always validates in full and
+reports `AxiomValidationMode.unknown`.
+
+On the web, `--dart-define=AXIOM_WEB_FAST_START=true` (opt-in) lets
+`AxiomSdk.create()` return before the wasm runtime is ready, for unsigned
+contracts in namespaces without auth; validated endpoints still wait, and a
+later contract failure fails every queued call.
+
+## 10. Lean runtime and the extensions add-on
+
+`axiom_flutter` 0.150.1 bundles the **lean** runtime on Android and the web:
+everything above works, but executable AxiomCore extensions are not compiled
+in. On Android, `loadExtension` and `invokeExtension` then throw
+`AxiomExtensionException` ("Executable extensions need the
+axiom_flutter_extensions package"). Apps that load extensions add the add-on:
 
 ```bash
 flutter pub add axiom_flutter_extensions:^0.150.1
 ```
 
-The add-on carries the full Android runtime and the app then ships only that
-library. Calling an extension method on the lean runtime throws an error that
-names `axiom_flutter_extensions`. On iOS and macOS nothing changes: they keep
-the full published runtime 0.148.6 until the next Apple runtime release. On
-the web extensions are not available with either package.
-<!-- VERIFY: lean default, add-on name/version, error text and "only one library per APK" are confirmed by /home/node/fp/pack/REPORT.md (unit pack, not DONE at time of writing) -->
+No code is needed. The add-on ships the full Android runtime
+(`libaxiom_runtime_full.so`), `axiom_flutter` loads it in preference to the
+lean one, and the add-on's Gradle build removes the lean library, so the APK
+carries one runtime. Optionally fail early if it was not packaged:
 
-Finished, runnable versions of these steps are in the examples repository:
-[`flutter-quickstart`](https://github.com/AxiomCore/examples/tree/main/flutter-quickstart) (steps 1 to 6, with
-`run-backend.sh` and `tool/regen.sh` for the two CLI details above),
-[`flutter-auth`](https://github.com/AxiomCore/examples/tree/main/flutter-auth) (step 7 with `axiom_flutter_auth`),
-[`flutter-offline-first`](https://github.com/AxiomCore/examples/tree/main/flutter-offline-first) (step 8),
-[`flutter-minimal`](https://github.com/AxiomCore/examples/tree/main/flutter-minimal) (release sizes) and
-[`stream/example`](https://github.com/AxiomCore/examples/tree/main/stream/example) (SSE, chunked and WebSocket).
-<!-- VERIFY: example links resolve once examples perf/examples2 (5d20793) is merged to main -->
+```dart
+import 'package:axiom_flutter_extensions/axiom_flutter_extensions.dart';
+
+void checkExtensions() {
+  AxiomExtensions.ensureInitialized(); // call before AxiomSdk.create()
+}
+```
+
+On iOS and macOS nothing changes: they use the full published runtime 0.148.6
+with or without the add-on. On the web, extensions are not available.
+
+Sizes (runtime library, arm64-v8a): lean 4,804,712 bytes, full 7,375,344
+bytes. The SDK's integration app as an arm64 release APK is 21.07 MB with the
+lean default and 23.65 MB with the add-on (27.32 MB with 0.150.0).
+
+## Examples
+
+Finished, runnable apps for these steps in the examples repository:
+
+- [`flutter-quickstart`](https://github.com/AxiomCore/examples/tree/main/flutter-quickstart): steps 1 to 6, with
+  `run-backend.sh` and `tool/regen.sh` for the two CLI details in steps 2
+  and 4.
+- [`flutter-auth`](https://github.com/AxiomCore/examples/tree/main/flutter-auth): step 7 with `axiom_flutter_auth`.
+- [`flutter-offline-first`](https://github.com/AxiomCore/examples/tree/main/flutter-offline-first): step 8, cache-first
+  and stale-while-revalidate lists that render after a restart offline.
+- [`flutter-minimal`](https://github.com/AxiomCore/examples/tree/main/flutter-minimal): the smallest app, with measured
+  release sizes.
+- [`stream/example`](https://github.com/AxiomCore/examples/tree/main/stream/example): HTTP chunked, SSE and WebSocket.
 
 Size and speed details: [`wasm-size.md`](wasm-size.md),
-[App size](https://docs.axiomcore.dev/sdks/flutter-app-size) and
-[Performance](https://docs.axiomcore.dev/sdks/flutter-performance).
+[App size](https://docs.axiomcore.dev/sdks/flutter-app-size),
+[Performance](https://docs.axiomcore.dev/sdks/flutter-performance) and
+[Benchmarks](https://docs.axiomcore.dev/sdks/flutter-benchmarks).
