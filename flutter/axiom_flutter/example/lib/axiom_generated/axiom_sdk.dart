@@ -81,6 +81,11 @@ class TodosModule {
   TodosModule._(this._runtime, this._namespace)
     : axiom = TodosModuleAxiomNamespace._(_runtime, _namespace);
 
+  /// Binds this client to another namespace of [runtime], for example the same
+  /// contract loaded a second time with a different base URL.
+  TodosModule(AxiomRuntime runtime, String namespace)
+    : this._(runtime, namespace);
+
   final AxiomRuntime _runtime;
   final String _namespace;
 

@@ -99,6 +99,9 @@ cors(origins: ["http://localhost:3000"], methods: [GET, POST],
 
 Then run the app on that origin: `flutter run -d chrome --web-port 3000`.
 
+Loading, Content Security Policy, sub-path hosting (`--base-href`) and the
+web cache are covered in [doc/web.md](doc/web.md).
+
 ## Generate a client
 
 You need the `axiom` CLI. With a backend contract built

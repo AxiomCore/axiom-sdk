@@ -132,8 +132,9 @@ A complete app with a mutation is in
 ### Benchmarks
 
 <!-- BENCHMARKS:START -->
-_Not measured yet. This block is filled by the benchmark script; do not edit
-it by hand._
+_Not published yet. This block is filled by
+`flutter/benchmarks/tool/render_readme.py --insert README.md`; do not edit it
+by hand. Method: [flutter/benchmarks/README.md](flutter/benchmarks/README.md)._
 <!-- BENCHMARKS:END -->
 
 ### Packages
