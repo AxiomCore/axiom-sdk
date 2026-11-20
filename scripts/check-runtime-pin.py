@@ -100,6 +100,9 @@ def main():
                "libaxiom_runtime.so", "lean", "axiom_flutter")
     if wasm.get("variant") is not None:
         check(wasm.get("variant") == "lean", "axiom_flutter wasm.variant is 'lean'")
+    ext_dir = ROOT / "flutter/axiom_flutter_extensions"
+    if ext_dir.exists():
+        check(EXT_PIN.exists(), f"{EXT_PIN.relative_to(ROOT)} exists (axiom_flutter_extensions is present)")
     if EXT_PIN.exists():
         ext = json.loads(EXT_PIN.read_bytes())
         check_libs(ext.get("android") or {}, ROOT / "flutter/axiom_flutter_extensions/android/src/main/jniLibs",
