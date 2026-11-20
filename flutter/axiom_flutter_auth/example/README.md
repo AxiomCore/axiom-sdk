@@ -1,16 +1,5 @@
-# axiom_flutter_auth_example
+# axiom_flutter_auth example
 
-A new Flutter project.
+Sign-in screen, session-aware home (`AxiomAuthBuilder`) and the web smoke run used by `../tool/web_smoke.sh`.
 
-## Getting Started
-
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+    flutter run --dart-define=AXIOM_AUTH_ISSUER=http://127.0.0.1:18777/local/<dir>
