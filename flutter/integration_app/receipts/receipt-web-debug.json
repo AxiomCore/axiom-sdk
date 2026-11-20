@@ -1,7 +1,7 @@
 {
   "platform": "web",
   "baseUrl": "http://127.0.0.1:8791",
-  "pass": 33,
+  "pass": 34,
   "fail": 14,
   "skip": 23,
   "checks": [
@@ -17,63 +17,63 @@
       "feature": "unary",
       "outcome": "PASS",
       "message": "",
-      "ms": 45
+      "ms": 46
     },
     {
       "name": "unary.post_json",
       "feature": "unary",
       "outcome": "FAIL",
       "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_input\",\"message\":\"the contract request body must be an object\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'HttpStatus')",
-      "ms": 35
+      "ms": 32
     },
     {
       "name": "unary.put_json",
       "feature": "unary",
       "outcome": "FAIL",
       "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_input\",\"message\":\"the contract request body must be an object\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'HttpStatus')",
-      "ms": 42
+      "ms": 47
     },
     {
       "name": "unary.delete",
       "feature": "unary",
       "outcome": "PASS",
       "message": "",
-      "ms": 33
+      "ms": 31
     },
     {
       "name": "unary.bytes_body",
       "feature": "unary",
       "outcome": "FAIL",
       "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'HttpStatus')",
-      "ms": 16
+      "ms": 31
     },
     {
       "name": "types.scalars",
       "feature": "models",
       "outcome": "FAIL",
       "message": "expected data, got error [ErrorStage.deserialize::ErrorCategory.serialization] TypeError: \"AQID\": type 'String' is not a subtype of type 'List<dynamic>' (Code: Instance of 'CodecError')",
-      "ms": 32
+      "ms": 26
     },
     {
       "name": "types.collections_nested_optional",
       "feature": "models",
       "outcome": "FAIL",
       "message": "expected data, got error [ErrorStage.deserialize::ErrorCategory.serialization] TypeError: \"AQID\": type 'String' is not a subtype of type 'List<dynamic>' (Code: Instance of 'CodecError')",
-      "ms": 14
+      "ms": 37
     },
     {
       "name": "types.enum_field",
       "feature": "models",
       "outcome": "FAIL",
       "message": "expected data, got error [ErrorStage.deserialize::ErrorCategory.serialization] TypeError: \"AQID\": type 'String' is not a subtype of type 'List<dynamic>' (Code: Instance of 'CodecError')",
-      "ms": 48
+      "ms": 28
     },
     {
       "name": "types.enum_generated_type",
       "feature": "generator",
       "outcome": "SKIP",
       "message": "pending: generator unit (enum rule emitted as String, not a Dart enum)",
-      "ms": 1
+      "ms": 0
     },
     {
       "name": "types.union",
@@ -87,14 +87,14 @@
       "feature": "failures",
       "outcome": "FAIL",
       "message": "HTTP status (error: [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'HttpStatus')): expected <409>, got <400>",
-      "ms": 30
+      "ms": 34
     },
     {
       "name": "failure.typed_409_payload",
       "feature": "failures",
       "outcome": "FAIL",
       "message": "error carries neither code nor payload: [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'HttpStatus') / {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}}",
-      "ms": 19
+      "ms": 28
     },
     {
       "name": "failure.typed_class",
@@ -108,35 +108,35 @@
       "feature": "failures",
       "outcome": "FAIL",
       "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'HttpStatus')",
-      "ms": 27
+      "ms": 19
     },
     {
       "name": "cache.network_only",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 32
+      "ms": 31
     },
     {
       "name": "cache.cache_first",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 31
+      "ms": 32
     },
     {
       "name": "cache.network_first",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 31
+      "ms": 47
     },
     {
       "name": "cache.stale_while_revalidate",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 32
+      "ms": 48
     },
     {
       "name": "cache.identity_invalidates",
@@ -171,7 +171,7 @@
       "feature": "retry",
       "outcome": "PASS",
       "message": "",
-      "ms": 25
+      "ms": 19
     },
     {
       "name": "retry.on_503",
@@ -185,21 +185,21 @@
       "feature": "auth",
       "outcome": "PASS",
       "message": "",
-      "ms": 15
+      "ms": 27
     },
     {
       "name": "auth.bearer_token",
       "feature": "auth",
       "outcome": "FAIL",
       "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"unauthenticated\",\"message\":\"verified identity required\",\"path\":\"authorization\",\"status\":401}} (Code: Instance of 'HttpStatus')",
-      "ms": 16
+      "ms": 15
     },
     {
       "name": "auth.api_key_header",
       "feature": "auth",
       "outcome": "FAIL",
       "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"missing_parameter\",\"message\":\"required input is missing\",\"path\":\"key\",\"status\":400}} (Code: Instance of 'HttpStatus')",
-      "ms": 4
+      "ms": 22
     },
     {
       "name": "auth.api_key_header_wrong_is_401",
@@ -213,7 +213,7 @@
       "feature": "auth",
       "outcome": "PASS",
       "message": "",
-      "ms": 16
+      "ms": 15
     },
     {
       "name": "auth.namespace_global_token",
@@ -241,21 +241,21 @@
       "feature": "streams",
       "outcome": "PASS",
       "message": "",
-      "ms": 15
+      "ms": 16
     },
     {
       "name": "stream.chunked_ndjson",
       "feature": "streams",
       "outcome": "PASS",
       "message": "",
-      "ms": 15
+      "ms": 16
     },
     {
       "name": "stream.websocket_echo",
       "feature": "streams",
       "outcome": "FAIL",
       "message": "expected data, got error [ErrorStage.runtime::ErrorCategory.network] {\"error\": \"WebSocket Error\"} (Code: Instance of 'NetworkConnectionFailed')",
-      "ms": 31
+      "ms": 24
     },
     {
       "name": "stream.typed_channel",
@@ -346,7 +346,7 @@
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 5
+      "ms": 14
     },
     {
       "name": "c.locked_load_rejects_bad_hash",
@@ -360,21 +360,21 @@
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 13
+      "ms": 1
     },
     {
       "name": "c.cancel_websocket",
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 301
+      "ms": 304
     },
     {
       "name": "c.call_options_timeout",
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 14
+      "ms": 15
     },
     {
       "name": "c.runtime_cache_first",
@@ -388,7 +388,7 @@
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 47
+      "ms": 31
     },
     {
       "name": "c.invalidate_cache_identity",
@@ -409,7 +409,7 @@
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 1
+      "ms": 0
     },
     {
       "name": "c.error_listener",
@@ -447,18 +447,25 @@
       "ms": 0
     },
     {
+      "name": "c.wasm_memory_no_leak",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 1214
+    },
+    {
       "name": "c.reset_session",
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 20
+      "ms": 32
     },
     {
       "name": "c.shutdown_reinitialize",
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 32
+      "ms": 33
     },
     {
       "name": "auth_f.binding_authorizes_calls",

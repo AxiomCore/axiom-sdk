@@ -1,7 +1,7 @@
 {
   "platform": "web",
   "baseUrl": "http://127.0.0.1:8791",
-  "pass": 33,
+  "pass": 34,
   "fail": 14,
   "skip": 23,
   "checks": [
@@ -10,7 +10,7 @@
       "feature": "unary",
       "outcome": "PASS",
       "message": "",
-      "ms": 10
+      "ms": 11
     },
     {
       "name": "unary.get_optional_query_omitted",
@@ -23,50 +23,50 @@
       "name": "unary.post_json",
       "feature": "unary",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_input\",\"message\":\"the contract request body must be an object\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:mh')",
-      "ms": 32
+      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_input\",\"message\":\"the contract request body must be an object\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:mj')",
+      "ms": 33
     },
     {
       "name": "unary.put_json",
       "feature": "unary",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_input\",\"message\":\"the contract request body must be an object\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:mh')",
-      "ms": 31
+      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_input\",\"message\":\"the contract request body must be an object\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:mj')",
+      "ms": 30
     },
     {
       "name": "unary.delete",
       "feature": "unary",
       "outcome": "PASS",
       "message": "",
-      "ms": 16
+      "ms": 15
     },
     {
       "name": "unary.bytes_body",
       "feature": "unary",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:mh')",
-      "ms": 22
+      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:mj')",
+      "ms": 16
     },
     {
       "name": "types.scalars",
       "feature": "models",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.deserialize::ErrorCategory.serialization] TypeError: \"AQID\": type 'String' is not a subtype of type 'List<dynamic>' (Code: Instance of 'minified:RU')",
-      "ms": 19
+      "message": "expected data, got error [ErrorStage.deserialize::ErrorCategory.serialization] TypeError: \"AQID\": type 'String' is not a subtype of type 'List<dynamic>' (Code: Instance of 'minified:RV')",
+      "ms": 31
     },
     {
       "name": "types.collections_nested_optional",
       "feature": "models",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.deserialize::ErrorCategory.serialization] TypeError: \"AQID\": type 'String' is not a subtype of type 'List<dynamic>' (Code: Instance of 'minified:RU')",
-      "ms": 25
+      "message": "expected data, got error [ErrorStage.deserialize::ErrorCategory.serialization] TypeError: \"AQID\": type 'String' is not a subtype of type 'List<dynamic>' (Code: Instance of 'minified:RV')",
+      "ms": 17
     },
     {
       "name": "types.enum_field",
       "feature": "models",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.deserialize::ErrorCategory.serialization] TypeError: \"AQID\": type 'String' is not a subtype of type 'List<dynamic>' (Code: Instance of 'minified:RU')",
-      "ms": 11
+      "message": "expected data, got error [ErrorStage.deserialize::ErrorCategory.serialization] TypeError: \"AQID\": type 'String' is not a subtype of type 'List<dynamic>' (Code: Instance of 'minified:RV')",
+      "ms": 18
     },
     {
       "name": "types.enum_generated_type",
@@ -86,15 +86,15 @@
       "name": "failure.typed_409_status",
       "feature": "failures",
       "outcome": "FAIL",
-      "message": "HTTP status (error: [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:mh')): expected <409>, got <400>",
-      "ms": 31
+      "message": "HTTP status (error: [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:mj')): expected <409>, got <400>",
+      "ms": 27
     },
     {
       "name": "failure.typed_409_payload",
       "feature": "failures",
       "outcome": "FAIL",
-      "message": "error carries neither code nor payload: [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:mh') / {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}}",
-      "ms": 15
+      "message": "error carries neither code nor payload: [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:mj') / {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}}",
+      "ms": 16
     },
     {
       "name": "failure.typed_class",
@@ -107,29 +107,29 @@
       "name": "failure.success_path",
       "feature": "failures",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:mh')",
-      "ms": 15
+      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:mj')",
+      "ms": 16
     },
     {
       "name": "cache.network_only",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 31
+      "ms": 29
     },
     {
       "name": "cache.cache_first",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 32
+      "ms": 31
     },
     {
       "name": "cache.network_first",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 31
+      "ms": 32
     },
     {
       "name": "cache.stale_while_revalidate",
@@ -171,7 +171,7 @@
       "feature": "retry",
       "outcome": "PASS",
       "message": "",
-      "ms": 17
+      "ms": 15
     },
     {
       "name": "retry.on_503",
@@ -191,22 +191,22 @@
       "name": "auth.bearer_token",
       "feature": "auth",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"unauthenticated\",\"message\":\"verified identity required\",\"path\":\"authorization\",\"status\":401}} (Code: Instance of 'minified:mh')",
-      "ms": 17
+      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"unauthenticated\",\"message\":\"verified identity required\",\"path\":\"authorization\",\"status\":401}} (Code: Instance of 'minified:mj')",
+      "ms": 16
     },
     {
       "name": "auth.api_key_header",
       "feature": "auth",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"missing_parameter\",\"message\":\"required input is missing\",\"path\":\"key\",\"status\":400}} (Code: Instance of 'minified:mh')",
-      "ms": 17
+      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"missing_parameter\",\"message\":\"required input is missing\",\"path\":\"key\",\"status\":400}} (Code: Instance of 'minified:mj')",
+      "ms": 15
     },
     {
       "name": "auth.api_key_header_wrong_is_401",
       "feature": "auth",
       "outcome": "FAIL",
-      "message": "status (error: [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"missing_parameter\",\"message\":\"required input is missing\",\"path\":\"key\",\"status\":400}} (Code: Instance of 'minified:mh')): expected <401>, got <400>",
-      "ms": 17
+      "message": "status (error: [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"missing_parameter\",\"message\":\"required input is missing\",\"path\":\"key\",\"status\":400}} (Code: Instance of 'minified:mj')): expected <401>, got <400>",
+      "ms": 15
     },
     {
       "name": "auth.api_key_query",
@@ -241,21 +241,21 @@
       "feature": "streams",
       "outcome": "PASS",
       "message": "",
-      "ms": 16
+      "ms": 15
     },
     {
       "name": "stream.chunked_ndjson",
       "feature": "streams",
       "outcome": "PASS",
       "message": "",
-      "ms": 19
+      "ms": 15
     },
     {
       "name": "stream.websocket_echo",
       "feature": "streams",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.runtime::ErrorCategory.network] {\"error\": \"WebSocket Error\"} (Code: Instance of 'minified:a_S')",
-      "ms": 23
+      "message": "expected data, got error [ErrorStage.runtime::ErrorCategory.network] {\"error\": \"WebSocket Error\"} (Code: Instance of 'minified:a_T')",
+      "ms": 31
     },
     {
       "name": "stream.typed_channel",
@@ -346,7 +346,7 @@
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 11
+      "ms": 5
     },
     {
       "name": "c.locked_load_rejects_bad_hash",
@@ -360,35 +360,35 @@
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 3
+      "ms": 10
     },
     {
       "name": "c.cancel_websocket",
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 304
+      "ms": 303
     },
     {
       "name": "c.call_options_timeout",
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 15
+      "ms": 16
     },
     {
       "name": "c.runtime_cache_first",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 32
+      "ms": 31
     },
     {
       "name": "c.forced_refresh_header",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 32
+      "ms": 31
     },
     {
       "name": "c.invalidate_cache_identity",
@@ -402,7 +402,7 @@
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 64
+      "ms": 63
     },
     {
       "name": "c.set_get_query_data",
@@ -416,7 +416,7 @@
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 14
+      "ms": 15
     },
     {
       "name": "c.typed_failure_fields",
@@ -447,11 +447,18 @@
       "ms": 0
     },
     {
+      "name": "c.wasm_memory_no_leak",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 942
+    },
+    {
       "name": "c.reset_session",
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 14
+      "ms": 15
     },
     {
       "name": "c.shutdown_reinitialize",
@@ -464,8 +471,8 @@
       "name": "auth_f.binding_authorizes_calls",
       "feature": "auth_f",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"unauthenticated\",\"message\":\"verified identity required\",\"path\":\"authorization\",\"status\":401}} (Code: Instance of 'minified:mh')",
-      "ms": 15
+      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"unauthenticated\",\"message\":\"verified identity required\",\"path\":\"authorization\",\"status\":401}} (Code: Instance of 'minified:mj')",
+      "ms": 16
     },
     {
       "name": "auth_f.provider_answers_runtime",
