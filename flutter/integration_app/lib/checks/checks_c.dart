@@ -290,27 +290,33 @@ final checksC = <CheckDef>[
   }),
   CheckDef('c.wasm_memory_no_leak', 'runtime', (c) async {
     if (!kIsWeb) skip('native platform');
-    final q = 'x' * 1000; // ~1 KB echoed back per response (fixture limit)
-    Future<void> one(int i) async {
-      final s = await _raw(c,
-          endpointId: _echoId, path: '/echo/leak', query: {'q': q, 'limit': i});
+    // 16 000 calls of one cache-first request (cache hits after the first:
+    // fast, no network). Every call ends with a Complete, so any per-call
+    // state in the runtime grows with the call count. 0.150.0 kept one id per
+    // finished call (TERMINAL_REQUESTS): its hash table doubled at ~7.2k and
+    // ~14.3k ids, +147 KB / +288 KB of linear memory, which this check
+    // catches; the fixed runtime keeps the last 4096 ids only. A short
+    // warm-up only lets the allocator and the cache reach steady state; it
+    // is far below the doubling points, so it cannot hide per-call growth.
+    final nonce = _nonce('leak');
+    Future<void> one() async {
+      final s = await _cacheFirst(c, nonce);
       if (!s.any((x) => x.hasData)) {
         throw CheckFailure('no data: ${s.map((x) => x.error)}');
       }
     }
     Future<void> burst(int n) async {
-      for (var i = 0; i < n; i += 20) {
-        await Future.wait([for (var k = 0; k < 20; k++) one(i + k)]);
+      for (var i = 0; i < n; i += 50) {
+        await Future.wait([for (var k = 0; k < 50; k++) one()]);
       }
     }
-    // warm-up: let the allocator reach steady state and fill the runtime's
-    // bounded per-call stage-timer ring (last 256 calls, 0.150.1).
-    await burst(300);
+    await burst(500);
     final before = await wasmMemoryBytes();
     if (before == null) skip('wasm memory not reachable');
-    await burst(400); // ~400 KB of response buffers if they leaked
+    await burst(16000);
     final grown = (await wasmMemoryBytes())! - before;
-    expectThat(grown < 192 * 1024, 'wasm memory grew by $grown bytes over 400 calls');
+    expectThat(grown <= 64 * 1024,
+        'wasm memory grew by $grown bytes over 16000 calls (limit one 64 KiB page)');
   }),
   CheckDef('c.reset_session', 'runtime', (c) async {
     final rt = _rt(c);
