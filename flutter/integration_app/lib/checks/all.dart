@@ -6,6 +6,7 @@ import 'checks_c.dart';
 import 'checks_d.dart';
 import 'checks_f.dart';
 import 'checks_fixn.dart';
+import 'checks_fixg.dart';
 import 'checks_g.dart';
 import 'checks_h.dart';
 import 'checks_h2.dart';
@@ -30,6 +31,7 @@ final List<CheckDef> allChecks = [
   ...checksG,
   ...checksH,
   ...checksFixn,
+  ...checksFixg,
   ...checksH2, // h2.failed_initialize_is_retryable restarts the runtime
   ...checksB, // keep last: ends with b.shutdown_restart
 ];

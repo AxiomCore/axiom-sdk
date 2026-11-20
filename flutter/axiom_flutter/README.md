@@ -272,7 +272,9 @@ contracts stay.
 
 For a full sign-in flow (password, OAuth, MFA, secure storage), use
 [`axiom_flutter_auth`](https://pub.dev/packages/axiom_flutter_auth). It plugs
-into the runtime with `AxiomAuthBinding.attach(auth, runtime: sdk.runtime)`.
+into the runtime with
+`AxiomAuthBinding.attach(auth, runtime: sdk.runtime, namespaces: ['api'])`.
+The token is sent only to the contracts you name.
 
 ## Cache control
 

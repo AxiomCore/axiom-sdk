@@ -20,8 +20,9 @@ Future<void> main() async {
   if (smokeEmail.isNotEmpty) {
     await _smoke();
   } else {
-    // Every Axiom call now carries a fresh token.
-    AxiomAuthBinding.attach(auth, runtime: AxiomRuntime());
+    // Calls to the `api` namespace (your own backend) now carry a fresh
+    // token. Other namespaces never see it.
+    AxiomAuthBinding.attach(auth, runtime: AxiomRuntime(), namespaces: const ['api']);
     await auth.restore();
   }
   runApp(AxiomAuthLifecycle(auth: auth, child: const App()));

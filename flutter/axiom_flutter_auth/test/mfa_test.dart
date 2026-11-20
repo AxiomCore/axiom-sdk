@@ -128,7 +128,7 @@ void main() {
     } catch (e) {
       caught = e;
     }
-    expect(caught, isA<AxiomAuthError>().having((e) => (e as AxiomAuthError).code, 'code', 'mfa_required'));
+    expect(caught, isA<AxiomAuthError>().having((e) => e.code, 'code', 'mfa_required'));
     expect(caught.toString().contains('axs1'), isFalse);
     expect(jsonEncode(auth.toJson()).contains('axs1'), isFalse);
     final ch = auth.mfaChallenge()!;

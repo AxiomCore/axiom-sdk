@@ -1,6 +1,5 @@
 // Runs against `axiom auth emulate` (tool/emulator.sh sets AXIOM_AUTH_ISSUER).
 // Skipped when the variable is absent.
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -71,6 +70,19 @@ class FakeRuntime implements AxiomRuntime {
   FakeRuntime({this.globalSupported = true});
   final bool globalSupported;
   String? global;
+  final Map<String, String> ns = {};
+
+  @override
+  void setNamespaceAuthToken({required String namespace, required String token}) {
+    if (!globalSupported) throw UnimplementedError('setNamespaceAuthToken');
+    ns[namespace] = token;
+  }
+
+  @override
+  void clearNamespaceAuthToken({required String namespace}) {
+    if (!globalSupported) throw UnimplementedError('clearNamespaceAuthToken');
+    ns.remove(namespace);
+  }
   final Map<String, String> perMethod = {};
   AxiomAuthProvider? provider;
   int resets = 0;
@@ -225,19 +237,21 @@ void main() {
     test('binding pushes tokens into the runtime and resets on sign-out', () async {
       final rt = FakeRuntime();
       final auth = AxiomAuth(AxiomAuthOptions(issuer: issuer!));
-      final binding = AxiomAuthBinding.attach(auth, runtime: rt);
+      final binding = AxiomAuthBinding.attach(auth, runtime: rt, namespaces: const ['fixture']);
       expect(rt.provider, isNotNull);
       await signUpVerified(auth, email());
       final t = await auth.accessToken();
-      expect(rt.global, t);
+      expect(rt.global, isNull, reason: 'the binding is scoped, never global');
+      expect(rt.ns['fixture'], t);
       expect(await rt.provider!('fixture', 'authBearer'), t);
+      expect(await rt.provider!('other', 'authBearer'), isNull);
       await Future<void>.delayed(const Duration(milliseconds: 1100));
       await auth.refresh();
-      expect(rt.global, await auth.accessToken());
-      expect(rt.global, isNot(t));
+      expect(rt.ns['fixture'], await auth.accessToken());
+      expect(rt.ns['fixture'], isNot(t));
       await auth.signOut();
       await Future<void>.delayed(Duration.zero);
-      expect(rt.global, isNull);
+      expect(rt.ns, isEmpty);
       expect(rt.resets, 1);
       expect(rt.provider, isNotNull, reason: 're-registered after resetSession');
       binding.detach();
@@ -247,7 +261,7 @@ void main() {
     test('binding falls back to per-method tokens', () async {
       final rt = FakeRuntime(globalSupported: false);
       final auth = AxiomAuth(AxiomAuthOptions(issuer: issuer!));
-      AxiomAuthBinding.attach(auth, runtime: rt, authMethods: {'fixture': ['authBearer']});
+      AxiomAuthBinding.attach(auth, runtime: rt, namespaces: const ['fixture'], authMethods: {'fixture': ['authBearer']});
       await signUpVerified(auth, email());
       expect(rt.perMethod['fixture.authBearer'], await auth.accessToken());
       await auth.signOut();

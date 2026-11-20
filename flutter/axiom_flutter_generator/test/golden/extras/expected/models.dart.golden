@@ -84,6 +84,14 @@ abstract final class AxiomGeneratedCodec {
     return a == b;
   }
 
+  /// True when [v] is, or contains, an enum value this client does not know.
+  static bool hasUnknown(Object? v) => switch (v) {
+    AxiomGeneratedEnum() => v.isUnknown,
+    List() => v.any(hasUnknown),
+    Map() => v.keys.any(hasUnknown) || v.values.any(hasUnknown),
+    _ => false,
+  };
+
   static int deepHash(Object? v) => switch (v) {
     List() => Object.hashAll(v.map(deepHash)),
     Map() => Object.hashAllUnordered(
@@ -119,11 +127,55 @@ abstract final class AxiomGeneratedCodec {
   }
 }
 
-enum DrawingMaybeStatus {
+/// Implemented by every generated enum.
+abstract interface class AxiomGeneratedEnum {
+  /// True for a wire value this client version does not know.
+  bool get isUnknown;
+}
+
+final Expando<Map<String, Object?>> _axiomRaw = Expando('axiomRaw');
+
+/// Remembers the wire value of each field of [decoded] holding an unknown
+/// enum value.
+void _keepRaw(
+  Object model,
+  Map<String, dynamic> json,
+  Map<String, Object?> decoded,
+) {
+  Map<String, Object?>? raw;
+  for (final e in decoded.entries) {
+    if (AxiomGeneratedCodec.hasUnknown(e.value)) {
+      (raw ??= {})[e.key] = json[e.key];
+    }
+  }
+  if (raw != null) _axiomRaw[model] = raw;
+}
+
+/// The kept wire value of [key], else [encode]().
+Object? _rawOr(Object model, String key, Object? Function() encode) {
+  final raw = _axiomRaw[model];
+  return raw != null && raw.containsKey(key) ? raw[key] : encode();
+}
+
+/// Copies the kept wire values of [from] to [to], except [changed] keys.
+T _carryRaw<T extends Object>(Object from, T to, List<String> changed) {
+  final raw = _axiomRaw[from];
+  if (raw != null) {
+    final kept = {
+      for (final e in raw.entries)
+        if (!changed.contains(e.key)) e.key: e.value,
+    };
+    if (kept.isNotEmpty) _axiomRaw[to] = kept;
+  }
+  return to;
+}
+
+enum DrawingMaybeStatus implements AxiomGeneratedEnum {
   a('a'),
   b('b'),
 
-  /// A value this client version does not know.
+  /// A value this client version does not know. Models keep the
+  /// original wire value and send it back unchanged.
   unknown(null);
 
   const DrawingMaybeStatus(this.value);
@@ -138,15 +190,23 @@ enum DrawingMaybeStatus {
     return unknown;
   }
 
-  String toJson() => value ?? 'unknown';
+  @override
+  bool get isUnknown => value == null;
+
+  /// The wire value. Throws for [unknown], which has none: a model
+  /// decoded from JSON sends the original value back instead.
+  String toJson() =>
+      value ??
+      (throw StateError('DrawingMaybeStatus.unknown has no wire value'));
 }
 
-enum DrawingStatus {
+enum DrawingStatus implements AxiomGeneratedEnum {
   draft('draft'),
   published('published'),
   inReview('in-review'),
 
-  /// A value this client version does not know.
+  /// A value this client version does not know. Models keep the
+  /// original wire value and send it back unchanged.
   unknown(null);
 
   const DrawingStatus(this.value);
@@ -161,7 +221,13 @@ enum DrawingStatus {
     return unknown;
   }
 
-  String toJson() => value ?? 'unknown';
+  @override
+  bool get isUnknown => value == null;
+
+  /// The wire value. Throws for [unknown], which has none: a model
+  /// decoded from JSON sends the original value back instead.
+  String toJson() =>
+      value ?? (throw StateError('DrawingStatus.unknown has no wire value'));
 }
 
 /// One of: Circle, Square.
@@ -402,7 +468,7 @@ class Drawing {
 
   factory Drawing.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
-    return Drawing(
+    final out = Drawing(
       blob: map['blob'] == null
           ? null
           : AxiomGeneratedCodec.asBytes(map['blob']),
@@ -421,6 +487,8 @@ class Drawing {
       shape: DrawingShape.fromJson(map['shape']),
       status: DrawingStatus.fromJson(map['status']),
     );
+    _keepRaw(out, map, {'maybeStatus': out.maybeStatus, 'status': out.status});
+    return out;
   }
 
   final Uint8List? blob;
@@ -441,9 +509,10 @@ class Drawing {
     'created': created.toIso8601String(),
     'either': either.toJson(),
     if (layers case final v?) 'layers': [for (final e in v) e.toJson()],
-    if (maybeStatus case final v?) 'maybeStatus': v.toJson(),
+    if (maybeStatus case final v?)
+      'maybeStatus': _rawOr(this, 'maybeStatus', () => v.toJson()),
     'shape': shape.toJson(),
-    'status': status.toJson(),
+    'status': _rawOr(this, 'status', () => status.toJson()),
   };
 
   Drawing copyWith({
@@ -455,17 +524,24 @@ class Drawing {
     Object? maybeStatus = _unset,
     DrawingShape? shape,
     DrawingStatus? status,
-  }) => Drawing(
-    blob: identical(blob, _unset) ? this.blob : blob as Uint8List?,
-    byName: byName ?? this.byName,
-    created: created ?? this.created,
-    either: either ?? this.either,
-    layers: identical(layers, _unset) ? this.layers : layers as List<Circle>?,
-    maybeStatus: identical(maybeStatus, _unset)
-        ? this.maybeStatus
-        : maybeStatus as DrawingMaybeStatus?,
-    shape: shape ?? this.shape,
-    status: status ?? this.status,
+  }) => _carryRaw(
+    this,
+    Drawing(
+      blob: identical(blob, _unset) ? this.blob : blob as Uint8List?,
+      byName: byName ?? this.byName,
+      created: created ?? this.created,
+      either: either ?? this.either,
+      layers: identical(layers, _unset) ? this.layers : layers as List<Circle>?,
+      maybeStatus: identical(maybeStatus, _unset)
+          ? this.maybeStatus
+          : maybeStatus as DrawingMaybeStatus?,
+      shape: shape ?? this.shape,
+      status: status ?? this.status,
+    ),
+    [
+      if (!identical(maybeStatus, _unset)) 'maybeStatus',
+      if (status != null) 'status',
+    ],
   );
 
   @override

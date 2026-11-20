@@ -1,15 +1,90 @@
+/// Thrown for contract/config problems the user must fix.
+class GeneratorException implements Exception {
+  final String message;
+  GeneratorException(this.message);
+  @override
+  String toString() => message;
+}
+
 /// Naming and literal helpers shared by the writers.
 class GeneratorUtils {
+  /// Members every Dart object has; a generated member must not reuse them.
+  static const objectMembers = {
+    'hashCode',
+    'toString',
+    'runtimeType',
+    'noSuchMethod',
+  };
+
   static const _reserved = {
-    'abstract', 'as', 'assert', 'async', 'await', 'base', 'break', 'case',
-    'catch', 'class', 'const', 'continue', 'covariant', 'default', 'deferred',
-    'do', 'dynamic', 'else', 'enum', 'export', 'extends', 'extension',
-    'external', 'factory', 'false', 'final', 'finally', 'for', 'Function',
-    'get', 'hide', 'if', 'implements', 'import', 'in', 'interface', 'is',
-    'late', 'library', 'mixin', 'new', 'null', 'of', 'on', 'operator', 'part',
-    'required', 'rethrow', 'return', 'sealed', 'set', 'show', 'static',
-    'super', 'switch', 'sync', 'this', 'throw', 'true', 'try', 'type',
-    'typedef', 'var', 'void', 'when', 'while', 'with', 'yield',
+    'abstract',
+    'as',
+    'assert',
+    'async',
+    'await',
+    'base',
+    'break',
+    'case',
+    'catch',
+    'class',
+    'const',
+    'continue',
+    'covariant',
+    'default',
+    'deferred',
+    'do',
+    'dynamic',
+    'else',
+    'enum',
+    'export',
+    'extends',
+    'extension',
+    'external',
+    'factory',
+    'false',
+    'final',
+    'finally',
+    'for',
+    'Function',
+    'get',
+    'hide',
+    'if',
+    'implements',
+    'import',
+    'in',
+    'interface',
+    'is',
+    'late',
+    'library',
+    'mixin',
+    'new',
+    'null',
+    'of',
+    'on',
+    'operator',
+    'part',
+    'required',
+    'rethrow',
+    'return',
+    'sealed',
+    'set',
+    'show',
+    'static',
+    'super',
+    'switch',
+    'sync',
+    'this',
+    'throw',
+    'true',
+    'try',
+    'type',
+    'typedef',
+    'var',
+    'void',
+    'when',
+    'while',
+    'with',
+    'yield',
   };
 
   /// Splits `snake_case`, `kebab-case`, `camelCase` and spaced words.
@@ -55,6 +130,47 @@ class GeneratorUtils {
     final c = camelCase(name);
     if (_reserved.contains(c) || avoid.contains(c)) return '\$$c';
     return c;
+  }
+
+  /// [identifier] made unique within [used] (deterministic suffix: `name2`,
+  /// `name3`, ...). The result is added to [used].
+  static String uniqueIdentifier(
+    String name,
+    Set<String> used, {
+    Set<String> avoid = const {},
+  }) => unique(identifier(name, avoid: {...avoid, ...objectMembers}), used);
+
+  /// Unique identifiers for [wires] (same order). Names that are already
+  /// valid identifiers as written (`userId`) are claimed first, so a
+  /// converted name (`user_id`) gets the suffix (`userId2`).
+  static List<String> uniqueNames(
+    List<String> wires,
+    Set<String> used, {
+    Set<String> avoid = const {},
+  }) {
+    final out = List<String>.filled(wires.length, '');
+    final all = {...avoid, ...objectMembers};
+    final order = [
+      for (var i = 0; i < wires.length; i++)
+        if (identifier(wires[i], avoid: all) == wires[i]) i,
+      for (var i = 0; i < wires.length; i++)
+        if (identifier(wires[i], avoid: all) != wires[i]) i,
+    ];
+    for (final i in order) {
+      out[i] = uniqueIdentifier(wires[i], used, avoid: avoid);
+    }
+    return out;
+  }
+
+  /// [id] or `id2`, `id3`, ... : the first not in [used]; added to [used].
+  static String unique(String id, Set<String> used) {
+    var out = id;
+    var n = 2;
+    while (used.contains(out)) {
+      out = '$id${n++}';
+    }
+    used.add(out);
+    return out;
   }
 
   /// `$name` or `${name}` inside a single-quoted string.

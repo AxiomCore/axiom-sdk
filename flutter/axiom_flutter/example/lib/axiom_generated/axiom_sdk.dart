@@ -3,7 +3,6 @@
 // todos: dev.axiomcore.example.todos 1.0.0 variant default schema 84a9b8da032b
 
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:axiom_flutter/axiom_flutter.dart';
 import 'package:flutter/services.dart' show rootBundle;

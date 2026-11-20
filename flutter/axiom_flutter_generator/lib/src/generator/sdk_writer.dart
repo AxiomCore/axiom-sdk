@@ -24,7 +24,8 @@ class ContractInput {
     this.sha256,
   });
 
-  Map<String, dynamic> get ir => (contract['ir'] ?? contract) as Map<String, dynamic>;
+  Map<String, dynamic> get ir =>
+      (contract['ir'] ?? contract) as Map<String, dynamic>;
 }
 
 class _Param {
@@ -66,7 +67,8 @@ class _Endpoint {
     required this.idempotent,
   });
 
-  bool get isMutation => const {'POST', 'PUT', 'PATCH', 'DELETE'}.contains(method);
+  bool get isMutation =>
+      const {'POST', 'PUT', 'PATCH', 'DELETE'}.contains(method);
   Iterable<_Param> by(String source) => params.where((p) => p.source == source);
 }
 
@@ -98,6 +100,9 @@ class SdkWriter {
     for (final c in contracts) {
       _writeModule(body, c);
     }
+    for (final c in contracts) {
+      _writeRpcs(body, c);
+    }
     _writeHelpers(body);
 
     final b = StringBuffer();
@@ -105,9 +110,10 @@ class SdkWriter {
     b.writeln();
     final text = body.toString();
     final dartImports = [
-      if (RegExp(r'jsonEncode|jsonDecode|utf8\.').hasMatch(text)) 'dart:convert',
+      if (RegExp(r'jsonEncode|jsonDecode|utf8\.').hasMatch(text))
+        'dart:convert',
       if (_usesIdempotency) 'dart:math',
-      if (text.contains('Uint8List')) 'dart:typed_data',
+      if (RegExp(r'\bUint8List\b').hasMatch(text)) 'dart:typed_data',
     ];
     for (final i in dartImports) {
       b.writeln("import '$i';");
@@ -127,32 +133,51 @@ class SdkWriter {
   // ---------------------------------------------------------------------------
 
   void _writeConfig(StringBuffer b) {
-    final allSigned = contracts.every((c) => c.signature != null && c.publicKey != null);
+    final allSigned = contracts.every(
+      (c) => c.signature != null && c.publicKey != null,
+    );
     b.writeln('/// Contract configuration written by `axiom pull`.');
     b.writeln('abstract final class AxiomDefaultConfig {');
-    final usesRelease = allSigned ||
-        contracts.any((c) => c.sha256 != null && c.signature != null && c.publicKey != null);
+    final usesRelease =
+        allSigned ||
+        contracts.any(
+          (c) => c.sha256 != null && c.signature != null && c.publicKey != null,
+        );
     if (usesRelease) {
-      b.writeln("  static const bool _release = bool.fromEnvironment('dart.vm.product');");
+      b.writeln(
+        "  static const bool _release = bool.fromEnvironment('dart.vm.product');",
+      );
       b.writeln();
     }
     b.writeln('  static const AxiomConfig config = AxiomConfig(');
     b.writeln('    contracts: {');
     for (final c in contracts) {
-      b.writeln('      ${GeneratorUtils.str(c.namespace)}: AxiomContractConfig(');
+      b.writeln(
+        '      ${GeneratorUtils.str(c.namespace)}: AxiomContractConfig(',
+      );
       if (c.baseUrl == null) {
-        b.writeln('        // Neither the contract nor the pull config names a base URL;');
-        b.writeln('        // override with AxiomEnvironment or --dart-define=AXIOM_BASE_URL.');
+        b.writeln(
+          '        // Neither the contract nor the pull config names a base URL;',
+        );
+        b.writeln(
+          '        // override with AxiomEnvironment or --dart-define=AXIOM_BASE_URL.',
+        );
         b.writeln("        baseUrl: 'http://localhost:8000',");
       } else {
         b.writeln('        baseUrl: ${GeneratorUtils.str(c.baseUrl!)},');
       }
       b.writeln('        assetPath: ${GeneratorUtils.str(c.assetPath)},');
-      if (c.signature != null) b.writeln('        signature: ${GeneratorUtils.str(c.signature!)},');
-      if (c.publicKey != null) b.writeln('        publicKey: ${GeneratorUtils.str(c.publicKey!)},');
+      if (c.signature != null) {
+        b.writeln('        signature: ${GeneratorUtils.str(c.signature!)},');
+      }
+      if (c.publicKey != null) {
+        b.writeln('        publicKey: ${GeneratorUtils.str(c.publicKey!)},');
+      }
       if (c.sha256 != null && c.signature != null && c.publicKey != null) {
         b.writeln('        // Release builds use the hash-locked load.');
-        b.writeln('        sha256: _release ? ${GeneratorUtils.str(c.sha256!)} : null,');
+        b.writeln(
+          '        sha256: _release ? ${GeneratorUtils.str(c.sha256!)} : null,',
+        );
       }
       b.writeln('      ),');
     }
@@ -165,7 +190,9 @@ class SdkWriter {
       b.writeln('  /// sha256 of each contract asset at generation time.');
       b.writeln('  static const Map<String, String> contractSha256 = {');
       for (final c in hashes) {
-        b.writeln('    ${GeneratorUtils.str(c.namespace)}: ${GeneratorUtils.str(c.sha256!)},');
+        b.writeln(
+          '    ${GeneratorUtils.str(c.namespace)}: ${GeneratorUtils.str(c.sha256!)},',
+        );
       }
       b.writeln('  };');
     }
@@ -176,8 +203,12 @@ class SdkWriter {
   void _writeSdk(StringBuffer b) {
     b.writeln('/// Entry point of the generated client.');
     b.writeln('class AxiomSdk {');
-    b.writeln('  /// Wraps an already initialized [runtime] (tests, custom start-up).');
-    b.write('  AxiomSdk.fromRuntime(this.runtime, [this.initResult = const AxiomInitResult(ok: true)])');
+    b.writeln(
+      '  /// Wraps an already initialized [runtime] (tests, custom start-up).',
+    );
+    b.write(
+      '  AxiomSdk.fromRuntime(this.runtime, [this.initResult = const AxiomInitResult(ok: true)])',
+    );
     final inits = [
       for (final c in contracts)
         '${_prop(c)} = ${_moduleClass(c)}._(runtime, ${GeneratorUtils.str(c.namespace)})',
@@ -200,8 +231,12 @@ class SdkWriter {
     b.writeln();
     b.writeln('  /// Starts the runtime and loads the contracts.');
     b.writeln('  ///');
-    b.writeln('  /// Base URL priority: [baseUrlOverrides] > [environment] (or the');
-    b.writeln('  /// config\'s, else `--dart-define=AXIOM_ENV` / `AXIOM_BASE_URL`) >');
+    b.writeln(
+      '  /// Base URL priority: [baseUrlOverrides] > [environment] (or the',
+    );
+    b.writeln(
+      '  /// config\'s, else `--dart-define=AXIOM_ENV` / `AXIOM_BASE_URL`) >',
+    );
     b.writeln('  /// the generated default. Throws when initialization fails.');
     b.writeln('  static Future<AxiomSdk> create({');
     b.writeln('    AxiomConfig? config,');
@@ -212,7 +247,9 @@ class SdkWriter {
     b.writeln('    final base = config ?? AxiomDefaultConfig.config;');
     b.writeln('    final cfg = base.copyWith(');
     b.writeln('      environment:');
-    b.writeln('          environment ?? base.environment ?? AxiomEnvironment.fromDartDefines(),');
+    b.writeln(
+      '          environment ?? base.environment ?? AxiomEnvironment.fromDartDefines(),',
+    );
     b.writeln('      baseUrlOverrides: baseUrlOverrides,');
     b.writeln('    );');
     b.writeln('    final runtime = AxiomRuntime();');
@@ -222,9 +259,13 @@ class SdkWriter {
     }
     b.writeln('    AxiomInitResult result;');
     b.writeln('    try {');
-    b.writeln('      result = await runtime.initialize(cfg, assetLoader: assetLoader);');
+    b.writeln(
+      '      result = await runtime.initialize(cfg, assetLoader: assetLoader);',
+    );
     b.writeln('    } on UnimplementedError {');
-    b.writeln('      // Runtime package without initialize(): legacy start-up.');
+    b.writeln(
+      '      // Runtime package without initialize(): legacy start-up.',
+    );
     b.writeln('      result = await _legacyInit(runtime, cfg, assetLoader);');
     b.writeln('    }');
     b.writeln('    result.requireOk();');
@@ -234,8 +275,41 @@ class SdkWriter {
     b.writeln();
   }
 
-  String _moduleClass(ContractInput c) => '${GeneratorUtils.pascalCase(c.namespace)}Module';
-  String _prop(ContractInput c) => GeneratorUtils.identifier(c.namespace, avoid: {'runtime', 'initResult'});
+  String _moduleClass(ContractInput c) => _names.$1[c.namespace]!;
+  String _prop(ContractInput c) => _names.$2[c.namespace]!;
+
+  /// Module class and AxiomSdk property per namespace. Two namespaces that
+  /// map to the same class name are an error; property names get a suffix.
+  late final (Map<String, String>, Map<String, String>) _names = () {
+    final classes = <String, String>{};
+    final props = <String, String>{};
+    final usedProps = <String>{
+      'runtime',
+      'initResult',
+      'create',
+      'fromRuntime',
+    };
+    final owner = <String, String>{};
+    for (final c in contracts) {
+      final cls = '${GeneratorUtils.pascalCase(c.namespace)}Module';
+      for (final t in [cls, '${cls}AxiomNamespace']) {
+        final prev = owner[t];
+        if (prev != null || t == 'AxiomSdk' || t == 'AxiomDefaultConfig') {
+          throw GeneratorException(
+            'Namespaces "${prev ?? t}" and "${c.namespace}" both map to the Dart class "$t". '
+            'Pull one of them with another --name.',
+          );
+        }
+        owner[t] = c.namespace;
+      }
+      classes[c.namespace] = cls;
+      props[c.namespace] = GeneratorUtils.uniqueIdentifier(
+        c.namespace,
+        usedProps,
+      );
+    }
+    return (classes, props);
+  }();
 
   // ---------------------------------------------------------------------------
 
@@ -263,32 +337,104 @@ class SdkWriter {
     }
     raw.sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
 
-    final used = <String>{'axiom', 'cacheIdentities', 'endpointIds', 'authMethods', 'invalidateIdentity'};
+    // Module members: fixed ones, then per endpoint `name`, plus `nameStream`
+    // / `nameChannel` for streaming endpoints (endpoints are sorted, so `foo`
+    // claims `fooStream` before a `foo_stream` endpoint is named).
+    final used = <String>{
+      'axiom',
+      'cacheIdentities',
+      'endpointIds',
+      'authMethods',
+      'invalidateIdentity',
+    };
+    final names = <String, String>{};
+    String? helperSuffix(Map<String, dynamic> ep) {
+      final st = ep['streaming'] is Map
+          ? (ep['streaming'] as Map)['type']
+          : null;
+      return st == 'sse' || st == 'http_stream'
+          ? 'Stream'
+          : st == 'websocket'
+          ? 'Channel'
+          : null;
+    }
+
+    // Endpoints whose name is already an identifier (`getUser`) go first,
+    // so `get_user` becomes `getUser2`, not the other way round.
+    bool exact(Map<String, dynamic> ep) =>
+        GeneratorUtils.identifier(
+          ep['name'] as String,
+          avoid: GeneratorUtils.objectMembers,
+        ) ==
+        ep['name'];
+    for (final ep in [...raw.where(exact), ...raw.where((e) => !exact(e))]) {
+      final name = ep['name'] as String;
+      final suffix = helperSuffix(ep);
+      final base = GeneratorUtils.identifier(
+        name,
+        avoid: GeneratorUtils.objectMembers,
+      );
+      var dartName = base;
+      var n = 2;
+      while (used.contains(dartName) ||
+          (suffix != null && used.contains('$dartName$suffix'))) {
+        dartName = '$base${n++}';
+      }
+      used.add(dartName);
+      if (suffix != null) used.add('$dartName$suffix');
+      names[name] = dartName;
+    }
+    // Locals and top-level names the generated method bodies refer to.
+    const paramAvoid = {
+      'options',
+      'idempotencyKey',
+      'reconnect',
+      'headers',
+      'query',
+      'response',
+      'extra',
+      'e',
+      'k',
+      'v',
+      'json',
+      'models',
+      'jsonEncode',
+      'utf8',
+      'identical',
+    };
     final out = <_Endpoint>[];
     for (final ep in raw) {
       final name = ep['name'] as String;
-      var dartName = GeneratorUtils.identifier(name, avoid: used);
-      used.add(dartName);
+      final dartName = names[name]!;
       final op = ops[name] ?? const {};
-      final paramAvoid = {'options', 'idempotencyKey', 'reconnect'};
       final params = <_Param>[];
-      for (final p in (ep['parameters'] as List? ?? const [])) {
-        final pm = (p as Map).cast<String, dynamic>();
-        var dart = GeneratorUtils.identifier(pm['name'] as String, avoid: paramAvoid);
-        while (params.any((x) => x.dart == dart)) {
-          dart = '${dart}2';
-        }
+      final rawParams = [
+        for (final p in (ep['parameters'] as List? ?? const []))
+          (p as Map).cast<String, dynamic>(),
+      ];
+      final paramNames = GeneratorUtils.uniqueNames(
+        [for (final pm in rawParams) pm['name'] as String],
+        <String>{},
+        avoid: paramAvoid,
+      );
+      for (final (i, pm) in rawParams.indexed) {
+        final dart = paramNames[i];
         params.add(
           _Param(
             pm['name'] as String,
             dart,
-            m.resolve((pm['typeRef'] as Map? ?? const {'kind': 'json'}).cast<String, dynamic>()),
+            m.resolve(
+              (pm['typeRef'] as Map? ?? const {'kind': 'json'})
+                  .cast<String, dynamic>(),
+            ),
             pm['isOptional'] as bool? ?? false,
             pm['source'] as String? ?? 'query',
           ),
         );
       }
-      final streaming = ep['streaming'] is Map ? (ep['streaming'] as Map)['type'] as String? : null;
+      final streaming = ep['streaming'] is Map
+          ? (ep['streaming'] as Map)['type'] as String?
+          : null;
       out.add(
         _Endpoint(
           raw: ep,
@@ -298,7 +444,10 @@ class SdkWriter {
           method: (ep['method'] as String? ?? 'GET').toUpperCase(),
           path: ep['path'] as String? ?? '/',
           params: params,
-          returnType: m.resolve((ep['returnType'] as Map? ?? const {'kind': 'void'}).cast<String, dynamic>()),
+          returnType: m.resolve(
+            (ep['returnType'] as Map? ?? const {'kind': 'void'})
+                .cast<String, dynamic>(),
+          ),
           returnOptional: ep['returnIsOptional'] as bool? ?? false,
           streaming: streaming,
           invalidates: [
@@ -307,7 +456,8 @@ class SdkWriter {
               ...(op['invalidates'] as List? ?? const []).cast<String>(),
             },
           ]..sort(),
-          cacheIdentity: (ep['cacheIdentity'] ?? op['cacheIdentity']) as String?,
+          cacheIdentity:
+              (ep['cacheIdentity'] ?? op['cacheIdentity']) as String?,
           idempotent: op['idempotent'] == true,
         ),
       );
@@ -320,7 +470,8 @@ class SdkWriter {
     final endpoints = _endpoints(c);
     final project = c.contract['project'];
     final ident = project is Map
-        ? ' (${project['project_id'] ?? ''} ${project['version'] ?? ''})'.replaceAll(' )', ')')
+        ? ' (${project['project_id'] ?? ''} ${project['version'] ?? ''})'
+              .replaceAll(' )', ')')
         : '';
 
     // Cache identity -> endpoint ids (deterministic).
@@ -339,7 +490,9 @@ class SdkWriter {
       final auth = e.raw['auth'];
       if (auth is Map && auth['methods'] is List) {
         for (final am in auth['methods'] as List) {
-          if (am is Map && am['name'] is String) authMethods.add(am['name'] as String);
+          if (am is Map && am['name'] is String) {
+            authMethods.add(am['name'] as String);
+          }
         }
       }
     }
@@ -349,9 +502,13 @@ class SdkWriter {
     b.writeln('  $cls._(this._runtime, this._namespace)');
     b.writeln('    : axiom = ${cls}AxiomNamespace._(_runtime, _namespace);');
     b.writeln();
-    b.writeln('  /// Binds this client to another namespace of [runtime], for example the same');
+    b.writeln(
+      '  /// Binds this client to another namespace of [runtime], for example the same',
+    );
     b.writeln('  /// contract loaded a second time with a different base URL.');
-    b.writeln('  $cls(AxiomRuntime runtime, String namespace) : this._(runtime, namespace);');
+    b.writeln(
+      '  $cls(AxiomRuntime runtime, String namespace) : this._(runtime, namespace);',
+    );
     b.writeln();
     b.writeln('  final AxiomRuntime _runtime;');
     b.writeln('  final String _namespace;');
@@ -369,7 +526,9 @@ class SdkWriter {
     b.writeln('  /// Endpoint ids by contract cache identity.');
     b.writeln('  static const Map<String, List<int>> cacheIdentities = {');
     for (final k in identities.keys.toList()..sort()) {
-      b.writeln('    ${GeneratorUtils.str(k)}: [${(identities[k]!..sort()).join(', ')}],');
+      b.writeln(
+        '    ${GeneratorUtils.str(k)}: [${(identities[k]!..sort()).join(', ')}],',
+      );
     }
     b.writeln('  };');
     b.writeln();
@@ -392,7 +551,9 @@ class SdkWriter {
       }
     }
     b.writeln();
-    b.writeln('  /// Refetches the active queries of every endpoint with [identity].');
+    b.writeln(
+      '  /// Refetches the active queries of every endpoint with [identity].',
+    );
     b.writeln('  void invalidateIdentity(String identity) {');
     b.writeln('    final ids = cacheIdentities[identity];');
     b.writeln('    if (ids == null) return;');
@@ -411,23 +572,31 @@ class SdkWriter {
     b.writeln('  final String _namespace;');
     b.writeln();
     b.writeln('  void setAuthToken(String methodName, String token) {');
-    b.writeln('    _runtime.setAuthToken(namespace: _namespace, methodName: methodName, token: token);');
+    b.writeln(
+      '    _runtime.setAuthToken(namespace: _namespace, methodName: methodName, token: token);',
+    );
     b.writeln('  }');
     b.writeln();
     b.writeln('  void clearAuthToken(String methodName) {');
-    b.writeln('    _runtime.clearAuthToken(namespace: _namespace, methodName: methodName);');
+    b.writeln(
+      '    _runtime.clearAuthToken(namespace: _namespace, methodName: methodName);',
+    );
     b.writeln('  }');
     b.writeln();
     b.writeln('  /// Sets [token] for every auth method of this namespace.');
     b.writeln('  void setNamespaceToken(String token) {');
-    b.writeln('    _runtime.setNamespaceAuthToken(namespace: _namespace, token: token);');
+    b.writeln(
+      '    _runtime.setNamespaceAuthToken(namespace: _namespace, token: token);',
+    );
     b.writeln('  }');
     b.writeln();
     b.writeln('  void clearNamespaceToken() {');
     b.writeln('    _runtime.clearNamespaceAuthToken(namespace: _namespace);');
     b.writeln('  }');
     b.writeln();
-    b.writeln('  /// Marks every cached query of this namespace stale and refetches.');
+    b.writeln(
+      '  /// Marks every cached query of this namespace stale and refetches.',
+    );
     b.writeln('  void invalidateAll() {');
     b.writeln('    _runtime.invalidate(namespace: _namespace);');
     b.writeln('  }');
@@ -437,7 +606,249 @@ class SdkWriter {
 
   // ---------------------------------------------------------------------------
 
-  String _signature(_Endpoint e, {bool includeBody = true, List<String> extra = const []}) {
+  final Set<String> _rpcExtensions = {};
+
+  /// Model RPCs (`models.<Model>.rpcs.<name>`): an extension method on the
+  /// model that calls the mapped endpoint of [c] with a request built by the
+  /// resolver (`$args.<argument>`, `$this.<field>`, literals), e.g.
+  /// `person.getContacts(sdk.rpc, limit: 10)`.
+  void _writeRpcs(StringBuffer b, ContractInput c) {
+    final rawModels = c.ir['models'];
+    final entries = <String, Map<String, dynamic>>{};
+    if (rawModels is Map) {
+      rawModels.forEach((k, v) {
+        if (v is Map) entries['$k'] = v.cast<String, dynamic>();
+      });
+    } else if (rawModels is List) {
+      for (final v in rawModels) {
+        if (v is Map && v['name'] is String) {
+          entries[v['name'] as String] = v.cast<String, dynamic>();
+        }
+      }
+    }
+    final endpoints = {for (final e in _endpoints(c)) e.name: e};
+    for (final rawName in entries.keys.toList()..sort()) {
+      final rpcs = entries[rawName]!['rpcs'];
+      if (rpcs is! Map || rpcs.isEmpty) continue;
+      final model = schema.models[GeneratorUtils.pascalCase(rawName)];
+      if (model == null) continue;
+      final ext = GeneratorUtils.unique('${model.dartName}Rpc', _rpcExtensions);
+      // Instance members shadow extension methods: never reuse them.
+      final members = <String>{
+        for (final f in model.fields) f.dart,
+        'toJson',
+        'copyWith',
+        'fromJson',
+        ...GeneratorUtils.objectMembers,
+      };
+      final methods = <String>[];
+      for (final rpcName in (rpcs.keys.map((k) => '$k').toList()..sort())) {
+        final rpc = rpcs[rpcName];
+        if (rpc is! Map) continue;
+        final e = endpoints[rpc['endpoint']];
+        if (e == null) {
+          throw GeneratorException(
+            'Model RPC ${model.raw}.$rpcName maps to endpoint "${rpc['endpoint']}", '
+            'which contract "${c.namespace}" does not declare.',
+          );
+        }
+        methods.add(
+          _rpcMethod(
+            c,
+            model,
+            rpcName,
+            rpc.cast<String, dynamic>(),
+            e,
+            members,
+          ),
+        );
+      }
+      if (methods.isEmpty) continue;
+      b.writeln(
+        '/// RPCs of [models.${model.dartName}] (`${c.namespace}` contract).',
+      );
+      b.writeln('extension $ext on models.${model.dartName} {');
+      b.write(methods.join('\n'));
+      b.writeln('}');
+      b.writeln();
+    }
+  }
+
+  String _rpcMethod(
+    ContractInput c,
+    ModelSpec model,
+    String rpcName,
+    Map<String, dynamic> rpc,
+    _Endpoint e,
+    Set<String> members,
+  ) {
+    final b = StringBuffer();
+    final name = GeneratorUtils.uniqueIdentifier(rpcName, members);
+    final rawArgs = rpc['arguments'] is Map
+        ? (rpc['arguments'] as Map).cast<String, dynamic>()
+        : <String, dynamic>{};
+    final argWires = rawArgs.keys.toList();
+    final argNames = GeneratorUtils.uniqueNames(
+      argWires,
+      <String>{},
+      // Fields stay reachable without `this.` (unnecessary_this lint).
+      avoid: {
+        'module',
+        'options',
+        'headers',
+        'query',
+        'e',
+        'k',
+        'v',
+        'json',
+        'models',
+        'jsonEncode',
+        for (final f in model.fields) f.dart,
+      },
+    );
+    final args = <String, (String, TypeNode, bool)>{};
+    for (final (i, w) in argWires.indexed) {
+      final t = (rawArgs[w] as Map).cast<String, dynamic>();
+      args[w] = (
+        argNames[i],
+        m.resolve(t),
+        t['isOptional'] == true || t['optional'] == true,
+      );
+    }
+
+    String value(Object? v) {
+      if (v is String && v.startsWith(r'$args.')) {
+        final a = args[v.substring(6)];
+        if (a == null) {
+          throw GeneratorException(
+            'Model RPC ${model.raw}.$rpcName refers to unknown argument "$v".',
+          );
+        }
+        final (dart, type, optional) = a;
+        return optional
+            ? (m.isIdentityEncode(type)
+                  ? dart
+                  : '$dart == null ? null : ${m.encode(type, '$dart!')}')
+            : m.encode(type, dart);
+      }
+      if (v is String && v.startsWith(r'$this.')) {
+        final wire = v.substring(6);
+        final f = model.fields.where((f) => f.wire == wire).firstOrNull;
+        if (f == null) {
+          throw GeneratorException(
+            'Model RPC ${model.raw}.$rpcName refers to unknown field "$v".',
+          );
+        }
+        final x =
+            const {'module', 'options', 'headers', 'query'}.contains(f.dart)
+            ? 'this.${f.dart}'
+            : f.dart;
+        return f.optional
+            ? (m.isIdentityEncode(f.type)
+                  ? x
+                  : '$x == null ? null : ${m.encode(f.type, '$x!')}')
+            : m.encode(f.type, x);
+      }
+      if (v is String) return GeneratorUtils.str(v);
+      if (v is Map) {
+        return '<String, dynamic>{${v.entries.map((en) => '${GeneratorUtils.str('${en.key}')}: ${value(en.value)}').join(', ')}}';
+      }
+      if (v is List) return '[${v.map(value).join(', ')}]';
+      return '$v';
+    }
+
+    String str(Object? v) {
+      final x = value(v);
+      return v is String && !v.startsWith(r'$') ? x : '\'\${$x}\'';
+    }
+
+    final resolver = rpc['resolver'] is Map
+        ? (rpc['resolver'] as Map).cast<String, dynamic>()
+        : const <String, dynamic>{};
+    Map<String, dynamic> section(String k) => resolver[k] is Map
+        ? (resolver[k] as Map).cast<String, dynamic>()
+        : const {};
+    final body = resolver['body'];
+    final query = section('query');
+    final path = section('path');
+    final headers = section('headers');
+
+    final rt = _returnType(e);
+    final params = [
+      for (final w in argWires)
+        args[w]!.$3
+            ? '${m.dartType(args[w]!.$2)}${m.dartType(args[w]!.$2).endsWith('?') ? '' : '?'} ${args[w]!.$1}'
+            : 'required ${m.dartType(args[w]!.$2)} ${args[w]!.$1}',
+      'AxiomCallOptions? options',
+    ];
+    final cls = _moduleClass(c);
+    b.writeln(
+      '  /// `${model.raw}.$rpcName`: calls `${e.name}` (`${e.method} ${e.path}`).',
+    );
+    b.writeln('  AxiomQuery<$rt> $name($cls module, {${params.join(', ')}}) {');
+    if (headers.isNotEmpty || (e.isMutation && e.idempotent)) {
+      if (e.isMutation && e.idempotent) _usesIdempotency = true;
+      b.writeln('    final headers = <String, String>{');
+      headers.forEach(
+        (k, v) => b.writeln('      ${GeneratorUtils.str(k)}: ${str(v)},'),
+      );
+      if (e.isMutation && e.idempotent) {
+        b.writeln("      'Idempotency-Key': _newIdempotencyKey(),");
+      }
+      b.writeln('    };');
+    }
+    final call = e.isMutation ? 'sendMutation' : 'send';
+    final invalidated = e.invalidates.isNotEmpty;
+    b.writeln(
+      '    ${invalidated ? 'final query =' : 'return'} module._runtime.$call<$rt>(',
+    );
+    b.writeln('      namespace: module._namespace,');
+    b.writeln('      endpointId: ${e.id},');
+    b.writeln('      method: ${GeneratorUtils.str(e.method)},');
+    b.writeln('      path: ${GeneratorUtils.str(e.path)},');
+    b.writeln(
+      headers.isNotEmpty || (e.isMutation && e.idempotent)
+          ? '      headers: options?.mergeHeaders(headers) ?? headers,'
+          : '      headers: options?.mergeHeaders(null),',
+    );
+    if (path.isNotEmpty) {
+      b.writeln(
+        '      pathParams: {${path.entries.map((en) => '${GeneratorUtils.str(en.key)}: Uri.encodeComponent(${str(en.value)})').join(', ')}},',
+      );
+    }
+    if (query.isNotEmpty) {
+      b.writeln(
+        '      queryParams: {${query.entries.map((en) => '${GeneratorUtils.str(en.key)}: ${str(en.value)}').join(', ')}},',
+      );
+    }
+    if (body != null) b.writeln('      body: jsonEncode(${value(body)}),');
+    b.writeln('      args: <String, dynamic>{');
+    b.writeln("        'rpc': ${GeneratorUtils.str('${model.raw}.$rpcName')},");
+    if (body != null) b.writeln("        'body': ${value(body)},");
+    if (query.isNotEmpty) b.writeln("        'query': ${value(query)},");
+    if (path.isNotEmpty) b.writeln("        'path': ${value(path)},");
+    b.writeln('      },');
+    b.writeln('      decoder: ${_decoder(e)},');
+    b.writeln('      options: options,');
+    b.writeln('    );');
+    if (invalidated) {
+      b.writeln('    return _onSuccess(query, module._runtime, () {');
+      b.writeln(
+        '      for (final identity in const [${e.invalidates.map(GeneratorUtils.str).join(', ')}]) {',
+      );
+      b.writeln('        module.invalidateIdentity(identity);');
+      b.writeln('      }');
+      b.writeln('    });');
+    }
+    b.writeln('  }');
+    return b.toString();
+  }
+
+  String _signature(
+    _Endpoint e, {
+    bool includeBody = true,
+    List<String> extra = const [],
+  }) {
     final parts = <String>[];
     for (final p in e.params) {
       if (!includeBody && p.source == 'body') continue;
@@ -464,7 +875,9 @@ class SdkWriter {
     if (t is VoidType) return '${m.codec}.asVoid';
     if (e.returnOptional) return '(json) => ${m.decodeNullable(t, 'json')}';
     if (t is JsonType) return '${m.codec}.asJson';
-    if (t is ListType || t is MapType) return '(json) => ${m.decode(t, 'json')}';
+    if (t is ListType || t is MapType) {
+      return '(json) => ${m.decode(t, 'json')}';
+    }
     return m.decodeFn(t);
   }
 
@@ -553,7 +966,9 @@ class SdkWriter {
 
   void _writeDoc(StringBuffer b, _Endpoint e) {
     b.write(GeneratorUtils.docComment(e.raw['doc'] as String?, '  '));
-    b.writeln('  /// `${e.method} ${e.path}`${e.streaming != null ? ' (${e.streaming})' : ''}.');
+    b.writeln(
+      '  /// `${e.method} ${e.path}`${e.streaming != null ? ' (${e.streaming})' : ''}.',
+    );
     final cache = e.raw['cache'];
     if (cache is Map && cache['strategy'] != null) {
       b.writeln('  ///');
@@ -568,7 +983,9 @@ class SdkWriter {
     }
     if (e.invalidates.isNotEmpty) {
       b.writeln('  ///');
-      b.writeln('  /// On success invalidates: ${e.invalidates.map((i) => '`$i`').join(', ')}.');
+      b.writeln(
+        '  /// On success invalidates: ${e.invalidates.map((i) => '`$i`').join(', ')}.',
+      );
     }
     final failures = schema.endpointFailures[e.name];
     if (failures != null && failures.isNotEmpty) {
@@ -580,7 +997,11 @@ class SdkWriter {
     }
   }
 
-  void _writeEndpoint(StringBuffer b, _Endpoint e, Map<String, List<int>> identities) {
+  void _writeEndpoint(
+    StringBuffer b,
+    _Endpoint e,
+    Map<String, List<int>> identities,
+  ) {
     final rt = _returnType(e);
     final idem = e.isMutation;
     if (idem && e.idempotent) _usesIdempotency = true;
@@ -589,20 +1010,27 @@ class SdkWriter {
       'AxiomCallOptions? options',
     ];
     _writeDoc(b, e);
-    b.writeln('  AxiomQuery<$rt> ${e.dartName}(${_signature(e, extra: extra)}) {');
+    b.writeln(
+      '  AxiomQuery<$rt> ${e.dartName}(${_signature(e, extra: extra)}) {',
+    );
     final parts = _requestParts(b, e, idempotency: idem);
-    if ((e.streaming == 'sse' || e.streaming == 'http_stream') && !e.isMutation) {
+    if ((e.streaming == 'sse' || e.streaming == 'http_stream') &&
+        !e.isMutation) {
       _usesStreams = true;
       final bodyIdx = parts.indexWhere((p) => p.startsWith('body: '));
       String? body;
-      if (bodyIdx >= 0) body = parts.removeAt(bodyIdx).substring('body: '.length);
+      if (bodyIdx >= 0) {
+        body = parts.removeAt(bodyIdx).substring('body: '.length);
+      }
       final hIdx = parts.indexWhere((p) => p.startsWith('headers: '));
       final h = parts[hIdx].substring('headers: '.length);
       parts[hIdx] = h.endsWith('?? headers')
           ? 'headers: {...($h), ...extra}'
           : 'headers: {...?($h), ...extra}';
       b.writeln('    return _streamQuery<$rt>(');
-      b.writeln("      '\${_namespace}_${e.id}_stream_\${jsonEncode(${_argsMap(e)})}',");
+      b.writeln(
+        "      '\${_namespace}_${e.id}_stream_\${jsonEncode(${_argsMap(e)})}',",
+      );
       b.writeln('      _runtime,');
       b.writeln('      (extra) => _runtime.callStream(');
       b.writeln('        namespace: _namespace,');
@@ -612,9 +1040,11 @@ class SdkWriter {
       for (final p in parts) {
         b.writeln('        $p,');
       }
-      b.writeln(body == null
-          ? '        requestBytes: Uint8List(0),'
-          : '        requestBytes: _utf8Bytes($body),');
+      b.writeln(
+        body == null
+            ? '        requestBytes: Uint8List(0),'
+            : '        requestBytes: _utf8Bytes($body),',
+      );
       b.writeln('        options: options,');
       b.writeln('      ),');
       b.writeln('      ${m.decodeFn(e.returnType)},');
@@ -625,8 +1055,7 @@ class SdkWriter {
     final call = e.isMutation ? 'sendMutation' : 'send';
     final invalidated = <int>{
       for (final i in e.invalidates) ...?identities[i],
-    }.toList()
-      ..sort();
+    }.toList()..sort();
     final prefix = invalidated.isEmpty ? 'return' : 'final query =';
     b.writeln('    $prefix _runtime.$call<$rt>(');
     b.writeln('      namespace: _namespace,');
@@ -643,7 +1072,9 @@ class SdkWriter {
     if (invalidated.isNotEmpty) {
       _usesInvalidation = true;
       b.writeln('    return _onSuccess(query, _runtime, () {');
-      b.writeln('      _invalidateEndpoints(_runtime, _namespace, const [${invalidated.join(', ')}]);');
+      b.writeln(
+        '      _invalidateEndpoints(_runtime, _namespace, const [${invalidated.join(', ')}]);',
+      );
       b.writeln('    });');
     }
     b.writeln('  }');
@@ -652,9 +1083,13 @@ class SdkWriter {
   void _writeStreamHelper(StringBuffer b, _Endpoint e) {
     _usesStreams = true;
     final rt = m.dartType(e.returnType);
-    b.writeln('  /// Frames of `${e.name}` as a typed stream. Cancelling the subscription');
+    b.writeln(
+      '  /// Frames of `${e.name}` as a typed stream. Cancelling the subscription',
+    );
     b.writeln('  /// cancels the request.');
-    b.writeln('  Stream<$rt> ${e.dartName}Stream(${_signature(e, extra: ['AxiomCallOptions? options'])}) {');
+    b.writeln(
+      '  Stream<$rt> ${e.dartName}Stream(${_signature(e, extra: ['AxiomCallOptions? options'])}) {',
+    );
     final parts = _requestParts(b, e);
     final bodyIdx = parts.indexWhere((p) => p.startsWith('body: '));
     String? body;
@@ -674,7 +1109,9 @@ class SdkWriter {
     );
     b.writeln('      options: options,');
     b.writeln('    );');
-    b.writeln('    return _frames(response, _runtime, ${m.decodeFn(e.returnType)});');
+    b.writeln(
+      '    return _frames(response, _runtime, ${m.decodeFn(e.returnType)});',
+    );
     b.writeln('  }');
   }
 
@@ -690,16 +1127,18 @@ class SdkWriter {
 
     final bodyParams = e.by('body').toList();
     final receive = msg('server') ?? e.returnType;
-    final send = msg('client') ??
+    final send =
+        msg('client') ??
         (bodyParams.length == 1 ? bodyParams.single.type : const JsonType());
     final rt = m.dartType(receive);
     final st = m.dartType(send);
     final auto = s['reconnect'] == 'auto';
-    b.writeln('  /// Typed WebSocket channel for `${e.name}`: send [$st], receive [$rt].');
-    b.writeln('  AxiomChannel<$rt, $st> ${e.dartName}Channel(${_signature(e, includeBody: false, extra: [
-      'AxiomReconnectPolicy reconnect = AxiomReconnectPolicy.${auto ? 'auto' : 'none'}',
-      'AxiomCallOptions? options',
-    ])}) {');
+    b.writeln(
+      '  /// Typed WebSocket channel for `${e.name}`: send [$st], receive [$rt].',
+    );
+    b.writeln(
+      '  AxiomChannel<$rt, $st> ${e.dartName}Channel(${_signature(e, includeBody: false, extra: ['AxiomReconnectPolicy reconnect = AxiomReconnectPolicy.${auto ? 'auto' : 'none'}', 'AxiomCallOptions? options'])}) {',
+    );
     final parts = _requestParts(b, e, includeBody: false);
     b.writeln('    return _runtime.openChannel<$rt, $st>(');
     b.writeln('      namespace: _namespace,');
@@ -709,7 +1148,9 @@ class SdkWriter {
     for (final p in parts) {
       b.writeln('      $p,');
     }
-    b.writeln('      decoder: ${receive is JsonType ? '${m.codec}.asJson' : m.decodeFn(receive)},');
+    b.writeln(
+      '      decoder: ${receive is JsonType ? '${m.codec}.asJson' : m.decodeFn(receive)},',
+    );
     b.writeln('      reconnect: reconnect,');
     b.writeln('      options: options,');
     b.writeln('    );');
