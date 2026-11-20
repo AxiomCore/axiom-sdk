@@ -15,6 +15,8 @@ set -euo pipefail
 APP="$(cd "$(dirname "$0")/.." && pwd)"
 WEB_PORT="${WEB_PORT:-8792}"
 BASE="${FIXTURE_BASE_URL:-http://127.0.0.1:8791}"
+# Second fixture instance without cors() for WebSocket checks (FIXTURE_CORS=0 ./run.sh 8793).
+WS_BASE="${FIXTURE_WS_BASE_URL:-}"
 CHROME="${CHROME:-$(command -v google-chrome || command -v chrome || command -v chromium)}"
 TIMEOUT="${TIMEOUT:-120}"
 MODE="${MODE:-debug}"
@@ -25,6 +27,7 @@ RECEIPT="${RECEIPT:-$APP/receipt-web.json}"
 cd "$APP"
 if [ "${SKIP_BUILD:-0}" != "1" ]; then
   args=(--"$MODE" --dart-define=FIXTURE_BASE_URL="$BASE" --base-href "$BASE_HREF")
+  [ -n "$WS_BASE" ] && args+=(--dart-define=FIXTURE_WS_BASE_URL="$WS_BASE")
   [ "$CSP" = "1" ] && args+=(--no-web-resources-cdn --csp)
   [ "$WASM" = "1" ] && args+=(--wasm)
   # shellcheck disable=SC2086

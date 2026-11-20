@@ -14,8 +14,9 @@ final streamChecks = <CheckDef>[
     expectEq(r.seq, 1, 'frame seq');
   }),
   CheckDef('stream.websocket_echo', 'streams', (c) async {
-    c.api.axiom.setAuthToken('wsEcho', fixtureBearerToken);
-    final r = await data(c.api.wsEcho(message: Ping(text: 'hi', seq: 7)));
+    final api = await c.wsApi();
+    api.axiom.setAuthToken('wsEcho', fixtureBearerToken);
+    final r = await data(api.wsEcho(message: Ping(text: 'hi', seq: 7)));
     expectEq(r.text, 'hi', 'echo text');
     expectEq(r.seq, 7, 'echo seq');
   }),

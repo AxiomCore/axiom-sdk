@@ -213,6 +213,62 @@ class _Request {
   final int endpointId;
   Timer? timeout;
   bool timedOut = false;
+
+  /// Server-Sent Events framing detected on the first chunk; null = unknown.
+  bool? sse;
+  String sseBuffer = '';
+}
+
+/// Minimal text/event-stream parser: the runtime forwards raw SSE bytes, so
+/// the SDK extracts the `data:` payload of each event (multi-line data joined
+/// with `\n`, comments and id/event/retry fields dropped).
+class _Sse {
+  static final _start = RegExp(r'^\s*(data|id|event|retry)?:');
+
+  static bool looksLike(Uint8List bytes) {
+    if (bytes.isEmpty) return false;
+    final head = utf8.decode(
+      bytes.length > 64 ? bytes.sublist(0, 64) : bytes,
+      allowMalformed: true,
+    );
+    return _start.hasMatch(head);
+  }
+
+  /// Appends [chunk] to [req]'s buffer and returns the complete events.
+  static List<Uint8List> feed(_Request req, Uint8List chunk, {bool flush = false}) {
+    req.sseBuffer += utf8
+        .decode(chunk, allowMalformed: true)
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n');
+    final out = <Uint8List>[];
+    while (true) {
+      final i = req.sseBuffer.indexOf('\n\n');
+      if (i < 0) break;
+      final block = req.sseBuffer.substring(0, i);
+      req.sseBuffer = req.sseBuffer.substring(i + 2);
+      final d = _data(block);
+      if (d != null) out.add(d);
+    }
+    if (flush && req.sseBuffer.trim().isNotEmpty) {
+      final d = _data(req.sseBuffer);
+      req.sseBuffer = '';
+      if (d != null) out.add(d);
+    }
+    return out;
+  }
+
+  static Uint8List? _data(String block) {
+    final lines = <String>[];
+    for (final line in block.split('\n')) {
+      if (line.startsWith('data:')) {
+        var v = line.substring(5);
+        if (v.startsWith(' ')) v = v.substring(1);
+        lines.add(v);
+      }
+    }
+    if (lines.isEmpty) return null;
+    return Uint8List.fromList(utf8.encode(lines.join('\n')));
+  }
 }
 
 /// What the SDK knows about a `send` query key (for invalidate/setQueryData).
@@ -605,20 +661,36 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   }
 
   void _onEvent(int id, int evt, int errCode, Uint8List data, Uint8List err) {
+    // ignore: parameter_assignments
     final req = _requests[id];
     if (req == null) return;
     final controller = req.controller;
 
     switch (evt) {
       case EventType.complete:
+        if (req.sse == true && !controller.isClosed) {
+          for (final e in _Sse.feed(req, Uint8List(0), flush: true)) {
+            controller.add(
+              AxiomState.success(e, AxiomSource.network, isStreaming: true),
+            );
+          }
+        }
         _finish(id);
         return;
       case EventType.streamChunk:
-        if (!controller.isClosed) {
-          controller.add(
-            AxiomState.success(data, AxiomSource.network, isStreaming: true),
-          );
+        req.sse ??= _Sse.looksLike(data);
+        if (controller.isClosed) return;
+        if (req.sse!) {
+          for (final e in _Sse.feed(req, data)) {
+            controller.add(
+              AxiomState.success(e, AxiomSource.network, isStreaming: true),
+            );
+          }
+          return;
         }
+        controller.add(
+          AxiomState.success(data, AxiomSource.network, isStreaming: true),
+        );
         return;
       case EventType.error:
         var error = _decodeError(errCode, err);
@@ -645,6 +717,11 @@ class AxiomRuntimeWeb implements AxiomRuntime {
         return;
       default:
         if (data.isEmpty && evt != EventType.networkSuccess) return;
+        if (_Sse.looksLike(data)) {
+          // A whole event-stream body delivered as one response.
+          final events = _Sse.feed(req, data, flush: true);
+          if (events.isNotEmpty) data = events.last;
+        }
         if (!controller.isClosed) {
           controller.add(
             AxiomState.success(
@@ -880,7 +957,13 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     AxiomCallOptions? options,
   }) {
     final id = _nextRequestId++;
-    final controller = StreamController<AxiomState<Uint8List>>.broadcast();
+    // Synchronous: data and the Complete event of one drain reach listeners
+    // in the same turn, so a query's "stream closed" flag is set before the
+    // next subscriber arrives (otherwise a 2nd identical call could get the
+    // old network state instead of a fresh cache read).
+    final controller = StreamController<AxiomState<Uint8List>>.broadcast(
+      sync: true,
+    );
     final req = _Request(controller, namespace, endpointId);
     _requests[id] = req;
     controller.add(AxiomState.loading());
