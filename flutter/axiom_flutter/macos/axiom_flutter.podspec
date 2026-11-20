@@ -1,3 +1,9 @@
+require 'json'
+
+# Runtime pin shared with Package.swift; this copy ships inside the pub package
+# and is kept identical to the repository root by scripts/check-runtime-pin.py.
+runtime_pin = JSON.parse(File.read(File.join(__dir__, '..', 'runtime-pin.json')))
+
 Pod::Spec.new do |s|
   s.name             = 'axiom_flutter'
   s.version          = '0.147.5'
@@ -16,10 +22,12 @@ Pod::Spec.new do |s|
   # 👇 THE MAGIC DOWNLOAD SCRIPT 👇
   framework_name = 'AxiomRuntime.xcframework'
   zip_name = "#{framework_name}.zip"
-  runtime_version = '0.148.6' # Independent, verified AxiomRuntime release pin.
-  url = "https://github.com/AxiomCore/AxiomCore/releases/download/v#{runtime_version}/#{zip_name}"
-
-  runtime_sha256 = 'f8b394fe7be49091face20e142ae2c3f2c4ad2a47235d736c137493bbe014db6'
+  runtime_version = runtime_pin.fetch('runtime_version')
+  url = runtime_pin.fetch('apple').fetch('url')
+  runtime_sha256 = runtime_pin.fetch('apple').fetch('sha256')
+  unless runtime_sha256 =~ /\A[0-9a-f]{64}\z/ && url.include?("/v#{runtime_version}/#{zip_name}")
+    raise "runtime-pin.json: invalid Apple runtime pin"
+  end
   # Download and verify on every preparation so a stale framework cannot
   # bypass the release pin. Failed downloads/checks leave the existing one intact.
   s.prepare_command = <<-CMD
