@@ -13,6 +13,7 @@ library;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:axiom_flutter/axiom_flutter.dart';
@@ -41,6 +42,18 @@ Future<void> _ok(HttpRequest r) async {
 /// Accepts connections and never answers.
 late ServerSocket _blackhole;
 final _held = <Socket>[];
+
+/// HTTP server on its own isolate (answers while the test isolate blocks).
+void _isolateServer(SendPort out) async {
+  final s = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+  out.send(s.port);
+  await for (final r in s) {
+    r.response
+      ..headers.contentType = ContentType.json
+      ..write('{"ok":true}');
+    await r.response.close();
+  }
+}
 
 Future<Uint8List> _loader(String path) async => File(path).readAsBytes();
 
@@ -235,5 +248,42 @@ void main() {
     final c = q(null)..setHeader('X-Tenant', 'z');
     expect(c.key, isNot(plain.key));
     expect(((await settle(c.stream)).data as Map)['tenant'], 'z');
+  });
+
+  test('cancel of a request Dart sees in flight returns true and delivers '
+      'Cancelled even when the runtime already finished it', () async {
+    final portRx = ReceivePort();
+    final iso = await Isolate.spawn(_isolateServer, portRx.sendPort);
+    final port = await portRx.first as int;
+    final j = jsonDecode(File('$_assets/fixture.axiom').readAsStringSync())
+        as Map<String, dynamic>;
+    for (final e in (j['endpoints'] as List)) {
+      (e as Map)['validation_enabled'] = false;
+    }
+    rt.loadContract(
+      namespace: 'fxiso',
+      baseUrl: 'http://127.0.0.1:$port',
+      contractBytes: Uint8List.fromList(utf8.encode(jsonEncode(j))),
+    );
+    final r = rt.callStream(
+      namespace: 'fxiso',
+      endpointId: epEverything,
+      method: 'GET',
+      path: '/types/everything',
+      requestBytes: Uint8List(0),
+    );
+    final states = <AxiomState<Uint8List>>[];
+    final done = Completer<void>();
+    r.stream.listen(states.add, onDone: done.complete);
+    addTearDown(() => iso.kill());
+    // Block this isolate: the runtime finishes the request meanwhile, but its
+    // events are not delivered to Dart yet (the Android race).
+    sleep(const Duration(milliseconds: 500));
+    expect(rt.cancel(r.requestId), isTrue);
+    await done.future.timeout(const Duration(seconds: 5));
+    final errs = states.where((s) => s.hasError).toList();
+    expect(errs.isNotEmpty && errs.first.error!.isCancelled, isTrue,
+        reason: '${states.map((s) => s.status)}');
+    expect(rt.cancel(987654321), isFalse);
   });
 }

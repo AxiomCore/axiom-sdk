@@ -1894,11 +1894,40 @@ class AxiomRuntimeIo implements AxiomRuntime {
     pending?.retryAuth = null;
     final fn = _cancelFfi;
     if (fn == null || requestId == 0) return false;
+    var ok = false;
     try {
-      return fn(requestId) == FfiError.success;
+      ok = fn(requestId) == FfiError.success;
     } catch (_) {
-      return false;
+      ok = false;
     }
+    if (ok || pending == null || pending.controller.isClosed) return ok;
+    // Dart still sees the request in flight, but the runtime does not know
+    // it (yet or any more): its task already finished with the Complete not
+    // delivered yet, or it is not registered yet. Cancel on the Dart side
+    // (later runtime events for this id are dropped) and retry the native
+    // cancel once after the next pump so an unregistered task is aborted.
+    final nativeId = requestId;
+    _finishCall(nativeId);
+    var err = parseRuntimeError(FfiError.cancelled, Uint8List(0));
+    if (pending.timedOut) {
+      err = AxiomError(
+        stage: ErrorStage.networkReceive,
+        category: ErrorCategory.timeout,
+        code: const NetworkTimeout(),
+        message: 'Request timed out (per-call timeout)',
+        retryable: true,
+      );
+      _reportError(err, pending.namespace, pending.endpointId, pending.publicId);
+    }
+    pending.controller
+      ..add(AxiomState.error(err))
+      ..close();
+    Timer(const Duration(milliseconds: 5), () {
+      try {
+        fn(nativeId);
+      } catch (_) {}
+    });
+    return true;
   }
 
   /// Closes every Dart-side call stream with a [Cancelled] error (used when
