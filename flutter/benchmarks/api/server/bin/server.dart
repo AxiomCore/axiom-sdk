@@ -170,7 +170,11 @@ Future<void> _startH2(int port) async {
       s.destroy();
       return;
     }
-    final conn = h2.ServerTransportConnection.viaSocket(s);
+    s.setOption(SocketOption.tcpNoDelay, true);
+    final conn = h2.ServerTransportConnection.viaSocket(
+      s,
+      settings: const h2.ServerSettings(concurrentStreamLimit: 1000),
+    );
     conn.incomingStreams.listen((st) => _h2Stream(st).catchError((Object _) {}),
         onError: (Object _) {});
   }, onError: (Object _) {});
