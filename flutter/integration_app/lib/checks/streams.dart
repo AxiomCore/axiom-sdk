@@ -1,3 +1,4 @@
+import 'package:axiom_flutter/axiom_flutter.dart';
 
 import '../axiom_generated/models.dart';
 import 'ctx.dart';
@@ -18,7 +19,12 @@ final streamChecks = <CheckDef>[
     // Guarded endpoint, no contract auth metadata: global token -> header.
     c.sdk.runtime.setGlobalAuthToken(fixtureBearerToken);
     try {
-      final r = await data(api.wsEcho(message: Ping(text: 'hi', seq: 7)));
+      // Native clients have no browser Origin; the fixture's stream policy
+      // only admits the web runner's origin (browsers ignore this header).
+      final r = await data(api.wsEcho(
+        message: Ping(text: 'hi', seq: 7),
+        options: const AxiomCallOptions(headers: {'Origin': 'http://127.0.0.1:8792'}),
+      ));
       expectEq(r.text, 'hi', 'echo text');
       expectEq(r.seq, 7, 'echo seq');
     } finally {
