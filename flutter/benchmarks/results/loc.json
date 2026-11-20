@@ -1,0 +1,54 @@
+{
+  "method": "Lines of code per client approach. Counts non-blank lines that are not only a comment\n(`//`, `///`, `#`). Prints JSON; `--out FILE` writes it.\n\nHand-written files per approach are listed in FILES below; generated files are counted\nseparately and never added to the hand-written total. For Acore the contract also carries the\nserver implementation (`managed { ... }` bodies); those lines are reported separately\n(`acore_managed_bodies`) so a reader can compare declarations only. The contract also declares a\nWebSocket endpoint the other clients do not have: `hand_written_unary_only` subtracts it.",
+  "approaches": {
+    "axiom": {
+      "hand_written": {
+        "files": {
+          "api/acore/main.acore": 55,
+          "app/AxiomDeps.toml": 4,
+          "app/lib/bench_axiom_setup.dart": 11
+        },
+        "total": 70
+      },
+      "generated": {
+        "files": {
+          "app/lib/axiom_generated/axiom_sdk.dart": 243,
+          "app/lib/axiom_generated/models.dart": 311
+        },
+        "total": 554
+      },
+      "acore_managed_bodies": 4,
+      "acore_websocket_lines": 15,
+      "hand_written_unary_only": 55
+    },
+    "dio_retrofit": {
+      "hand_written": {
+        "files": {
+          "api/dio_client/lib/src/api.dart": 16,
+          "api/dio_client/lib/src/models.dart": 38,
+          "api/dio_client/lib/bench_dio_client.dart": 3
+        },
+        "total": 57
+      },
+      "generated": {
+        "files": {
+          "api/dio_client/lib/src/api.g.dart": 134,
+          "api/dio_client/lib/src/models.g.dart": 37
+        },
+        "total": 171
+      }
+    },
+    "http_manual": {
+      "hand_written": {
+        "files": {
+          "api/http_client/lib/bench_http_client.dart": 65
+        },
+        "total": 65
+      },
+      "generated": {
+        "files": {},
+        "total": 0
+      }
+    }
+  }
+}

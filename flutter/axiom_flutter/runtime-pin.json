@@ -29,9 +29,9 @@
     }
   },
   "wasm": {
-    "runtime_commit": "85934e544ef08ede418cd76dc5c3c98e3a7c9de8",
-    "runtime_branch": "axiom-runtime flutter/f4 (flutter/parity a67a62d + wasm exports)",
-    "axiom_runtime_js_sha256": "e74b0dc93f1dddfc72ef42c16a486d4d9683a9bb7123a2ac11564f4c1411e8da",
-    "axiom_runtime_bg_wasm_sha256": "bd57be2892cbfeecf11ece2fb8fe279f3848c082485cd08ddf974ab727f6215e"
+    "runtime_commit": "822224b1886e6aeb21cf9eeb9627ca08131cc668",
+    "runtime_branch": "axiom-runtime flutter/c (flutter/parity + f4 + r merged, wasm wrappers for the 0.157 additive exports)",
+    "axiom_runtime_js_sha256": "727a02425559a97cb0ba86ab04e6cbfa678dca0f14e51e24caeb3c951fa4d26c",
+    "axiom_runtime_bg_wasm_sha256": "6f6916d917c853cceb548c1f72ec777c01680d019b9e75153c2d9784179b13d3"
   }
 }

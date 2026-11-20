@@ -1,0 +1,6 @@
+framework = "flutter"
+
+[contracts]
+
+[contracts.bench]
+source = "../api/acore/.out/bench.axiom"
