@@ -1,0 +1,6 @@
+framework = "flutter"
+
+[contracts]
+
+[contracts.fixture]
+source = "../fixtures/backend/.out/backend.axiom"
