@@ -132,4 +132,75 @@ void main() {
     expect(last.isSuccess, isTrue, reason: '${states.map((s) => '${s.status} ${s.error}').toList()}');
     expect(last.data, isNull);
   });
+
+  Future<(bool, Object?)> amBearer() async {
+    final r = rt.callStream(
+      namespace: 'am',
+      endpointId: epAmBearer,
+      method: 'GET',
+      path: '/auth/bearer',
+      requestBytes: Uint8List(0),
+    );
+    final states = <AxiomState<Uint8List>>[];
+    final done = Completer<void>();
+    r.stream.listen(states.add, onDone: done.complete);
+    await done.future.timeout(const Duration(seconds: 10));
+    final d = states.where((s) => s.hasData).toList();
+    if (d.isNotEmpty) return (true, jsonDecode(utf8.decode(d.last.data!)));
+    return (false, states.map((s) => s.error).whereType<AxiomError>().toList());
+  }
+
+  Future<void> bearerOnly(String token) async {
+    // Drop tokens a v2 runtime stored from earlier provider answers.
+    rt.clearNamespaceAuthToken(namespace: 'am');
+    handler = (r) async {
+      final ok = r.headers.value('authorization') == 'Bearer $token';
+      r.response
+        ..statusCode = ok ? 200 : 401
+        ..headers.contentType = ContentType.json
+        ..write(ok ? '{"method":"bearer","ok":true}' : '{"message":"no"}');
+      await r.response.close();
+    };
+  }
+
+  test('auth provider answers contract auth methods (published runtime too)',
+      () async {
+    await bearerOnly('tok-1');
+    final asked = <String>[];
+    rt.setAuthProvider((ns, m) async {
+      asked.add('$ns/$m');
+      return ns == 'am' ? 'tok-1' : null;
+    });
+    try {
+      final r = await amBearer();
+      expect(r.$1, isTrue, reason: 'asked: $asked, result: ${r.$2}');
+      expect(asked, contains('am/Authorization'));
+    } finally {
+      rt.setAuthProvider(null);
+    }
+    if (_published) {
+      // Provider removed: the token the Dart fallback stored is dropped.
+      final after = await amBearer();
+      expect(after.$1, isFalse, reason: 'token survived provider removal');
+    }
+  });
+
+  test('auth provider fallback re-asks once after an auth failure', () async {
+    await bearerOnly('tok-2');
+    var n = 0;
+    rt.setAuthProvider((ns, m) async => ++n == 1 ? 'stale' : 'tok-2');
+    try {
+      final r = await amBearer();
+      if (_published) {
+        expect(r.$1, isTrue, reason: 'asked $n times, result: ${r.$2}');
+        expect(n, 2);
+      } else {
+        // v2 runtime asks the provider itself (no Dart retry).
+        expect(n, greaterThanOrEqualTo(1));
+        expect(r.$1, isFalse, reason: 'stale token accepted?');
+      }
+    } finally {
+      rt.setAuthProvider(null);
+    }
+  });
 }
