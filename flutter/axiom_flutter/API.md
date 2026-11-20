@@ -77,3 +77,25 @@ cancelled. Mutations are never cancelled implicitly; call
 Unions, managed auth, batching, client-side validators (Phase 4/5). The
 legacy `init`, `startup`, `loadContract`, `setAuthToken`, `clearAuthToken`,
 `sendStreamMessage` remain and are not deprecated yet.
+
+## Explicit tokens (rule, unit b)
+
+Backend-profile contracts publish no client auth metadata (`"auth": null` on
+every endpoint), so the runtime never injects a stored token for them. Rule,
+shared by native and web (`lib/src/internal/auth_headers.dart`):
+
+- `setNamespaceAuthToken` / `setGlobalAuthToken` (namespace wins over global):
+  every call of that namespace sends `Authorization: Bearer <token>` unless
+  the caller already set an `Authorization` header. When the generator
+  registered contract auth methods for the namespace
+  (`AxiomContractMetadata.registerAuthMethods`), the token goes through the
+  runtime instead (no header added, no duplicate).
+- `setAuthProvider`: when no explicit token applies and the namespace has no
+  registered auth methods, the provider is asked `(namespace, '')` before
+  dispatch and a non-null answer is sent as the same header. With contract
+  auth methods the runtime asks the provider itself (flutter/r v2 callback).
+- `setAuthToken(namespace, methodName)` keeps the runtime path: it only
+  applies to endpoints whose contract declares that auth method name (for
+  example `Authorization`).
+- `resetSession` clears all of these, including tokens the runtime stored
+  from provider answers.
