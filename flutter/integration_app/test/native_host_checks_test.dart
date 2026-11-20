@@ -22,6 +22,10 @@ void main() {
   final lib = Platform.environment['AXIOM_RUNTIME_LIB'] ?? '';
   TestWidgetsFlutterBinding.ensureInitialized();
   test('integration checks on the host native runtime', () async {
+    // The test binding installs HttpOverrides that answer every dart:io
+    // HttpClient request with 400; the checks' own calls (OTLP sink records,
+    // issuer stubs) need the real network, like on a device.
+    HttpOverrides.global = null;
     final ctx = Ctx(await createFixtureSdk());
     // AXIOM_CHECKS=a.,b.x : run only checks whose id starts with one of the
     // comma-separated prefixes (local debugging; receipts use the full list).

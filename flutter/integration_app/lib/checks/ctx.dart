@@ -16,6 +16,20 @@ const String fixtureBaseUrl = String.fromEnvironment(
 /// Empty: WebSocket checks use [fixtureBaseUrl].
 const String fixtureWsBaseUrl = String.fromEnvironment('FIXTURE_WS_BASE_URL');
 
+/// Base URL of the hanging server (`flutter/fixtures/tool/hang.py`): accepts
+/// requests and never answers. Used by cancel / timeout / reset checks on
+/// every platform; they SKIP when it is empty. Android emulator:
+/// http://10.0.2.2:8806.
+const String fixtureHangUrl = String.fromEnvironment('FIXTURE_HANG_URL');
+
+/// Skips the calling check when [fixtureHangUrl] is not set.
+void requireHangUrl() {
+  if (fixtureHangUrl.isEmpty) {
+    skip('FIXTURE_HANG_URL not set: start flutter/fixtures/tool/hang.py and '
+        'pass --dart-define=FIXTURE_HANG_URL=http://127.0.0.1:8806');
+  }
+}
+
 /// Fixed HS256 token minted by `fixtures/backend/tool/jwt.py token`.
 const String fixtureBearerToken =
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2ZpeHR1cmUuYXhpb21jb3JlLmxvY2FsIiwiYXVkIjoiYXhpb20tZml4dHVyZSIsInN1YiI6ImZpeHR1cmUtdXNlciIsImV4cCI6NDEwMjQ0NDgwMCwiaWF0IjoxNzYzNjQwMDAwfQ.jwRiGU7TnZJe5u9JMFc25Crv5r6OscJkitUjMXAEwyU';
@@ -28,6 +42,19 @@ class Ctx {
   String get baseUrl => fixtureBaseUrl;
 
   FixtureModule? _ws;
+
+  /// Namespace of [wsApi].
+  String get wsNamespace => fixtureWsBaseUrl.isEmpty ? 'fixture' : 'fixture_ws';
+
+  /// Headers a native WebSocket check sends: the fixture's stream policy only
+  /// admits the web runner's origin (browsers ignore a caller Origin).
+  static const Map<String, String> wsHeaders = {'Origin': 'http://127.0.0.1:8792'};
+
+  /// Bearer for [wsNamespace] (guarded endpoint, no contract auth metadata:
+  /// a namespace token becomes the Authorization header). Pair with
+  /// [resetAuthState] or clearNamespaceAuthToken in a `finally`.
+  void setWsToken() => sdk.runtime
+      .setNamespaceAuthToken(namespace: wsNamespace, token: fixtureBearerToken);
 
   /// The fixture module for WebSocket checks: namespace `fixture_ws` bound to
   /// [fixtureWsBaseUrl] (falls back to [api] when that is not set).

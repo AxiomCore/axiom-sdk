@@ -109,8 +109,11 @@ final dChecks = <CheckDef>[
         expectEq(t.seq, 1, 'frame seq');
       })),
   CheckDef('gen.ws_channel', 'streams', (c) => _pendingAware(() async {
-        c.api.axiom.setAuthToken('wsEcho', fixtureBearerToken);
-        final channel = c.api.wsEchoChannel();
+        // Same server, token and Origin as stream.websocket_echo.
+        final api = await c.wsApi();
+        c.setWsToken();
+        final channel = api.wsEchoChannel(
+            options: const AxiomCallOptions(headers: Ctx.wsHeaders));
         try {
           final reply = channel.stream
               .firstWhere((s) => s.data != null || s.error != null)
@@ -121,7 +124,7 @@ final dChecks = <CheckDef>[
           expectEq(s.data?.text, 'typed', 'echo text');
         } finally {
           await channel.close();
-          c.api.axiom.clearAuthToken('wsEcho');
+          resetAuthState(c);
         }
       })),
   CheckDef('gen.validators', 'generator', (c) async {
