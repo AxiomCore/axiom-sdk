@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:axiom_flutter/axiom_flutter.dart' show AxiomSource;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart' show rootBundle;
 
@@ -89,6 +90,28 @@ final checksH = <CheckDef>[
     } finally {
       await sub.cancel();
       await ch.close();
+    }
+  }),
+  // Lead item (d): a repeat identical networkOnly query issued right after
+  // the previous one delivered data (possibly before its Complete event)
+  // must start a new request, not replay the old state. The benchmark
+  // worked around this with AxiomQueryManager().remove.
+  CheckDef('h.repeat_query_refetches', 'cache', (c) async {
+    final n = 'h-rep-${DateTime.now().microsecondsSinceEpoch}';
+    final ids = <int?>[];
+    for (var i = 0; i < 10; i++) {
+      final q = c.api.cacheNetworkOnly(nonce: n);
+      final s = await q.stream
+          .firstWhere((s) => s.isSuccess || s.hasError)
+          .timeout(const Duration(seconds: 10));
+      if (s.hasError) throw CheckFailure('call $i failed: ${s.error}');
+      if (s.source != AxiomSource.network) {
+        throw CheckFailure('call $i source ${s.source}');
+      }
+      ids.add(q.requestId);
+    }
+    if (ids.toSet().length != ids.length) {
+      throw CheckFailure('request ids repeated (stale replay): $ids');
     }
   }),
 ];

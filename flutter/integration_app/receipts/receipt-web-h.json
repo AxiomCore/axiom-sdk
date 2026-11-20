@@ -1,0 +1,716 @@
+{
+  "platform": "web",
+  "baseUrl": "http://127.0.0.1:8844",
+  "pass": 68,
+  "fail": 6,
+  "skip": 26,
+  "checks": [
+    {
+      "name": "unary.get_path_query",
+      "feature": "unary",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 11
+    },
+    {
+      "name": "unary.get_optional_query_omitted",
+      "feature": "unary",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 35
+    },
+    {
+      "name": "unary.post_json",
+      "feature": "unary",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 24
+    },
+    {
+      "name": "unary.put_json",
+      "feature": "unary",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 4
+    },
+    {
+      "name": "unary.delete",
+      "feature": "unary",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 3
+    },
+    {
+      "name": "unary.bytes_body",
+      "feature": "unary",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 28
+    },
+    {
+      "name": "types.scalars",
+      "feature": "models",
+      "outcome": "FAIL",
+      "message": "Int64 exact: expected <9007199254740993>, got <9007199254740992>",
+      "ms": 5
+    },
+    {
+      "name": "types.collections_nested_optional",
+      "feature": "models",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 32
+    },
+    {
+      "name": "types.enum_field",
+      "feature": "models",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 26
+    },
+    {
+      "name": "types.enum_generated_type",
+      "feature": "generator",
+      "outcome": "SKIP",
+      "message": "pending: generator unit (enum rule emitted as String, not a Dart enum)",
+      "ms": 0
+    },
+    {
+      "name": "types.union",
+      "feature": "generator",
+      "outcome": "SKIP",
+      "message": "pending: backend profile has no union type (CLI 0.156.0); see fixtures/README.md",
+      "ms": 0
+    },
+    {
+      "name": "failure.typed_409_status",
+      "feature": "failures",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 6
+    },
+    {
+      "name": "failure.typed_409_payload",
+      "feature": "failures",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 28
+    },
+    {
+      "name": "failure.typed_class",
+      "feature": "failures",
+      "outcome": "SKIP",
+      "message": "pending: f1/generator (AxiomError.failureCode, failurePayload, generated Conflict failure)",
+      "ms": 0
+    },
+    {
+      "name": "failure.success_path",
+      "feature": "failures",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 3
+    },
+    {
+      "name": "cache.network_only",
+      "feature": "cache",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 23
+    },
+    {
+      "name": "cache.cache_first",
+      "feature": "cache",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 5
+    },
+    {
+      "name": "cache.network_first",
+      "feature": "cache",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 7
+    },
+    {
+      "name": "cache.stale_while_revalidate",
+      "feature": "cache",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 15
+    },
+    {
+      "name": "cache.identity_invalidates",
+      "feature": "cache",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 24
+    },
+    {
+      "name": "cache.forced_refresh",
+      "feature": "cache",
+      "outcome": "SKIP",
+      "message": "pending: f1 (query.refresh(force: true) -> x-axiom-cache-mode: refresh)",
+      "ms": 0
+    },
+    {
+      "name": "cache.set_get_query_data",
+      "feature": "cache",
+      "outcome": "SKIP",
+      "message": "pending: f1 (setQueryData, getCachedQueryData)",
+      "ms": 0
+    },
+    {
+      "name": "cache.clear_purge",
+      "feature": "cache",
+      "outcome": "SKIP",
+      "message": "pending: f1 (clearCache, purgeCache, invalidate(cacheIdentity))",
+      "ms": 0
+    },
+    {
+      "name": "retry.policy_success",
+      "feature": "retry",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 14
+    },
+    {
+      "name": "retry.on_503",
+      "feature": "retry",
+      "outcome": "SKIP",
+      "message": "pending: fixture cannot fail transiently (managed code is stateless); needs a fault-injecting proxy",
+      "ms": 0
+    },
+    {
+      "name": "auth.bearer_missing_is_401",
+      "feature": "auth",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 3
+    },
+    {
+      "name": "auth.bearer_token",
+      "feature": "auth",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 4
+    },
+    {
+      "name": "auth.api_key_header",
+      "feature": "auth",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 3
+    },
+    {
+      "name": "auth.api_key_header_wrong_is_401",
+      "feature": "auth",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 13
+    },
+    {
+      "name": "auth.api_key_query",
+      "feature": "auth",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 15
+    },
+    {
+      "name": "auth.namespace_global_token",
+      "feature": "auth",
+      "outcome": "SKIP",
+      "message": "pending: f1 (namespace-wide and global token setters)",
+      "ms": 0
+    },
+    {
+      "name": "auth.provider_refresh",
+      "feature": "auth",
+      "outcome": "SKIP",
+      "message": "pending: f1 (setAuthProvider -> axiom_register_auth_provider)",
+      "ms": 0
+    },
+    {
+      "name": "auth.cookie_session",
+      "feature": "auth",
+      "outcome": "SKIP",
+      "message": "pending: fixture uses JWT; deployment allows one auth provider",
+      "ms": 0
+    },
+    {
+      "name": "stream.sse",
+      "feature": "streams",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 17
+    },
+    {
+      "name": "stream.chunked_ndjson",
+      "feature": "streams",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 16
+    },
+    {
+      "name": "stream.websocket_echo",
+      "feature": "streams",
+      "outcome": "FAIL",
+      "message": "expected data, got error [ErrorStage.runtime::ErrorCategory.network] {\"error\": \"WebSocket Error\"} (Code: Instance of 'NetworkConnectionFailed')",
+      "ms": 15
+    },
+    {
+      "name": "stream.typed_channel",
+      "feature": "streams",
+      "outcome": "SKIP",
+      "message": "pending: f1/generator (AxiomChannel<Send, Receive> with reconnect policy)",
+      "ms": 0
+    },
+    {
+      "name": "runtime.version_handshake",
+      "feature": "runtime",
+      "outcome": "SKIP",
+      "message": "pending: f1 (AxiomRuntimeInfo abi/data/contract-reader versions)",
+      "ms": 0
+    },
+    {
+      "name": "runtime.init_result",
+      "feature": "runtime",
+      "outcome": "SKIP",
+      "message": "pending: f1 (idempotent init returning AxiomInitResult)",
+      "ms": 0
+    },
+    {
+      "name": "runtime.contract_locked_load",
+      "feature": "runtime",
+      "outcome": "SKIP",
+      "message": "pending: f1 (AxiomContractConfig signature/publicKey/sha256)",
+      "ms": 0
+    },
+    {
+      "name": "runtime.cancel",
+      "feature": "runtime",
+      "outcome": "SKIP",
+      "message": "pending: f1 (AxiomRuntime.cancel, AxiomQuery.cancel)",
+      "ms": 0
+    },
+    {
+      "name": "runtime.reset_session",
+      "feature": "runtime",
+      "outcome": "SKIP",
+      "message": "pending: f1 (resetSession)",
+      "ms": 0
+    },
+    {
+      "name": "runtime.shutdown",
+      "feature": "runtime",
+      "outcome": "SKIP",
+      "message": "pending: f1 (shutdown clears callback)",
+      "ms": 0
+    },
+    {
+      "name": "runtime.call_options",
+      "feature": "runtime",
+      "outcome": "SKIP",
+      "message": "pending: f1 (AxiomCallOptions timeout/headers/cacheMode)",
+      "ms": 0
+    },
+    {
+      "name": "runtime.error_listener",
+      "feature": "runtime",
+      "outcome": "SKIP",
+      "message": "pending: f1 (global onError listener)",
+      "ms": 0
+    },
+    {
+      "name": "runtime.extensions",
+      "feature": "runtime",
+      "outcome": "SKIP",
+      "message": "pending: f1 (loadExtension/invokeExtension/lifecycle/audit, native only)",
+      "ms": 0
+    },
+    {
+      "name": "runtime.base_url_override",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 15
+    },
+    {
+      "name": "android.library_loaded",
+      "feature": "android",
+      "outcome": "SKIP",
+      "message": "android only",
+      "ms": 0
+    },
+    {
+      "name": "android.default_cache_dir",
+      "feature": "android",
+      "outcome": "SKIP",
+      "message": "android only",
+      "ms": 0
+    },
+    {
+      "name": "c.version_handshake",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 0
+    },
+    {
+      "name": "c.init_result_idempotent",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 0
+    },
+    {
+      "name": "c.locked_load_rejects_bad_hash",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 0
+    },
+    {
+      "name": "c.cancel",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 0
+    },
+    {
+      "name": "c.cancel_websocket",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 300
+    },
+    {
+      "name": "c.call_options_timeout",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 17
+    },
+    {
+      "name": "c.runtime_cache_first",
+      "feature": "cache",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 17
+    },
+    {
+      "name": "c.forced_refresh_header",
+      "feature": "cache",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 8
+    },
+    {
+      "name": "c.invalidate_cache_identity",
+      "feature": "cache",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 57
+    },
+    {
+      "name": "c.clear_cache",
+      "feature": "cache",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 13
+    },
+    {
+      "name": "c.set_get_query_data",
+      "feature": "cache",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 1
+    },
+    {
+      "name": "c.error_listener",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 15
+    },
+    {
+      "name": "c.typed_failure_fields",
+      "feature": "failures",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 0
+    },
+    {
+      "name": "c.namespace_global_token",
+      "feature": "auth",
+      "outcome": "SKIP",
+      "message": "setters run without error; the fixture contract carries no endpoint auth metadata (\"auth\": null), so no token is injected on any platform",
+      "ms": 0
+    },
+    {
+      "name": "c.auth_provider",
+      "feature": "auth",
+      "outcome": "SKIP",
+      "message": "provider registered; not exercised because the fixture contract has no endpoint auth metadata (web asks the provider before dispatch for endpoints that declare auth methods)",
+      "ms": 0
+    },
+    {
+      "name": "c.extensions_unsupported_on_web",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 0
+    },
+    {
+      "name": "c.wasm_memory_no_leak",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 996
+    },
+    {
+      "name": "c.reset_session",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 14
+    },
+    {
+      "name": "c.shutdown_reinitialize",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 18
+    },
+    {
+      "name": "gen.enum_type",
+      "feature": "generator",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 14
+    },
+    {
+      "name": "gen.model_value_semantics",
+      "feature": "generator",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 4
+    },
+    {
+      "name": "gen.typed_failure_when",
+      "feature": "failures",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 20
+    },
+    {
+      "name": "gen.typed_failure_unauthorized",
+      "feature": "failures",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 12
+    },
+    {
+      "name": "gen.body_multi_field",
+      "feature": "unary",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 13
+    },
+    {
+      "name": "gen.call_options_refresh",
+      "feature": "cache",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 18
+    },
+    {
+      "name": "gen.mutation_invalidates_active_query",
+      "feature": "cache",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 20
+    },
+    {
+      "name": "gen.sse_stream",
+      "feature": "streams",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 11
+    },
+    {
+      "name": "gen.chunked_stream",
+      "feature": "streams",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 13
+    },
+    {
+      "name": "gen.ws_channel",
+      "feature": "streams",
+      "outcome": "FAIL",
+      "message": "channel error: [ErrorStage.runtime::ErrorCategory.network] {\"error\": \"WebSocket Error\"} (Code: Instance of 'NetworkConnectionFailed')",
+      "ms": 2
+    },
+    {
+      "name": "gen.validators",
+      "feature": "generator",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 0
+    },
+    {
+      "name": "gen.namespace_metadata",
+      "feature": "generator",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 0
+    },
+    {
+      "name": "auth_f.binding_authorizes_calls",
+      "feature": "auth_f",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 26
+    },
+    {
+      "name": "auth_f.provider_answers_runtime",
+      "feature": "auth_f",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 1
+    },
+    {
+      "name": "auth_f.platform_storage",
+      "feature": "auth_f",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 0
+    },
+    {
+      "name": "auth_f.restore_from_platform_storage",
+      "feature": "auth_f",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 2
+    },
+    {
+      "name": "auth_f.emulator_sign_in",
+      "feature": "auth_f",
+      "outcome": "SKIP",
+      "message": "set AXIOM_AUTH_ISSUER, AXIOM_AUTH_EMAIL, AXIOM_AUTH_PASSWORD",
+      "ms": 0
+    },
+    {
+      "name": "h.web_no_poll_floor",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 115
+    },
+    {
+      "name": "h.ws_send_echo",
+      "feature": "streams",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 19
+    },
+    {
+      "name": "h.repeat_query_refetches",
+      "feature": "cache",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 53
+    },
+    {
+      "name": "b.version_handshake",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 0
+    },
+    {
+      "name": "b.init_result",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 0
+    },
+    {
+      "name": "b.contract_trust",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 15
+    },
+    {
+      "name": "b.cancel_explicit",
+      "feature": "runtime",
+      "outcome": "FAIL",
+      "message": "error is Cancelled: [ErrorStage.networkSend::ErrorCategory.network] Network Error (Code: Instance of 'NetworkConnectionFailed')",
+      "ms": 115
+    },
+    {
+      "name": "b.cancel_last_listener",
+      "feature": "runtime",
+      "outcome": "FAIL",
+      "message": "last unsubscribe cancelled the request",
+      "ms": 603
+    },
+    {
+      "name": "b.call_options",
+      "feature": "runtime",
+      "outcome": "FAIL",
+      "message": "timeout -> NetworkTimeout, got [ErrorStage.networkSend::ErrorCategory.network] Network Error (Code: Instance of 'NetworkConnectionFailed')",
+      "ms": 16
+    },
+    {
+      "name": "b.error_listener_typed_failure",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 4
+    },
+    {
+      "name": "b.cache_control",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 20
+    },
+    {
+      "name": "b.namespace_global_token",
+      "feature": "auth",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 0
+    },
+    {
+      "name": "b.extensions",
+      "feature": "runtime",
+      "outcome": "SKIP",
+      "message": "extensions are native only",
+      "ms": 0
+    },
+    {
+      "name": "b.reset_session",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 24
+    },
+    {
+      "name": "b.shutdown_restart",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 17
+    }
+  ],
+  "build": {
+    "mode": "debug",
+    "baseHref": "/",
+    "csp": false,
+    "compiler": "dart2js"
+  },
+  "cspViolations": 0
+}

@@ -738,6 +738,54 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   /// Builds an [AxiomError] from an error event. The runtime normally sends
   /// AxiomError JSON, but cancellation (code 15) sends plain text and older
   /// paths may send arbitrary bytes, so parsing is tolerant.
+  /// Fills [AxiomError.failureCode]/[AxiomError.failurePayload] from a
+  /// contract failure body carried in `details` when the runtime did not set
+  /// them. Same rules as native (runtime_io.dart `_withFailure`).
+  static AxiomError _withFailure(AxiomError e) {
+    if (e.failureCode != null || e.details == null) return e;
+    try {
+      final body = jsonDecode(e.details!);
+      if (body is! Map) return e;
+      String? code;
+      Object? payload;
+      final failure = body['failure'];
+      final err = body['error'];
+      if (failure is Map) {
+        code = failure['code']?.toString();
+        payload = failure['payload'] ?? failure['data'];
+      } else if (body['failure_code'] != null || body['failureCode'] != null) {
+        code = (body['failure_code'] ?? body['failureCode']).toString();
+        payload = body['failure_payload'] ?? body['failurePayload'];
+      } else if (err is Map &&
+          err['code'] != null &&
+          err.containsKey('payload')) {
+        code = err['code'].toString();
+        payload = err['payload'];
+      } else if (err is String &&
+          (body['payload'] != null || body['data'] != null)) {
+        code = err;
+        payload = body['payload'] ?? body['data'];
+      } else if (body['code'] is String &&
+          (body['payload'] != null || body['data'] != null)) {
+        code = body['code'] as String;
+        payload = body['payload'] ?? body['data'];
+      }
+      if (code == null) return e;
+      return AxiomError(
+        stage: e.stage,
+        category: e.category,
+        code: e.code,
+        message: e.message,
+        retryable: e.retryable,
+        details: e.details,
+        failureCode: code,
+        failurePayload: payload,
+      );
+    } catch (_) {
+      return e;
+    }
+  }
+
   static AxiomError _decodeError(int errCode, Uint8List bytes) {
     final text = bytes.isEmpty ? '' : utf8.decode(bytes, allowMalformed: true);
     if (errCode == FfiError.cancelled) {
@@ -753,7 +801,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       try {
         final json = jsonDecode(text);
         if (json is Map<String, dynamic> && json['stage'] != null) {
-          return AxiomError.fromJson(json);
+          return _withFailure(AxiomError.fromJson(json));
         }
       } catch (_) {}
     }
@@ -1767,6 +1815,13 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       _lastData.remove(k);
       _overrides.remove(k);
     }
+    // setQueryData keys that never had a query (`<ns>_<endpointId>:<args>`).
+    final own = namespace == null
+        ? null
+        : RegExp('^${RegExp.escape(namespace)}_\\d+:');
+    bool match(String k) => own == null || own.hasMatch(k);
+    _lastData.removeWhere((k, _) => match(k));
+    _overrides.removeWhere((k, _) => match(k));
   }
 
   @override
