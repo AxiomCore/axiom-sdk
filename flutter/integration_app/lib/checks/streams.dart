@@ -15,10 +15,15 @@ final streamChecks = <CheckDef>[
   }),
   CheckDef('stream.websocket_echo', 'streams', (c) async {
     final api = await c.wsApi();
-    api.axiom.setAuthToken('wsEcho', fixtureBearerToken);
-    final r = await data(api.wsEcho(message: Ping(text: 'hi', seq: 7)));
-    expectEq(r.text, 'hi', 'echo text');
-    expectEq(r.seq, 7, 'echo seq');
+    // Guarded endpoint, no contract auth metadata: global token -> header.
+    c.sdk.runtime.setGlobalAuthToken(fixtureBearerToken);
+    try {
+      final r = await data(api.wsEcho(message: Ping(text: 'hi', seq: 7)));
+      expectEq(r.text, 'hi', 'echo text');
+      expectEq(r.seq, 7, 'echo seq');
+    } finally {
+      c.sdk.runtime.clearGlobalAuthToken();
+    }
   }),
   CheckDef('stream.typed_channel', 'streams', (c) async {
     skip('pending: f1/generator (AxiomChannel<Send, Receive> with reconnect policy)');

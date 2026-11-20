@@ -22,7 +22,9 @@ import 'runtime_interface.dart';
 import 'state.dart';
 import 'query.dart';
 import 'query_manager.dart';
+import 'internal/auth_headers.dart';
 import 'internal/axiom_codec.dart';
+import 'internal/sse.dart';
 import 'internal/contract_metadata.dart';
 import 'internal/query_key.dart';
 import 'internal/tracing.dart';
@@ -218,7 +220,11 @@ typedef _AxiomCallWithOptions =
       AxiomString,
     );
 typedef AxiomAuthCallbackV2Native =
-    Void Function(Uint64 requestId, Pointer<Utf8> namespace, Pointer<Utf8> method);
+    Void Function(
+      Uint64 requestId,
+      Pointer<Utf8> namespace,
+      Pointer<Utf8> method,
+    );
 typedef _AxiomRegisterAuthV2Native =
     Void Function(Pointer<NativeFunction<AxiomAuthCallbackV2Native>>);
 typedef _AxiomRegisterAuthV2 =
@@ -231,6 +237,13 @@ class _Call {
   final int endpointId;
   Timer? timeout;
   bool timedOut = false;
+
+  /// SSE framing detected on the first data chunk (null = not yet known).
+  bool? sse;
+  AxiomSseParser? sseParser;
+
+  /// False while the call waits for the auth provider before axiom_call.
+  bool dispatched = false;
   _Call(this.controller, this.namespace, this.endpointId);
 }
 
@@ -401,9 +414,10 @@ class AxiomRuntimeIo implements AxiomRuntime {
           )
         : null;
     _callWithOptionsFfi = _has('axiom_call_with_options')
-        ? _lib.lookupFunction<_AxiomCallWithOptionsNative, _AxiomCallWithOptions>(
-            'axiom_call_with_options',
-          )
+        ? _lib.lookupFunction<
+            _AxiomCallWithOptionsNative,
+            _AxiomCallWithOptions
+          >('axiom_call_with_options')
         : null;
     _cacheInvalidateIdentityFfi = _has('axiom_cache_invalidate_identity')
         ? _lib.lookupFunction<_AxiomStr2StatusNative, _AxiomStr2Status>(
@@ -773,12 +787,30 @@ class AxiomRuntimeIo implements AxiomRuntime {
     }
 
     if (eventTypeValue == EventType.complete) {
+      final parser = call.sseParser;
+      if (parser != null) {
+        for (final e in parser.feed(Uint8List(0), flush: true)) {
+          controller.add(
+            AxiomState.success(e, AxiomSource.network, isStreaming: true),
+          );
+        }
+      }
       _finishCall(requestId);
       controller.close();
       return;
     }
 
     if (eventTypeValue == EventType.streamChunk) {
+      call.sse ??= AxiomSseParser.looksLike(data);
+      if (call.sse!) {
+        final parser = call.sseParser ??= AxiomSseParser();
+        for (final e in parser.feed(data)) {
+          controller.add(
+            AxiomState.success(e, AxiomSource.network, isStreaming: true),
+          );
+        }
+        return;
+      }
       controller.add(
         AxiomState.success(data, AxiomSource.network, isStreaming: true),
       );
@@ -1040,7 +1072,8 @@ class AxiomRuntimeIo implements AxiomRuntime {
 
     final loader =
         assetLoader ??
-        (String path) async => (await rootBundle.load(path)).buffer.asUint8List();
+        (String path) async =>
+            (await rootBundle.load(path)).buffer.asUint8List();
     final contracts = <String, AxiomContractLoadResult>{};
     Object? firstError;
     for (final entry in config.contracts.entries) {
@@ -1156,7 +1189,8 @@ class AxiomRuntimeIo implements AxiomRuntime {
         _toAxiomString(publicKey ?? '', arena),
       );
     });
-    final ok = status == FfiError.success || status == FfiError.successUnverified;
+    final ok =
+        status == FfiError.success || status == FfiError.successUnverified;
     if (ok) {
       _loadedNamespaces.add(namespace);
       if (_setNamespaceTokenFfi != null &&
@@ -1229,30 +1263,52 @@ class AxiomRuntimeIo implements AxiomRuntime {
       }
     }
 
-    final traceparent = AxiomTracing.generateTraceparent();
-    final headersJson = effectiveHeaders != null && effectiveHeaders.isNotEmpty
-        ? jsonEncode(effectiveHeaders)
-        : '';
+    void dispatch(Map<String, String>? sendHeaders) {
+      if (!identical(_calls[requestId], call)) return; // cancelled meanwhile
+      call.dispatched = true;
+      final traceparent = AxiomTracing.generateTraceparent();
+      final headersJson = sendHeaders != null && sendHeaders.isNotEmpty
+          ? jsonEncode(sendHeaders)
+          : '';
 
-    _logTransaction('OUT', requestId, {
-      'ns': namespace,
-      'ep': endpointId,
-      'm': method,
-      'p': finalPath,
-    });
+      _logTransaction('OUT', requestId, {
+        'ns': namespace,
+        'ep': endpointId,
+        'm': method,
+        'p': finalPath,
+      });
 
-    final withOptions = _callWithOptionsFfi;
-    final timeout = options?.timeout;
-    final nativeTimeout = withOptions != null && timeout != null;
-    final callStatus = using((Arena arena) {
-      final bPtr = arena<Uint8>(requestBytes.length);
-      bPtr.asTypedList(requestBytes.length).setAll(0, requestBytes);
-      final b = arena<AxiomBuffer>()
-        ..ref.ptr = bPtr
-        ..ref.len = requestBytes.length;
-      // axiom_call copies every argument before returning.
-      if (nativeTimeout) {
-        return withOptions(
+      final withOptions = _callWithOptionsFfi;
+      final timeout = options?.timeout;
+      final nativeTimeout = withOptions != null && timeout != null;
+      final callStatus = using((Arena arena) {
+        final bPtr = arena<Uint8>(requestBytes.length);
+        bPtr.asTypedList(requestBytes.length).setAll(0, requestBytes);
+        final b = arena<AxiomBuffer>()
+          ..ref.ptr = bPtr
+          ..ref.len = requestBytes.length;
+        // axiom_call copies every argument before returning.
+        if (nativeTimeout) {
+          return withOptions(
+            requestId,
+            _toAxiomString(namespace, arena),
+            endpointId,
+            _toAxiomString(method, arena),
+            _toAxiomString(finalPath, arena),
+            _toAxiomString(traceparent, arena),
+            _toAxiomString(headersJson, arena),
+            b.ref,
+            _toAxiomString(
+              jsonEncode({
+                'timeoutMs': timeout.inMilliseconds,
+                if (options!.cacheMode == AxiomCacheMode.refresh)
+                  'cacheMode': 'refresh',
+              }),
+              arena,
+            ),
+          );
+        }
+        return _callFfi(
           requestId,
           _toAxiomString(namespace, arena),
           endpointId,
@@ -1261,53 +1317,61 @@ class AxiomRuntimeIo implements AxiomRuntime {
           _toAxiomString(traceparent, arena),
           _toAxiomString(headersJson, arena),
           b.ref,
-          _toAxiomString(
-            jsonEncode({
-              'timeoutMs': timeout.inMilliseconds,
-              if (options!.cacheMode == AxiomCacheMode.refresh)
-                'cacheMode': 'refresh',
-            }),
-            arena,
-          ),
         );
-      }
-      return _callFfi(
-        requestId,
-        _toAxiomString(namespace, arena),
-        endpointId,
-        _toAxiomString(method, arena),
-        _toAxiomString(finalPath, arena),
-        _toAxiomString(traceparent, arena),
-        _toAxiomString(headersJson, arena),
-        b.ref,
-      );
-    });
+      });
 
-    if (callStatus != 0) {
-      final err = AxiomError(
-        stage: ErrorStage.requestBuild,
-        category: ErrorCategory.runtime,
-        code: _initialized
-            ? UnknownCode(FfiError.name(callStatus))
-            : const NotInitialized(),
-        message:
-            'Axiom request was rejected before dispatch (status $callStatus).',
-        retryable: false,
+      if (callStatus != 0) {
+        final err = AxiomError(
+          stage: ErrorStage.requestBuild,
+          category: ErrorCategory.runtime,
+          code: _initialized
+              ? UnknownCode(FfiError.name(callStatus))
+              : const NotInitialized(),
+          message:
+              'Axiom request was rejected before dispatch (status $callStatus).',
+          retryable: false,
+        );
+        _calls.remove(requestId);
+        _reportError(err, namespace, endpointId, requestId);
+        // Deliver after the caller attached its listener.
+        scheduleMicrotask(() {
+          controller.add(AxiomState.error(err));
+          controller.close();
+        });
+      } else if (timeout != null && !nativeTimeout) {
+        // Runtime without axiom_call_with_options: timer + cancel.
+        call.timeout = Timer(timeout, () {
+          if (!_calls.containsKey(requestId)) return;
+          call.timedOut = true;
+          if (!cancel(requestId)) call.timedOut = false;
+        });
+      }
+    }
+
+    // Explicit namespace-wide / global token: sent as an Authorization header
+    // because backend-profile contracts publish no client auth metadata (see
+    // internal/auth_headers.dart). Contracts whose auth methods were
+    // registered get the token through the runtime instead.
+    final usesRuntimeAuth = AxiomContractMetadata.authMethodsFor(
+      namespace,
+    ).isNotEmpty;
+    final explicitToken = _namespaceTokens[namespace] ?? _globalToken;
+    final provider = _authProvider;
+    if (usesRuntimeAuth ||
+        AxiomAuthHeaders.hasAuthorization(effectiveHeaders)) {
+      dispatch(effectiveHeaders);
+    } else if (explicitToken != null) {
+      dispatch(AxiomAuthHeaders.withBearer(effectiveHeaders, explicitToken));
+    } else if (provider != null) {
+      // No contract auth method: the runtime never asks, so ask the provider
+      // before dispatch.
+      provider(namespace, '').then(
+        (token) =>
+            dispatch(AxiomAuthHeaders.withBearer(effectiveHeaders, token)),
+        onError: (Object _) => dispatch(effectiveHeaders),
       );
-      _calls.remove(requestId);
-      _reportError(err, namespace, endpointId, requestId);
-      // Deliver after the caller attached its listener.
-      scheduleMicrotask(() {
-        controller.add(AxiomState.error(err));
-        controller.close();
-      });
-    } else if (timeout != null && !nativeTimeout) {
-      // Runtime without axiom_call_with_options: timer + cancel.
-      call.timeout = Timer(timeout, () {
-        if (!_calls.containsKey(requestId)) return;
-        call.timedOut = true;
-        if (!cancel(requestId)) call.timedOut = false;
-      });
+    } else {
+      dispatch(effectiveHeaders);
     }
 
     return AxiomStreamResponse(requestId, controller.stream);
@@ -1530,6 +1594,19 @@ class AxiomRuntimeIo implements AxiomRuntime {
 
   @override
   bool cancel(int requestId) {
+    final pending = _calls[requestId];
+    if (pending != null && !pending.dispatched) {
+      // Still waiting for the auth provider: never reaches the runtime.
+      _calls.remove(requestId);
+      pending.controller
+        ..add(
+          AxiomState.error(
+            parseRuntimeError(FfiError.cancelled, Uint8List(0)),
+          ),
+        )
+        ..close();
+      return true;
+    }
     final fn = _cancelFfi;
     if (fn == null || requestId == 0) return false;
     try {
@@ -1717,7 +1794,9 @@ class AxiomRuntimeIo implements AxiomRuntime {
   bool _clearNativeCache(String? namespace) {
     final native = _cacheClearNamespaceFfi;
     if (native == null) return false;
-    final targets = namespace == null ? _loadedNamespaces.toList() : [namespace];
+    final targets = namespace == null
+        ? _loadedNamespaces.toList()
+        : [namespace];
     for (final ns in targets) {
       using((Arena arena) => native(_toAxiomString(ns, arena)));
     }
@@ -1769,7 +1848,10 @@ class AxiomRuntimeIo implements AxiomRuntime {
   Object? _takeJson(Pointer<AxiomBuffer> out) {
     final buf = out.ref;
     if (buf.ptr == nullptr || buf.len == 0) return null;
-    final text = utf8.decode(buf.ptr.asTypedList(buf.len), allowMalformed: true);
+    final text = utf8.decode(
+      buf.ptr.asTypedList(buf.len),
+      allowMalformed: true,
+    );
     _lib.lookupFunction<_AxiomFreeBufferNative, _AxiomFreeBuffer>(
       'axiom_free_buffer',
     )(buf);
@@ -1783,7 +1865,9 @@ class AxiomRuntimeIo implements AxiomRuntime {
   @override
   Future<void> loadExtension(AxiomExtensionPackage package) async {
     _requireSymbol('axiom_extension_load_locked');
-    final fn = _lib.lookupFunction<_AxiomExtLoadNative, _AxiomExtLoad>('axiom_extension_load_locked');
+    final fn = _lib.lookupFunction<_AxiomExtLoadNative, _AxiomExtLoad>(
+      'axiom_extension_load_locked',
+    );
     final status = using(
       (Arena arena) => fn(
         _toAxiomString(package.target, arena),
@@ -1806,7 +1890,9 @@ class AxiomRuntimeIo implements AxiomRuntime {
   @override
   Future<Object?> invokeExtension(AxiomExtensionCall call) async {
     _requireSymbol('axiom_extension_invoke');
-    final fn = _lib.lookupFunction<_AxiomExtInvokeNative, _AxiomExtInvoke>('axiom_extension_invoke');
+    final fn = _lib.lookupFunction<_AxiomExtInvokeNative, _AxiomExtInvoke>(
+      'axiom_extension_invoke',
+    );
     return using((Arena arena) {
       final out = arena<AxiomBuffer>();
       out.ref
@@ -1834,7 +1920,10 @@ class AxiomRuntimeIo implements AxiomRuntime {
   @override
   void extensionLifecycle(AxiomLifecycleEvent event) {
     _requireSymbol('axiom_extension_lifecycle');
-    final fn = _lib.lookupFunction<_AxiomExtLifecycleNative, _AxiomExtLifecycle>('axiom_extension_lifecycle');
+    final fn = _lib
+        .lookupFunction<_AxiomExtLifecycleNative, _AxiomExtLifecycle>(
+          'axiom_extension_lifecycle',
+        );
     final status = fn(event.code);
     if (status != FfiError.success) {
       throw AxiomExtensionException(
@@ -1848,7 +1937,9 @@ class AxiomRuntimeIo implements AxiomRuntime {
   @override
   Future<Object?> extensionAudit() async {
     _requireSymbol('axiom_extension_audit');
-    final fn = _lib.lookupFunction<_AxiomExtAuditNative, _AxiomExtAudit>('axiom_extension_audit');
+    final fn = _lib.lookupFunction<_AxiomExtAuditNative, _AxiomExtAudit>(
+      'axiom_extension_audit',
+    );
     return using((Arena arena) {
       final out = arena<AxiomBuffer>();
       out.ref

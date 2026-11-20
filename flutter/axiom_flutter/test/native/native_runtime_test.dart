@@ -366,6 +366,40 @@ void main() {
     expect(s.isSuccess, isTrue);
   });
 
+  test('5 explicit tokens become Authorization: Bearer on null-auth contracts',
+      () async {
+    Future<AxiomState<Object?>> who() => settle(rt
+        .send<Object?>(
+          namespace: 'fixture',
+          endpointId: epAuthBearer,
+          method: 'GET',
+          path: '/auth/bearer',
+          args: {'n': DateTime.now().microsecondsSinceEpoch},
+          decoder: (j) => j,
+        )
+        .stream);
+    AxiomContractMetadata.clear(); // fixture publishes no auth methods
+    expect((await who()).hasError, isTrue, reason: 'no token -> 401');
+    rt.setNamespaceAuthToken(namespace: 'fixture', token: fixtureBearerToken);
+    final ok = await who();
+    expect(ok.isSuccess, isTrue, reason: '${ok.error}');
+    rt.clearNamespaceAuthToken(namespace: 'fixture');
+    expect((await who()).hasError, isTrue);
+    rt.setGlobalAuthToken(fixtureBearerToken);
+    expect((await who()).isSuccess, isTrue);
+    rt.clearGlobalAuthToken();
+    final asked = <String>[];
+    rt.setAuthProvider((ns, m) async {
+      asked.add(ns);
+      return fixtureBearerToken;
+    });
+    final viaProvider = await who();
+    expect(viaProvider.isSuccess, isTrue, reason: '${viaProvider.error}');
+    expect(asked, contains('fixture'));
+    rt.setAuthProvider(null);
+    expect((await who()).hasError, isTrue);
+  });
+
   test('7 typed failure fields from contract failure body', () async {
     final q = apiKey(rt, 'nope');
     final s = await settle(q.stream);

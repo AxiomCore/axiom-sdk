@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'sse.dart';
+
 class AxiomCodec {
   static Uint8List encodeBody(dynamic body, Map<String, String>? headers) {
     if (body == null) return Uint8List(0);
@@ -50,28 +52,12 @@ class AxiomCodec {
   }
 
   /// When [text] is a raw server-sent event (`id:`/`event:`/`data:` lines),
-  /// returns the joined `data:` payload; otherwise null.
+  /// returns the `data:` payload of its first event; otherwise null.
+  /// Uses the shared [AxiomSseParser].
   static String? sseData(String text) {
-    final first = text.trimLeft();
-    if (first.startsWith('{') || first.startsWith('[') || first.startsWith('"')) {
-      return null;
-    }
-    final lines = const LineSplitter().convert(text);
-    final data = <String>[];
-    var sawField = false;
-    for (final line in lines) {
-      if (line.isEmpty) continue;
-      final colon = line.indexOf(':');
-      if (colon <= 0 && !line.startsWith(':')) return null;
-      if (line.startsWith(':')) continue; // comment / heartbeat
-      final field = line.substring(0, colon);
-      if (!const {'id', 'event', 'data', 'retry'}.contains(field)) return null;
-      sawField = true;
-      var value = line.substring(colon + 1);
-      if (value.startsWith(' ')) value = value.substring(1);
-      if (field == 'data') data.add(value);
-    }
-    if (!sawField || data.isEmpty) return null;
-    return data.join('\n');
+    final bytes = Uint8List.fromList(utf8.encode(text));
+    if (!AxiomSseParser.looksLike(bytes)) return null;
+    final events = AxiomSseParser().feed(bytes, flush: true);
+    return events.isEmpty ? null : utf8.decode(events.first);
   }
 }
