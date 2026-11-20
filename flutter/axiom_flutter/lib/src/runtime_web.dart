@@ -285,8 +285,9 @@ class _ContractMeta {
           if (op is! Map) continue;
           final id = ((op['endpoint_id'] ?? op['endpointId']) as num?)?.toInt();
           final identity = op['cache_identity'] ?? op['cacheIdentity'];
-          if (id != null && identity is String)
+          if (id != null && identity is String) {
             meta.cacheIdentity[id] = identity;
+          }
         }
       }
     } catch (_) {
@@ -1229,53 +1230,58 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     final baseKey = keyFor(const {});
     _queries[baseKey] = _QueryMeta(namespace, endpointId, args);
 
-    return AxiomQuery<T>(baseKey, (customHeaders) {
-      final key = keyFor(customHeaders);
-      _queries[key] = _QueryMeta(namespace, endpointId, args);
-      return AxiomQueryManager().watchRaw<T>(
-        key,
-        null,
-        namespace: namespace,
-        endpointId: endpointId,
-        cancel: cancel,
-        forceRefresh: options?.cacheMode == AxiomCacheMode.refresh,
-        create: (force) {
-          if (_overrides.containsKey(key)) {
-            final value = _overrides.remove(key) as T;
-            _lastData[key] = value;
+    return AxiomQuery<T>(
+      baseKey,
+      (customHeaders) {
+        final key = keyFor(customHeaders);
+        _queries[key] = _QueryMeta(namespace, endpointId, args);
+        return AxiomQueryManager().watchRaw<T>(
+          key,
+          null,
+          namespace: namespace,
+          endpointId: endpointId,
+          cancel: cancel,
+          forceRefresh: options?.cacheMode == AxiomCacheMode.refresh,
+          create: (force) {
+            if (_overrides.containsKey(key)) {
+              final value = _overrides.remove(key) as T;
+              _lastData[key] = value;
+              return AxiomActiveStream<T>(
+                0,
+                Stream.value(AxiomState<T>.success(value, AxiomSource.cache)),
+              );
+            }
+            var opts = options;
+            if (_forceRefresh.remove(key) | force) {
+              opts = (opts ?? const AxiomCallOptions()).copyWith(
+                cacheMode: AxiomCacheMode.refresh,
+              );
+            }
+            final active = _rawStream<T>(
+              namespace: namespace,
+              endpointId: endpointId,
+              method: method,
+              path: path,
+              headers: {...?headers, ...customHeaders},
+              pathParams: pathParams,
+              queryParams: queryParams,
+              body: body,
+              decoder: decoder,
+              options: opts,
+            );
             return AxiomActiveStream<T>(
-              0,
-              Stream.value(AxiomState<T>.success(value, AxiomSource.cache)),
+              active.requestId,
+              active.stream.map((s) {
+                if (s.hasData) _lastData[key] = s.data;
+                return s;
+              }),
             );
-          }
-          var opts = options;
-          if (_forceRefresh.remove(key) | force) {
-            opts = (opts ?? const AxiomCallOptions()).copyWith(
-              cacheMode: AxiomCacheMode.refresh,
-            );
-          }
-          final active = _rawStream<T>(
-            namespace: namespace,
-            endpointId: endpointId,
-            method: method,
-            path: path,
-            headers: {...?headers, ...customHeaders},
-            pathParams: pathParams,
-            queryParams: queryParams,
-            body: body,
-            decoder: decoder,
-            options: opts,
-          );
-          return AxiomActiveStream<T>(
-            active.requestId,
-            active.stream.map((s) {
-              if (s.hasData) _lastData[key] = s.data;
-              return s;
-            }),
-          );
-        },
-      );
-    }, runtime: this, keyForHeaders: keyFor);
+          },
+        );
+      },
+      runtime: this,
+      keyForHeaders: keyFor,
+    );
   }
 
   @override
@@ -1685,8 +1691,9 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     _namespaceTokens.clear();
     _globalToken = null;
     _authProvider = null;
-    if (_hasExport('axiom_wasm_clear_auth_provider'))
+    if (_hasExport('axiom_wasm_clear_auth_provider')) {
       _wasm.axiomClearAuthProvider();
+    }
   }
 
   @override

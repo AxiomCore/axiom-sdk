@@ -1560,15 +1560,15 @@ class AxiomRuntimeIo implements AxiomRuntime {
       if (!identical(_calls[requestId], call)) return; // cancelled meanwhile
       call.dispatched = true;
       if (_purgedNs.isNotEmpty &&
-        (_purgedNs.contains('*') || _purgedNs.contains(namespace))) {
-      final key =
-          '$namespace|$endpointId|$finalPath|${Object.hashAll(requestBytes)}';
-      if (_refreshedAfterPurge.add(key) &&
-          !(sendHeaders?.containsKey(axiomCacheModeHeader) ?? false)) {
-        sendHeaders = {...?sendHeaders, axiomCacheModeHeader: 'refresh'};
+          (_purgedNs.contains('*') || _purgedNs.contains(namespace))) {
+        final key =
+            '$namespace|$endpointId|$finalPath|${Object.hashAll(requestBytes)}';
+        if (_refreshedAfterPurge.add(key) &&
+            !(sendHeaders?.containsKey(axiomCacheModeHeader) ?? false)) {
+          sendHeaders = {...?sendHeaders, axiomCacheModeHeader: 'refresh'};
+        }
       }
-    }
-    final traceparent = AxiomTracing.generateTraceparent();
+      final traceparent = AxiomTracing.generateTraceparent();
       final headersJson = sendHeaders != null && sendHeaders.isNotEmpty
           ? jsonEncode(sendHeaders)
           : '';
@@ -1603,9 +1603,9 @@ class AxiomRuntimeIo implements AxiomRuntime {
             _toAxiomString(
               jsonEncode({
                 // timeoutMs 0 means "no timeout" to the runtime: round up.
-              'timeoutMs': (timeout.inMicroseconds + 999) ~/ 1000 < 1
-                  ? 1
-                  : (timeout.inMicroseconds + 999) ~/ 1000,
+                'timeoutMs': (timeout.inMicroseconds + 999) ~/ 1000 < 1
+                    ? 1
+                    : (timeout.inMicroseconds + 999) ~/ 1000,
                 if (options!.cacheMode == AxiomCacheMode.refresh)
                   'cacheMode': 'refresh',
               }),
@@ -1740,31 +1740,36 @@ class AxiomRuntimeIo implements AxiomRuntime {
       timeout: options?.timeout,
     );
 
-    return AxiomQuery(keyFor(const {}), (customHeaders) {
-      final mergedHeaders = {...?headers, ...customHeaders};
-      return AxiomQueryManager().watchRaw<T>(
-        keyFor(customHeaders),
-        null,
-        namespace: namespace,
-        endpointId: endpointId,
-        cancel: cancel,
-        forceRefresh: options?.cacheMode == AxiomCacheMode.refresh,
-        create: (force) => _rawStream(
+    return AxiomQuery(
+      keyFor(const {}),
+      (customHeaders) {
+        final mergedHeaders = {...?headers, ...customHeaders};
+        return AxiomQueryManager().watchRaw<T>(
+          keyFor(customHeaders),
+          null,
           namespace: namespace,
           endpointId: endpointId,
-          method: method,
-          path: path,
-          headers: force
-              ? {...mergedHeaders, axiomCacheModeHeader: 'refresh'}
-              : mergedHeaders,
-          pathParams: pathParams,
-          queryParams: queryParams,
-          body: body,
-          decoder: decoder,
-          options: options,
-        ),
-      );
-    }, runtime: this, keyForHeaders: keyFor);
+          cancel: cancel,
+          forceRefresh: options?.cacheMode == AxiomCacheMode.refresh,
+          create: (force) => _rawStream(
+            namespace: namespace,
+            endpointId: endpointId,
+            method: method,
+            path: path,
+            headers: force
+                ? {...mergedHeaders, axiomCacheModeHeader: 'refresh'}
+                : mergedHeaders,
+            pathParams: pathParams,
+            queryParams: queryParams,
+            body: body,
+            decoder: decoder,
+            options: options,
+          ),
+        );
+      },
+      runtime: this,
+      keyForHeaders: keyFor,
+    );
   }
 
   @override
@@ -1946,9 +1951,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
       _retriedCalls.remove(pending.publicId);
       pending.controller
         ..add(
-          AxiomState.error(
-            parseRuntimeError(FfiError.cancelled, Uint8List(0)),
-          ),
+          AxiomState.error(parseRuntimeError(FfiError.cancelled, Uint8List(0))),
         )
         ..close();
       return true;
@@ -1980,7 +1983,12 @@ class AxiomRuntimeIo implements AxiomRuntime {
         message: 'Request timed out (per-call timeout)',
         retryable: true,
       );
-      _reportError(err, pending.namespace, pending.endpointId, pending.publicId);
+      _reportError(
+        err,
+        pending.namespace,
+        pending.endpointId,
+        pending.publicId,
+      );
     }
     pending.controller
       ..add(AxiomState.error(err))
@@ -2373,6 +2381,8 @@ class AxiomRuntimeIo implements AxiomRuntime {
     final pen = AnsiPen()
       ..white(bold: true)
       ..xterm(dir == 'OUT' ? 063 : 034);
+    // Debug logging only: guarded by the `debug` flag above.
+    // ignore: avoid_print
     print(pen('${dir == 'OUT' ? '➔ CALL' : '← RESP'} [#$id] $details'));
   }
 

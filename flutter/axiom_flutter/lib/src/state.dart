@@ -349,7 +349,7 @@ class AxiomState<T> {
   AxiomState<R> map<R>(R Function(T data) mapper) {
     return AxiomState<R>(
       status: status,
-      data: data != null ? mapper(data!) : null,
+      data: data != null ? mapper(data as T) : null,
       error: error,
       source: source,
       isFetching: isFetching,

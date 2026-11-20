@@ -89,6 +89,7 @@ class ActiveQuery<T> {
       m.add(_lastState);
     }
   }
+
   AxiomState<T> get state => _lastState;
 
   /// True while at least one listener is subscribed.

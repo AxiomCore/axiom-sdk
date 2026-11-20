@@ -8,7 +8,7 @@ class AxiomTracing {
   /// Returns standard W3C traceparent: 00-[trace_id]-[span_id]-01
   static String generateTraceparent() {
     final traceId = _generateHex(16); // 32 chars
-    final spanId = _generateHex(8);   // 16 chars
+    final spanId = _generateHex(8); // 16 chars
     return '00-$traceId-$spanId-01';
   }
 

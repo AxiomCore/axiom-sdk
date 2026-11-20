@@ -88,7 +88,9 @@ class AxiomQuery<T> {
     try {
       // Wait for a settled value so a background revalidation is not
       // cancelled when this temporary listener leaves.
-      await stream.firstWhere((s) => (s.hasData && !s.isFetching) || s.hasError);
+      await stream.firstWhere(
+        (s) => (s.hasData && !s.isFetching) || s.hasError,
+      );
     } finally {
       subscription.cancel();
     }
