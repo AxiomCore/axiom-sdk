@@ -9,29 +9,29 @@
   "android": {
     "distribution": "bundled",
     "path": "flutter/axiom_flutter/android/src/main/jniLibs/<abi>/libaxiom_runtime.so",
-    "source": "axiom-runtime flutter/r2 4e1ce85cc930d8218442dd7da526d039de1faeff (= flutter/parity), scripts/build-android-so.sh, NDK 26.3.11579264, API 24, 16 KB pages",
+    "source": "axiom-runtime flutter/rb 5120bb85273656feeac15f6c1bcd22b6ef48f818 (= main 00f49d7 + build path remapping), scripts/build-android-so.sh, NDK 26.3.11579264, API 24, 16 KB pages, --remap-path-prefix (no build-machine paths)",
     "archive": null,
     "url": null,
     "sha256": null,
     "libraries": {
       "arm64-v8a": {
-        "sha256": "c2b396be7f46737d85160fb3e9276b46abca1c5b69f70d4c19da5c5d3e0d6b03",
-        "bytes": 10101352
+        "sha256": "81e16575bb8aac1a4f22948c928a81059e4707b823dca745d8b82b9f112afafa",
+        "bytes": 10097128
       },
       "armeabi-v7a": {
-        "sha256": "6d7e73d5c47af0bb41bd4ba6a36bfebaf63bf9b7d090a377b2112e1a36050a1d",
-        "bytes": 7261332
+        "sha256": "b64df1ac998042366634574ee3988b62c80ba8f9393c68ed829c433f23336ab3",
+        "bytes": 7258388
       },
       "x86_64": {
-        "sha256": "dc9d6fa89ca9572bce8a19a448d0d93f43be33f401aae332c95333dd90f3c057",
-        "bytes": 12479928
+        "sha256": "2650b6f9184a643fdd0e912bb82aae7834f526f41cbc89e4729dcc2498d9cbb6",
+        "bytes": 12479672
       }
     }
   },
   "wasm": {
-    "runtime_commit": "4e1ce85",
-    "runtime_branch": "axiom-runtime flutter/r2 4e1ce85cc930d8218442dd7da526d039de1faeff (= flutter/parity; adds web WS initial message and quiet release console), scripts/build-wasm-flutter.sh",
-    "axiom_runtime_js_sha256": "6d9fb1d7946c5d42943916f021998977e8d7201ac75b553faeeaa98f68c5c550",
-    "axiom_runtime_bg_wasm_sha256": "7a0cc9413f68a2f494c26c342a0bd9d7442189b2aaa618483eaab5c793561d65"
+    "runtime_commit": "5120bb8",
+    "runtime_branch": "axiom-runtime flutter/rb 5120bb85273656feeac15f6c1bcd22b6ef48f818 (= main 00f49d7 + build path remapping), scripts/build-wasm-flutter.sh, --remap-path-prefix (no build-machine paths)",
+    "axiom_runtime_js_sha256": "9df108063accc58928686d036dc01a7729e90ea7dc2f0d5676cd1a2928ec342f",
+    "axiom_runtime_bg_wasm_sha256": "9a53647946e1a108dfe9fb8ae11295460aa7e7f3a1b0d9a0b205152ff8c087f5"
   }
 }
