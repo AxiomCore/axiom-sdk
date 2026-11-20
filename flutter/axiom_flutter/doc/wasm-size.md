@@ -26,6 +26,21 @@ So the package keeps bundling them (the web works offline, straight from the
 package, with no CDN). Apps that want to drop the files from native builds can
 opt out in their own project:
 
+
+## Android: removed automatically (since flutter/perf)
+
+The plugin's own `android/build.gradle` deletes
+`packages/axiom_flutter/lib/assets/wasm/**` from the app's merged Flutter
+assets after Flutter copies them, so Android APKs/AABs no longer carry the web
+runtime. Measured (benchmarks app, arm64 release APK, Flutter 3.32.0):
+26,988,656 bytes with the files, 26,032,037 bytes without (−956,619).
+To keep them, add `axiom.keepWebAssets=true` to the app's
+`android/gradle.properties` (or pass
+`--android-project-arg=axiom.keepWebAssets=true`). The app-side snippet below
+is no longer needed on Android. iOS/macOS: a CocoaPods script phase runs
+before the Runner target copies `flutter_assets`, so the plugin cannot remove
+them there; the app-side opt-out below still applies.
+
 ## Android (verified)
 
 Append to `android/app/build.gradle.kts`:
