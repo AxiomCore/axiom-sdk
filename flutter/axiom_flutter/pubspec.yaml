@@ -1,9 +1,16 @@
 name: axiom_flutter
-description: "Axiom Flutter SDK"
+description: "Flutter client runtime for AxiomCore contracts: typed queries, mutations, streams, caching, auth and cancellation on Android, iOS, macOS and web."
 version: 0.147.5
 homepage: https://github.com/AxiomCore/axiom-sdk
 repository: https://github.com/AxiomCore/axiom-sdk
 issue_tracker: https://github.com/AxiomCore/axiom-sdk/issues
+documentation: https://docs.axiomcore.dev
+topics:
+  - api
+  - network
+  - http
+  - ffi
+  - codegen
 
 environment:
   sdk: ^3.8.0
