@@ -1,3 +1,18 @@
+## 0.150.1 - 2026-11-21
+
+Regenerate your client after upgrading to `axiom_flutter` 0.150.1.
+
+Changed (behaviour changes first)
+- Generated `fromJson` reads the decoded `Map<String, dynamic>` directly
+  instead of through a `cast` view. Output for the same contract changes;
+  behaviour does not.
+  <!-- VERIFY: generated decoder speed changes from /home/node/fp/DARTNATIVE-REPORT.md (C1.6) -->
+
+Known limits
+- Validation policy and binary codec options are not generator options in
+  this release.
+  <!-- VERIFY: /home/node/fp/RTSPEED-REPORT.md and DARTNATIVE-REPORT.md -->
+
 ## 0.150.0 - 2026-11-21
 
 Rewritten on the `axiom_flutter` 0.150.0 API. Regenerate your client after
