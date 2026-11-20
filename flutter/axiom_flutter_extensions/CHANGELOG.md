@@ -1,4 +1,4 @@
-## 0.150.1
+## 0.150.1 - 2026-11-21
 
 - First release. Bundles the full AxiomCore runtime for Android
   (`libaxiom_runtime_full.so`, arm64-v8a, armeabi-v7a, x86_64; built from

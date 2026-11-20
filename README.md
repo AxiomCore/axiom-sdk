@@ -174,38 +174,40 @@ including the unstable metrics, the method and how to reproduce it, is in
 ### Size in 0.150.1
 
 From 0.150.1 `axiom_flutter` bundles the lean runtime on Android and web (no
-executable extensions, no telemetry exporter). Runtime library sizes in bytes,
-measured on the `flutter/perf` artifacts:
+executable extensions, no telemetry exporter). Runtime library sizes in bytes
+(0.150.1: artifacts built from the merged runtime):
 
-| Target | 0.150.0 (full) | 0.150.1 (lean) | Lean, gzip -9 |
-| --- | --- | --- | --- |
-| Android arm64-v8a | 10,097,128 | 5,025,888 | 2,483,034 |
-| Android armeabi-v7a | 7,258,388 | 3,538,792 | 2,040,974 |
-| Android x86_64 | 12,479,672 | 5,957,296 | 2,615,356 |
-| Web `axiom_runtime_bg.wasm` | 2,444,563 | 2,067,867 | 786,604 |
+| Target | 0.150.0 | 0.150.1 lean (default) | Lean, gzip -9 | 0.150.1 full (`axiom_flutter_extensions`) |
+| --- | --- | --- | --- | --- |
+| Android arm64-v8a | 10,097,128 | 4,804,712 | 2,381,263 | 7,375,344 |
+| Android armeabi-v7a | 7,258,388 | 3,410,196 | 1,963,736 | 5,197,156 |
+| Android x86_64 | 12,479,672 | 5,701,680 | 2,507,701 | 8,861,496 |
+| Web `axiom_runtime_bg.wasm` | 2,444,563 | 2,123,497 | 807,347 | not applicable |
 
-Android stores the library uncompressed in the APK (minSdk 24), so an APK
-grows by the raw size and a Play download by about the gzip size. The plugin
-also removes the unused web runtime from Android builds (about 0.96 MB per
-APK). iOS and macOS still use the full runtime 0.148.6. Apps that use
-executable extensions on Android add `axiom_flutter_extensions`.
-
-<!-- VERIFY: final 0.150.1 artifact sizes from /home/node/fp/rtlean/REPORT.md (item 8); lean default and add-on from /home/node/fp/pack/REPORT.md -->
+The SDK's integration app as an arm64 release APK: 27.32 MB with 0.150.0,
+21.07 MB with 0.150.1 and 23.65 MB with `axiom_flutter_extensions`. Android
+stores the library uncompressed in the APK (minSdk 24), so an APK grows by
+the raw size and a Play download by about the gzip size. The plugin also
+removes the unused web runtime from Android builds. iOS and macOS still use
+the full published runtime 0.148.6.
 
 ### Where Axiom is slower
 
 - **Web cold start.** The app downloads and compiles the WebAssembly runtime
-  and loads the contract before the first call; dio and http skip both.
-- **Large uncached lists.** The body is copied into the runtime and back and
-  checked before Dart decodes it. 0.150.1 replaces the full JSON parse with a
-  syntax check for endpoints without field rules, which was most of that cost.
+  and loads the contract before the first call; dio and http skip both. Web
+  fast start (`--dart-define=AXIOM_WEB_FAST_START=true`, opt-in, with limits)
+  shortens this for eligible calls.
+- **Large uncached lists.** The runtime checks the body before Dart decodes
+  it, and on the web copies it into wasm once. 0.150.1 replaces the full JSON
+  parse with an exact syntax check for endpoints without field rules, and
+  samples validation for responses of 64 KiB or more by default.
 - **Small calls** are within the timer resolution of the benchmark for all
   three clients.
 
-Axiom is faster on repeated calls its cache can answer. How a call flows and
-what each step costs: [Performance](https://docs.axiomcore.dev/sdks/flutter-performance).
-
-<!-- VERIFY: 0.150.1 rows from /home/node/fp/bench2/REPORT.md; webspeed (C1.1, C3.1) may change the first two bullets -->
+Axiom is faster on repeated calls its cache can answer. HTTP/2, the binary
+codec, batching, streaming decode and conditional requests are not in this
+release. How a call flows and what each step costs:
+[Performance](https://docs.axiomcore.dev/sdks/flutter-performance).
 
 ### Packages
 
@@ -214,7 +216,7 @@ what each step costs: [Performance](https://docs.axiomcore.dev/sdks/flutter-perf
 | [`flutter/axiom_flutter`](flutter/axiom_flutter/README.md) | [`axiom_flutter`](https://pub.dev/packages/axiom_flutter) | Runtime, widgets and API |
 | [`flutter/axiom_flutter_generator`](flutter/axiom_flutter_generator/README.md) | [`axiom_flutter_generator`](https://pub.dev/packages/axiom_flutter_generator) | Generates the Dart client; run by `axiom pull` |
 | [`flutter/axiom_flutter_auth`](flutter/axiom_flutter_auth/README.md) | [`axiom_flutter_auth`](https://pub.dev/packages/axiom_flutter_auth) | Managed project sign-in, token storage |
-| `flutter/axiom_flutter_extensions` | `axiom_flutter_extensions` (0.150.1) | Full Android runtime with executable extensions |
+| [`flutter/axiom_flutter_extensions`](flutter/axiom_flutter_extensions/README.md) | `axiom_flutter_extensions` (0.150.1) | Full Android runtime with executable extensions |
 
 ### Versioning and compatibility
 

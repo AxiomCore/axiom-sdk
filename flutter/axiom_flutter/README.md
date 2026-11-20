@@ -11,12 +11,13 @@ write Dio or Retrofit code, JSON parsing, or cache logic by hand.
 The network layer is a Rust runtime. It is loaded with `dart:ffi` on Android,
 iOS and macOS, and as a bundled WebAssembly module on web.
 
-> **0.150.1 behaviour change:** on Android and web the package bundles the
-> lean runtime (no executable extensions, no telemetry exporter). Everything
-> else works unchanged. Apps that use extensions on Android add
-> [`axiom_flutter_extensions`](#extensions). iOS and macOS are unchanged.
-> See [Size and performance](#size-and-performance).
-<!-- VERIFY: lean default and add-on from /home/node/fp/pack/REPORT.md -->
+> **0.150.1 behaviour changes:** on Android and web the package bundles the
+> lean runtime (no executable extensions, no telemetry exporter); apps that
+> load extensions on Android add [`axiom_flutter_extensions`](#extensions).
+> Responses of 64 KiB or more are validated on a sample by default
+> (`AxiomState.validation`; `AxiomValidationPolicy.full` restores full
+> validation). See [Size and performance](#size-and-performance) and
+> [`CHANGELOG.md`](CHANGELOG.md).
 
 New to the SDK? [`doc/usage.md`](doc/usage.md) lists every step from contract
 to first query.
@@ -41,10 +42,10 @@ to first query.
 
 ```yaml
 dependencies:
-  axiom_flutter: ^0.150.0
+  axiom_flutter: ^0.150.1
 
 dev_dependencies:
-  axiom_flutter_generator: ^0.150.0
+  axiom_flutter_generator: ^0.150.1
 ```
 
 `axiom_flutter_generator` is run for you by `axiom pull`. You do not call it
@@ -66,6 +67,11 @@ Android emulator (arm64, API 36), iOS simulator and macOS (81 of 84 run
 checks pass with the published runtime; the 3 WebSocket checks need the next
 AxiomRuntime), and web in headless Chrome (debug, release with a strict CSP,
 and dart2wasm).
+
+For 0.150.1 the suite was re-run on a Linux host with the final libraries: the
+native check list with the lean runtime passes 93 checks (2 host-only
+failures, 38 skipped) and the web debug build in headless Chrome passes 97 (0
+failures, 36 skipped). Devices, iOS and macOS were not re-run for 0.150.1.
 
 <!-- VERIFY: physical Android and iOS devices; Safari and Firefox; 32-bit ARM hardware (armeabi-v7a) -->
 
@@ -463,40 +469,52 @@ library from the app (opt out with `axiom.keepLeanRuntime=true` in
 
 ## Size and performance
 
-What the runtime adds to an app (bytes, runtime library only; from the
-`flutter/perf` artifact measurements):
+Runtime library added to an app, in bytes (0.150.1 artifacts from the merged
+runtime; 0.150.0 for comparison):
 
-| Target | Full runtime | Lean runtime (0.150.1 default) | Lean, gzip -9 |
-| --- | --- | --- | --- |
-| Android arm64-v8a | 10,123,728 | 5,025,888 | 2,483,034 |
-| Android armeabi-v7a | 7,280,044 | 3,538,792 | 2,040,974 |
-| Android x86_64 | 12,512,352 | 5,957,296 | 2,615,356 |
-| Web `axiom_runtime_bg.wasm` | 2,475,214 | 2,067,867 | 786,604 |
+| Target | 0.150.0 | 0.150.1 lean (default) | Lean, gzip -9 | 0.150.1 full (`axiom_flutter_extensions`) |
+| --- | --- | --- | --- | --- |
+| Android arm64-v8a | 10,097,128 | 4,804,712 | 2,381,263 | 7,375,344 |
+| Android armeabi-v7a | 7,258,388 | 3,410,196 | 1,963,736 | 5,197,156 |
+| Android x86_64 | 12,479,672 | 5,701,680 | 2,507,701 | 8,861,496 |
+| Web `axiom_runtime_bg.wasm` | 2,444,563 | 2,123,497 | 807,347 | not applicable |
 
-<!-- VERIFY: replace with the final 0.150.1 artifacts from /home/node/fp/rtlean/REPORT.md (item 8) -->
+The SDK's integration app as an arm64 release APK: 27.32 MB with 0.150.0,
+21.07 MB with 0.150.1, 23.65 MB with `axiom_flutter_extensions`.
 
 - Android stores native libraries uncompressed in the APK (minSdk 24), so the
   APK and the installed app grow by the raw size; Google Play downloads are
   compressed (about the gzip column). Publish an App Bundle, or use
   `flutter build apk --split-per-abi`, so users get only their ABI.
-- The plugin removes the unused web runtime from Android builds (about
-  0.96 MB per APK). `axiom.keepWebAssets=true` in `android/gradle.properties`
-  keeps it. iOS and macOS bundles still carry it; see
-  [`doc/wasm-size.md`](doc/wasm-size.md).
-- Responses of endpoints without field rules get a JSON syntax check instead
-  of a full parse, which is most of the time the runtime spent on large
-  lists in 0.150.0. Accept and reject behaviour is unchanged.
-  <!-- VERIFY: 10k-item before/after row from /home/node/fp/bench2/REPORT.md (p1's preliminary row had 12.1% spread, not publishable) -->
+- The plugin removes the unused web runtime from Android builds.
+  `axiom.keepWebAssets=true` in `android/gradle.properties` keeps it. iOS and
+  macOS bundles still carry it; see [`doc/wasm-size.md`](doc/wasm-size.md).
+- Validation: policy `auto` (default) validates bodies under 64 KiB in full
+  and larger ones on a sample; `AxiomState.validation` says which ran. Force
+  full validation with `AxiomConfig(validation: AxiomValidationPolicy.full)`
+  or `AxiomCallOptions(validation: AxiomValidationPolicy.full)`. Endpoints
+  without field rules get an exact JSON syntax check instead of a full parse.
+- Native: bodies of 256 KB or more are JSON-parsed on a background isolate
+  (`fromJson` stays on the calling isolate); `decodeIsolateThreshold: 0`
+  parses inline.
+- Native, opt-in: `AxiomConfig(objectCacheMaxEntries: 64)` reuses decoded
+  models when the runtime returns the same bytes. Off by default; enable only
+  if you treat models as immutable.
+- Web, opt-in: `--dart-define=AXIOM_WEB_FAST_START=true` lets
+  `AxiomSdk.create()` return before the wasm runtime is up, for unsigned
+  contracts in namespaces without auth; validated endpoints still wait, and a
+  later contract failure fails every queued call.
+- Not in this release: HTTP/2, the binary codec, batching, streaming decode,
+  conditional requests.
 - Where Axiom is still slower than `package:http`: web cold start (the wasm
   runtime and the contract load before the first call) and large uncached
-  lists (the body is copied into the runtime and back, and syntax-checked).
-  Repeated calls answered from the cache are faster than with
+  lists (the runtime checks the body, and on the web copies it into wasm
+  once). Repeated calls answered from the cache are faster than with
   `dio_cache_interceptor`.
 
 Details: [App size](https://docs.axiomcore.dev/sdks/flutter-app-size),
 [Performance](https://docs.axiomcore.dev/sdks/flutter-performance),
 [Benchmarks](https://docs.axiomcore.dev/sdks/flutter-benchmarks).
-<!-- VERIFY: 0.150.1 benchmark rows from /home/node/fp/bench2/REPORT.md; options from RTSPEED/DARTNATIVE/WEBSPEED reports -->
 
 ## Troubleshooting
 

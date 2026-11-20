@@ -1,4 +1,4 @@
-## 0.150.1 (unreleased)
+## 0.150.1 - 2026-11-21
 
 Regenerate your client after upgrading to `axiom_flutter` 0.150.1.
 
