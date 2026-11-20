@@ -355,16 +355,29 @@ class BenchRunner {
         'mean_rtt_ms': _r(_ms(sw) / msgs),
       });
     }
-    // Axiom typed channel.
+    // Axiom typed channel. The contract's WebSocket guard needs a token (the bench server
+    // ignores it). Listen before sending, as the fixture check does.
     try {
+      sdk.bench.axiom.setAuthToken('wsEcho', 'bench-token');
       final ch = sdk.bench.wsEchoChannel(reconnect: AxiomReconnectPolicy.none);
-      final it = StreamIterator(ch.stream.where((s) => s.status == AxiomStatus.success));
+      final frames = StreamController<AxiomState<ax.Ping>>();
+      final sub = ch.stream.where((s) => s.data != null || s.error != null).listen(frames.add);
+      final it = StreamIterator(frames.stream);
+      Future<void> roundTrip(int i) async {
+        ch.send(ax.Ping(text: 'ping', seq: i));
+        if (!await it.moveNext().timeout(const Duration(seconds: 10))) throw StateError('channel closed');
+        final s = it.current;
+        if (s.error != null) throw StateError('channel error: ${s.error}');
+      }
+      for (var i = 0; i < 20; i++) {
+        await roundTrip(i);
+      }
       final sw = Stopwatch()..start();
       for (var i = 0; i < msgs; i++) {
-        ch.send(ax.Ping(text: 'ping', seq: i));
-        await it.moveNext().timeout(const Duration(seconds: 10));
+        await roundTrip(i);
       }
       sw.stop();
+      await sub.cancel();
       await ch.close();
       emit({
         ..._base('ws'),
@@ -374,6 +387,9 @@ class BenchRunner {
         'round_trips_per_s': _r(msgs / (sw.elapsedMicroseconds / 1e6)),
         'mean_rtt_ms': _r(_ms(sw) / msgs),
       });
+    } on TimeoutException catch (e) {
+      emit({..._base('ws'), 'client': 'axiom', 'status': 'blocked',
+        'note': 'no echo within 10 s: the channel connects but the bench server receives no frame ($e)'});
     } on UnimplementedError catch (e) {
       emit({..._base('ws'), 'client': 'axiom', 'status': 'blocked', 'note': 'openChannel not implemented on this branch: $e'});
     }

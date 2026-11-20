@@ -11,6 +11,9 @@
 import 'dart:convert';
 import 'dart:io';
 
+/// BENCH_SERVER_LOG=1 logs WebSocket traffic (debugging only; adds latency).
+final bool _log = Platform.environment['BENCH_SERVER_LOG'] == '1';
+
 Map<String, Object?> item(int i) => {
       'id': '$i',
       'name': 'item $i',
@@ -66,7 +69,14 @@ Future<void> _handle(HttpRequest req) async {
   final path = req.uri.path;
   if (path == '/ws' && WebSocketTransformer.isUpgradeRequest(req)) {
     final ws = await WebSocketTransformer.upgrade(req);
-    ws.listen(ws.add, onDone: () => ws.close());
+    if (_log) stdout.writeln('ws open ${req.uri} origin=${req.headers.value('origin')}');
+    ws.listen((m) {
+      if (_log) stdout.writeln('ws msg ${m is String ? m : 'binary ${(m as List).length} B'}');
+      ws.add(m);
+    }, onDone: () {
+      if (_log) stdout.writeln('ws closed ${ws.closeCode}');
+      ws.close();
+    });
     return;
   }
   _cors(req);

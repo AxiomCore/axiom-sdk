@@ -155,8 +155,11 @@ merge its JSONL with `tool/collect_results.py --label <platform>` and pass every
 2. **Repeat identical query can skip the request.** In `query_manager.dart`, a new listener on a
    key whose last request has emitted data but not yet its Complete event receives the old state
    and no fetch starts, even for `networkOnly` endpoints.
-3. **Axiom WebSocket channel not implemented**: `openChannel` throws `UnimplementedError` on web
-   and native on this branch, so the Axiom WebSocket result is `blocked`.
+3. **Axiom WebSocket channel sends nothing on web.** In the 2026-11-20 results `openChannel` threw
+   `UnimplementedError`. After merging `flutter/parity` (unit c, `09ebeac`) the channel opens the
+   socket, but the bench server receives no frame from `send()` (with a token set for the guard,
+   listening before sending, as the fixture check does) and the socket closes with 1001. The
+   Axiom WebSocket result stays `blocked`; `BENCH_SERVER_LOG=1 tool/server.sh` shows the traffic.
 4. **Android**: `axiom_flutter` on this branch has no `android/` plugin, so the APK "with Axiom" contains
    only the Dart code; the runtime `.so` is not in it (see the APK note in the results).
 5. **Wasm runtime ships on every platform.** The package lists `lib/assets/wasm/*` as Flutter
