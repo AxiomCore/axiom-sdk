@@ -100,7 +100,7 @@ Future<int> liveId(AxiomQuery q) async {
 }
 
 void main() {
-  if (_lib == null || _lib.isEmpty) {
+  if ((_lib ?? "").isEmpty) {
     test('native runtime tests', () {}, skip: 'AXIOM_RUNTIME_LIB not set');
     return;
   }
@@ -323,39 +323,55 @@ void main() {
     await sub.cancel();
   });
 
-  test('5 namespace / global token setters', () async {
+  test('5 namespace / global token setters and auth provider', () async {
+    // The fixture contract declares no client-side auth methods (its bearer
+    // endpoint is guarded server-side only), so the runtime never injects a
+    // token for it; check the Dart token resolution the binding feeds to
+    // axiom_set_auth_token / axiom_provide_auth_token instead.
     AxiomContractMetadata.registerAuthMethods('fixture', ['Authorization']);
-    Future<AxiomState<Object?>> who() => settle(rt
-        .send<Object?>(
-          namespace: 'fixture',
-          endpointId: epAuthBearer,
-          method: 'GET',
-          path: '/auth/bearer',
-          args: {'n': DateTime.now().microsecondsSinceEpoch},
-          decoder: (j) => j,
-        )
-        .stream);
-    final none = await who();
-    expect(none.hasError, isTrue, reason: 'no token');
-    rt.setNamespaceAuthToken(namespace: 'fixture', token: fixtureBearerToken);
-    final ok = await who();
-    expect(ok.isSuccess, isTrue, reason: '${ok.error}');
-    rt.clearNamespaceAuthToken(namespace: 'fixture');
-    expect((await who()).hasError, isTrue);
-    rt.setGlobalAuthToken(fixtureBearerToken);
-    expect((await who()).isSuccess, isTrue);
-    rt.clearGlobalAuthToken();
-    expect((await who()).hasError, isTrue);
-  });
-
-  test('5 auth provider registers and resolves fallbacks', () async {
-    rt.setAuthProvider((ns, method) async => ns == 'fixture' ? 'from-provider' : null);
     final io = rt as dynamic;
+    expect(await io.resolveAuthToken('fixture', 'Authorization'), isNull);
+    rt.setNamespaceAuthToken(namespace: 'fixture', token: 'ns-token');
+    expect(await io.resolveAuthToken('fixture', 'Authorization'), 'ns-token');
+    rt.setGlobalAuthToken('global-token');
+    expect(await io.resolveAuthToken('fixture', 'Authorization'), 'ns-token');
+    expect(await io.resolveAuthToken('other', 'Authorization'), 'global-token');
+    rt.clearNamespaceAuthToken(namespace: 'fixture');
+    expect(await io.resolveAuthToken('fixture', 'Authorization'), 'global-token');
+    rt.setAuthToken(namespace: 'fixture', methodName: 'Authorization', token: 'explicit');
+    expect(await io.resolveAuthToken('fixture', 'Authorization'), 'explicit');
+    rt.clearAuthToken(namespace: 'fixture', methodName: 'Authorization');
+    rt.clearGlobalAuthToken();
+    expect(await io.resolveAuthToken('fixture', 'Authorization'), isNull);
+
+    rt.setAuthProvider((ns, method) async => ns == 'fixture' ? 'from-provider' : null);
     expect(await io.resolveAuthToken('fixture', ''), 'from-provider');
     rt.setAuthProvider(null);
     rt.setGlobalAuthToken('g');
     expect(await io.resolveAuthToken('fixture', ''), 'g');
     rt.clearGlobalAuthToken();
+    // Calls still work with a provider registered natively.
+    final s = await settle(everything(rt, args: {'auth': 1}).stream);
+    expect(s.isSuccess, isTrue);
+  });
+
+  test('7 typed failure fields from contract failure body', () async {
+    final q = rt.send<Object?>(
+      namespace: 'fixture',
+      endpointId: 1256260924,
+      method: 'GET',
+      path: '/auth/api-key-header',
+      headers: {'x-api-key': 'nope'},
+      args: {'x-api-key': 'nope'},
+      decoder: (j) => j,
+    );
+    final s = await settle(q.stream);
+    expect(s.hasError, isTrue);
+    expect(s.error!.failureCode, 'unauthorized', reason: '${s.error} ${s.error!.details}');
+    expect((s.error!.failurePayload as Map)['message'], 'bad api key');
+    AxiomFailureRegistry.register('unauthorized', (p) => 'typed:${(p as Map)['message']}');
+    expect(s.error!.failure(), 'typed:bad api key');
+    AxiomFailureRegistry.unregisterAll();
   });
 
   test('8 extensions: audit, lifecycle, invoke unknown', () async {

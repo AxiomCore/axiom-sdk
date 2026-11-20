@@ -727,6 +727,12 @@ class AxiomRuntimeIo implements AxiomRuntime {
       } else if (body['failure_code'] != null || body['failureCode'] != null) {
         code = (body['failure_code'] ?? body['failureCode']).toString();
         payload = body['failure_payload'] ?? body['failurePayload'];
+      } else if (body['error'] is Map &&
+          (body['error'] as Map)['code'] != null &&
+          (body['error'] as Map).containsKey('payload')) {
+        final err = body['error'] as Map;
+        code = err['code'].toString();
+        payload = err['payload'];
       } else if (body['error'] is String &&
           (body['payload'] != null || body['data'] != null)) {
         code = body['error'] as String;
@@ -1350,6 +1356,8 @@ class AxiomRuntimeIo implements AxiomRuntime {
     // without delivering a Cancelled/Complete pair, so close streams here.
     _resetSessionFfi?.call();
     _closeAllCalls('Request cancelled by resetSession');
+    // Let the Cancelled events reach query listeners before disposing.
+    await Future<void>.delayed(Duration.zero);
     AxiomQueryManager().clear();
     for (final entry in _methodTokens.entries) {
       for (final method in entry.value.keys) {
@@ -1386,6 +1394,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
     // by the runtime instead of being delivered.
     _clearCallbackFfi?.call();
     _closeAllCalls('Request cancelled by shutdown');
+    await Future<void>.delayed(Duration.zero);
     AxiomQueryManager().clear();
 
     final isolate = _eventIsolate;
