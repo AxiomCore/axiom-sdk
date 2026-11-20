@@ -1,72 +1,72 @@
 {
   "platform": "web",
   "baseUrl": "http://127.0.0.1:8791",
-  "pass": 28,
-  "fail": 14,
-  "skip": 23,
+  "pass": 30,
+  "fail": 13,
+  "skip": 22,
   "checks": [
     {
       "name": "unary.get_path_query",
       "feature": "unary",
       "outcome": "PASS",
       "message": "",
-      "ms": 22
+      "ms": 27
     },
     {
       "name": "unary.get_optional_query_omitted",
       "feature": "unary",
       "outcome": "PASS",
       "message": "",
-      "ms": 30
+      "ms": 31
     },
     {
       "name": "unary.post_json",
       "feature": "unary",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_input\",\"message\":\"the contract request body must be an object\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:Class777')",
+      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_input\",\"message\":\"the contract request body must be an object\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:Class778')",
       "ms": 16
     },
     {
       "name": "unary.put_json",
       "feature": "unary",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_input\",\"message\":\"the contract request body must be an object\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:Class777')",
-      "ms": 31
+      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_input\",\"message\":\"the contract request body must be an object\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:Class778')",
+      "ms": 14
     },
     {
       "name": "unary.delete",
       "feature": "unary",
       "outcome": "PASS",
       "message": "",
-      "ms": 16
+      "ms": 22
     },
     {
       "name": "unary.bytes_body",
       "feature": "unary",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:Class777')",
-      "ms": 16
+      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:Class778')",
+      "ms": 14
     },
     {
       "name": "types.scalars",
       "feature": "models",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.deserialize::ErrorCategory.serialization] Type 'minified:Class1720' is not a subtype of type 'minified:Class1777<dynamic>' in type cast (Code: Instance of 'minified:Class774')",
-      "ms": 16
+      "message": "expected data, got error [ErrorStage.deserialize::ErrorCategory.serialization] Type 'minified:Class1720' is not a subtype of type 'minified:Class1777<dynamic>' in type cast (Code: Instance of 'minified:Class775')",
+      "ms": 17
     },
     {
       "name": "types.collections_nested_optional",
       "feature": "models",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.deserialize::ErrorCategory.serialization] Type 'minified:Class1720' is not a subtype of type 'minified:Class1777<dynamic>' in type cast (Code: Instance of 'minified:Class774')",
-      "ms": 14
+      "message": "expected data, got error [ErrorStage.deserialize::ErrorCategory.serialization] Type 'minified:Class1720' is not a subtype of type 'minified:Class1777<dynamic>' in type cast (Code: Instance of 'minified:Class775')",
+      "ms": 10
     },
     {
       "name": "types.enum_field",
       "feature": "models",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.deserialize::ErrorCategory.serialization] Type 'minified:Class1720' is not a subtype of type 'minified:Class1777<dynamic>' in type cast (Code: Instance of 'minified:Class774')",
-      "ms": 16
+      "message": "expected data, got error [ErrorStage.deserialize::ErrorCategory.serialization] Type 'minified:Class1720' is not a subtype of type 'minified:Class1777<dynamic>' in type cast (Code: Instance of 'minified:Class775')",
+      "ms": 15
     },
     {
       "name": "types.enum_generated_type",
@@ -86,15 +86,15 @@
       "name": "failure.typed_409_status",
       "feature": "failures",
       "outcome": "FAIL",
-      "message": "HTTP status (error: [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:Class777')): expected <409>, got <400>",
+      "message": "HTTP status (error: [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:Class778')): expected <409>, got <400>",
       "ms": 16
     },
     {
       "name": "failure.typed_409_payload",
       "feature": "failures",
       "outcome": "FAIL",
-      "message": "error carries neither code nor payload: [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:Class777') / {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}}",
-      "ms": 14
+      "message": "error carries neither code nor payload: [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:Class778') / {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}}",
+      "ms": 15
     },
     {
       "name": "failure.typed_class",
@@ -107,22 +107,22 @@
       "name": "failure.success_path",
       "feature": "failures",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:Class777')",
-      "ms": 15
+      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:Class778')",
+      "ms": 16
     },
     {
       "name": "cache.network_only",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 32
+      "ms": 31
     },
     {
       "name": "cache.cache_first",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 31
+      "ms": 32
     },
     {
       "name": "cache.network_first",
@@ -136,14 +136,14 @@
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 30
+      "ms": 31
     },
     {
       "name": "cache.identity_invalidates",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 48
+      "ms": 47
     },
     {
       "name": "cache.forced_refresh",
@@ -191,21 +191,21 @@
       "name": "auth.bearer_token",
       "feature": "auth",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"unauthenticated\",\"message\":\"verified identity required\",\"path\":\"authorization\",\"status\":401}} (Code: Instance of 'minified:Class777')",
+      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"unauthenticated\",\"message\":\"verified identity required\",\"path\":\"authorization\",\"status\":401}} (Code: Instance of 'minified:Class778')",
       "ms": 15
     },
     {
       "name": "auth.api_key_header",
       "feature": "auth",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"missing_parameter\",\"message\":\"required input is missing\",\"path\":\"key\",\"status\":400}} (Code: Instance of 'minified:Class777')",
-      "ms": 16
+      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"missing_parameter\",\"message\":\"required input is missing\",\"path\":\"key\",\"status\":400}} (Code: Instance of 'minified:Class778')",
+      "ms": 15
     },
     {
       "name": "auth.api_key_header_wrong_is_401",
       "feature": "auth",
       "outcome": "FAIL",
-      "message": "status (error: [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"missing_parameter\",\"message\":\"required input is missing\",\"path\":\"key\",\"status\":400}} (Code: Instance of 'minified:Class777')): expected <401>, got <400>",
+      "message": "status (error: [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"missing_parameter\",\"message\":\"required input is missing\",\"path\":\"key\",\"status\":400}} (Code: Instance of 'minified:Class778')): expected <401>, got <400>",
       "ms": 16
     },
     {
@@ -213,7 +213,7 @@
       "feature": "auth",
       "outcome": "PASS",
       "message": "",
-      "ms": 15
+      "ms": 16
     },
     {
       "name": "auth.namespace_global_token",
@@ -239,8 +239,8 @@
     {
       "name": "stream.sse",
       "feature": "streams",
-      "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.deserialize::ErrorCategory.serialization] FormatException: Unexpected character (at character 1)\nid: t1\n^\n (Code: Instance of 'minified:Class774')",
+      "outcome": "PASS",
+      "message": "",
       "ms": 15
     },
     {
@@ -248,13 +248,13 @@
       "feature": "streams",
       "outcome": "PASS",
       "message": "",
-      "ms": 16
+      "ms": 15
     },
     {
       "name": "stream.websocket_echo",
       "feature": "streams",
       "outcome": "FAIL",
-      "message": "expected data, got error [ErrorStage.runtime::ErrorCategory.network] {\"error\": \"WebSocket Error\"} (Code: Instance of 'minified:Class772')",
+      "message": "expected data, got error [ErrorStage.runtime::ErrorCategory.network] {\"error\": \"WebSocket Error\"} (Code: Instance of 'minified:Class773')",
       "ms": 15
     },
     {
@@ -332,7 +332,7 @@
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 14
+      "ms": 15
     },
     {
       "name": "c.version_handshake",
@@ -346,42 +346,42 @@
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 6
+      "ms": 8
     },
     {
       "name": "c.locked_load_rejects_bad_hash",
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 1
+      "ms": 0
     },
     {
       "name": "c.cancel",
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 8
+      "ms": 6
     },
     {
       "name": "c.cancel_websocket",
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 304
+      "ms": 303
     },
     {
       "name": "c.call_options_timeout",
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 15
+      "ms": 16
     },
     {
       "name": "c.runtime_cache_first",
       "feature": "cache",
       "outcome": "PASS",
       "message": "",
-      "ms": 32
+      "ms": 31
     },
     {
       "name": "c.forced_refresh_header",
@@ -393,8 +393,8 @@
     {
       "name": "c.invalidate_cache_identity",
       "feature": "cache",
-      "outcome": "SKIP",
-      "message": "runtime has no cache-invalidate export yet (needs unit r); Dart refetch of active queries only",
+      "outcome": "PASS",
+      "message": "",
       "ms": 48
     },
     {
@@ -458,7 +458,7 @@
       "feature": "runtime",
       "outcome": "PASS",
       "message": "",
-      "ms": 16
+      "ms": 17
     }
   ],
   "build": {
