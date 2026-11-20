@@ -59,7 +59,7 @@ final checksF = <CheckDef>[
     } finally {
       binding.detach();
       auth.dispose();
-      c.api.axiom.clearAuthToken('authBearer');
+      resetAuthState(c); // detach() keeps pushed tokens
     }
   }),
   CheckDef('auth_f.provider_answers_runtime', 'auth_f', (c) async {
@@ -73,6 +73,9 @@ final checksF = <CheckDef>[
     } finally {
       binding.detach();
       auth.dispose();
+      // detach() keeps the namespace token pushed at sign-in; without this
+      // `fixture` keeps a bearer token for every later check.
+      resetAuthState(c);
     }
   }),
   CheckDef('auth_f.platform_storage', 'auth_f', (c) async {

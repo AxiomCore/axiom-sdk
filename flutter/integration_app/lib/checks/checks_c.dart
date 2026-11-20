@@ -225,17 +225,24 @@ final checksC = <CheckDef>[
   }),
   CheckDef('c.namespace_global_token', 'auth', (c) async {
     final rt = _rt(c);
-    rt.setGlobalAuthToken(fixtureBearerToken);
-    rt.setNamespaceAuthToken(namespace: _ns, token: fixtureBearerToken);
-    rt.clearNamespaceAuthToken(namespace: _ns);
-    rt.clearGlobalAuthToken();
+    try {
+      rt.setGlobalAuthToken(fixtureBearerToken);
+      rt.setNamespaceAuthToken(namespace: _ns, token: fixtureBearerToken);
+      rt.clearNamespaceAuthToken(namespace: _ns);
+      rt.clearGlobalAuthToken();
+    } finally {
+      resetAuthState(c);
+    }
     skip('setters run without error; the fixture contract carries no '
         'endpoint auth metadata ("auth": null), so no token is injected '
         'on any platform');
   }),
   CheckDef('c.auth_provider', 'auth', (c) async {
-    _rt(c).setAuthProvider((ns, m) async => fixtureBearerToken);
-    _rt(c).setAuthProvider(null);
+    try {
+      _rt(c).setAuthProvider((ns, m) async => fixtureBearerToken);
+    } finally {
+      _rt(c).setAuthProvider(null);
+    }
     skip('provider registered; not exercised because the fixture contract '
         'has no endpoint auth metadata (web asks the provider before '
         'dispatch for endpoints that declare auth methods)');

@@ -250,12 +250,16 @@ final checksB = <CheckDef>[
     final rt = _rt(c);
     // Must not throw; end-to-end injection needs contract auth methods
     // (the fixture declares none client-side).
-    rt.setNamespaceAuthToken(namespace: 'fixture', token: fixtureBearerToken);
-    rt.setGlobalAuthToken(fixtureBearerToken);
-    rt.clearNamespaceAuthToken(namespace: 'fixture');
-    rt.clearGlobalAuthToken();
-    rt.setAuthProvider((ns, method) async => null);
-    rt.setAuthProvider(null);
+    try {
+      rt.setNamespaceAuthToken(namespace: 'fixture', token: fixtureBearerToken);
+      rt.setGlobalAuthToken(fixtureBearerToken);
+      rt.clearNamespaceAuthToken(namespace: 'fixture');
+      rt.clearGlobalAuthToken();
+      rt.setAuthProvider((ns, method) async => null);
+      rt.setAuthProvider(null);
+    } finally {
+      resetAuthState(c);
+    }
   }),
   CheckDef('b.extensions', 'runtime', (c) async {
     if (kIsWeb) skip('extensions are native only');

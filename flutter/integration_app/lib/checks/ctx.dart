@@ -45,6 +45,39 @@ class Ctx {
   }
 }
 
+/// Namespaces the checks load, and the auth method names they use.
+const _authNamespaces = ['fixture', 'fixture_ws', 'fixg_vendor', 'g_authmeta'];
+const _authMethodNames = [
+  'Authorization', 'x-api-key', 'api_key', 'authBearer', 'sse', 'wsEcho', //
+];
+
+/// Clears every token and the auth provider the checks may set: per-method
+/// tokens, namespace tokens, the global token and the provider. Each check
+/// that sets one restores state in a `finally`; the runner also calls this
+/// between check groups so a failing check cannot leak into the next group.
+void resetAuthState(Ctx c) {
+  final rt = c.sdk.runtime;
+  void quiet(void Function() f) {
+    try {
+      f();
+    } catch (_) {
+      // Runtime without this setter, or namespace not loaded: nothing set.
+    }
+  }
+
+  quiet(() => rt.setAuthProvider(null));
+  quiet(rt.clearGlobalAuthToken);
+  for (final ns in _authNamespaces) {
+    quiet(() => rt.clearNamespaceAuthToken(namespace: ns));
+    for (final m in _authMethodNames) {
+      quiet(() => rt.clearAuthToken(namespace: ns, methodName: m));
+    }
+  }
+  for (final m in _authMethodNames) {
+    quiet(() => c.api.axiom.clearAuthToken(m));
+  }
+}
+
 typedef Check = Future<void> Function(Ctx ctx);
 
 class CheckDef {

@@ -35,17 +35,15 @@ final checksFixg = <CheckDef>[
     final binding = AxiomAuthBinding.attach(auth,
         runtime: c.sdk.runtime, namespaces: const ['fixg_vendor'], resetSessionOnSignOut: false);
     try {
-      c.api.axiom.clearAuthToken('authBearer');
+      resetAuthState(c); // clean state: no token or provider from earlier checks
       await auth.signInWithPassword('fixture@example.com', 'irrelevant');
       expectEq(binding.lastPushedToken, fixtureBearerToken, 'token pushed for the bound namespace');
       final e = await failure(c.api.authBearer());
       expectEq(httpStatusOf(e), 401, 'fixture (not bound) must not receive the token (error: $e)');
     } finally {
       binding.detach();
-      try {
-        c.sdk.runtime.clearNamespaceAuthToken(namespace: 'fixg_vendor');
-      } catch (_) {}
       auth.dispose();
+      resetAuthState(c);
     }
   }),
   CheckDef('fixg.unknown_enum_round_trips', 'types', (c) async {
