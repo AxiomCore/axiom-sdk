@@ -101,10 +101,37 @@ python3 tool/render_readme.py results/<date>-linux-chrome.json --insert ../../RE
 
 ## Results
 
-`results/2026-11-20-linux-chrome.json` (merged), `results/README-snippet.md` (rendered tables),
-raw inputs `results/raw-web*.jsonl`, `tooling.json`, `loc.json`, `size.json`. To add a platform,
-merge its JSONL with `tool/collect_results.py --label <platform>` and pass every results file to
-`tool/render_readme.py`.
+Numbers of record: `results/2026-11-20-linux-chrome-idle.json` (3 full web runs on an idle box,
+tooling, LOC, size), rendered by `tool/render_readme.py` into `results/README-TABLE.md` (the table
+for the repo README). Raw inputs: `results/raw-web-idle-run{1,2,3}.jsonl`, `tooling-l2.json`,
+`loc-l2.json`, `size-l2.json`, `extra-2026-11-20-idle.json` (machine, commits).
+`results/2026-11-20-linux-chrome.json` is the earlier preliminary run (shared CPUs, 16 ms web
+floor still present); it is superseded and kept only for history.
+
+### Reproduce the numbers of record
+
+```bash
+. ~/.profile                                   # Flutter 3.32.0, Android SDK, Chrome
+cd flutter/benchmarks
+top -bn1 | head -15                            # no cargo/rustc/gradle/other chrome running
+(cd api/acore && ~/bin/axiom build main.acore --out .out/bench.axiom)
+python3 tool/bench_size.py --out results/size-l2.json          # builds both apps (apk + web)
+(cd app/android && ./gradlew --stop)                           # stop Gradle before timing
+tool/server.sh 8851 &
+tool/run_web.sh results/raw-web-idle-run1.jsonl                # release build + 15 cold launches + full set
+SKIP_BUILD=1 tool/run_web.sh results/raw-web-idle-run2.jsonl
+SKIP_BUILD=1 tool/run_web.sh results/raw-web-idle-run3.jsonl
+AXIOM=~/bin/axiom python3 tool/bench_tooling.py --out results/tooling-l2.json
+python3 tool/count_loc.py --out results/loc-l2.json
+AXIOM=~/bin/axiom python3 tool/collect_results.py --label linux-chrome-idle \
+  --web-runs results/raw-web-idle-run{1,2,3}.jsonl --tooling results/tooling-l2.json \
+  --loc results/loc-l2.json --size results/size-l2.json \
+  --extra results/extra-2026-11-20-idle.json --out results/2026-11-20-linux-chrome-idle.json
+python3 tool/render_readme.py results/2026-11-20-linux-chrome-idle.json > results/README-TABLE.md
+```
+
+A full web run takes about 80 s on this box. To add a platform, merge its JSONL with
+`tool/collect_results.py --label <platform>` and pass every results file to `tool/render_readme.py`.
 
 ## Method
 
@@ -132,38 +159,51 @@ merge its JSONL with `tool/collect_results.py --label <platform>` and pass every
 - **Lines of code**: non-blank, non-comment lines; file lists are in `tool/count_loc.py`.
 - **Size**: `baseline_app` (dio + http, one call each) vs `app -t lib/size_main.dart` (same plus one
   Axiom call); `flutter build apk --release --split-per-abi` and `flutter build web --release`.
+- **Stability rule (web)**: the full set is run 3 times (fresh Chrome profile per launch). For each
+  metric the result is the median of the 3 run medians (cold start: the run median is the median
+  of 5 launches); spread = (max - min) / median. Only metrics with spread <= 10% are published as
+  numbers; the others are listed as "not stable" under the table (`web_stats` in the results JSON
+  holds every run value).
+- **Size breakdown**: `tool/bench_size.py` reads each APK as a zip and reports the in-APK bytes of
+  `libaxiom_runtime.so`, `libapp.so` (Dart AOT), `libflutter.so`, the web runtime assets
+  (`packages/axiom_flutter/lib/assets/wasm/*`) and the contract asset. It also builds the Axiom
+  APKs a second time with `AXIOM_DROP_WASM=1`, which turns on the documented opt-out
+  (`flutter/axiom_flutter/doc/wasm-size.md`) in `app/android/app/build.gradle.kts`. Web: raw and
+  gzip -9 sizes of every `.js`/`.wasm` file under `build/web` (both CanvasKit variants are counted
+  for both apps; a browser loads one).
+- **Generator used by `axiom pull`**: the released CLI 0.156.0 does not read
+  `AXIOM_FLUTTER_SDK_PATH`; it runs `dart run axiom_flutter_generator:generate` in the app, which
+  resolves the app's path dev_dependency, i.e. the generator on this branch.
 
 ## Caveats
 
-- Headless Chrome on a shared 4 vCPU container is not a phone. Localhost has no network latency,
-  which magnifies client overhead; on a real network the per-call differences are a smaller share.
-- Web timers: `Stopwatch` resolution in Chrome is 0.1 ms (or coarser without cross-origin isolation).
-- The bench server is the same for all clients, but its own cost is in every number.
-- The SDK is under active change on `flutter/parity`; results name the SDK commit they ran on.
-- **First results are preliminary.** `results/2026-11-20-linux-chrome.json` holds two web runs made
-  while other builds shared the box: only 5 of 25 medians repeat within 10% (the Axiom 16 ms
-  per-call floor and the cache medians do; cold start and decode do not). Rerun on an idle machine
-  before publishing web numbers. Tooling, LOC and size results are stable.
-- Physical-device runs (one mid-range Android, one iPhone) are still to do.
+- Headless Chrome (`--headless=new`, no GPU) on a 4 vCPU x86_64 server container (gVisor), not a
+  phone or a desktop browser. Server CPUs and a laptop/phone CPU differ in single-thread speed.
+- The bench server is on local loopback: no network latency, no TLS, no compression. That
+  magnifies client overhead; on a real network the per-call differences are a smaller share.
+- No physical devices. macOS, iOS simulator and Android emulator numbers are pending (the lead runs
+  them; commands above). The APKs were built but not run here (no emulator/KVM on this box).
+- Web timers: `Stopwatch` resolution in Chrome is 0.1 ms without cross-origin isolation, so ~2 ms
+  medians move by 5% per tick; that is why most small-call medians and all 1 000-item decode
+  medians (~1 ms) fail the 10% rule.
+- Run 1 followed the release build directly; its small-call medians are 0.1-0.3 ms higher for all
+  three clients. The runs were not repeated or selected afterwards.
+- The bench server's own cost is in every number, equally for all clients.
+- The Axiom bench drops the query key after every call (`AxiomQueryManager().remove`), so every
+  Axiom call is a network request, as for dio/http.
+- The SDK is under active change on `flutter/parity`; results name the SDK and runtime commits.
 
-## Findings (SDK issues these benchmarks exposed)
+## Findings (SDK issues these benchmarks exposed; status on 6cd7d9f)
 
-1. **Web: 16 ms polling floor.** `axiom_flutter/lib/src/runtime_web.dart` drives the wasm runtime
-   with `Timer.periodic(16 ms, axiomProcessResponses)`, so every Axiom call on web waits for the
-   next tick: p50 ≈ 16 ms for a 110-byte response where dio/http take ≈ 2 ms on localhost.
-   Processing responses when the fetch promise resolves would remove most of this.
-2. **Repeat identical query can skip the request.** In `query_manager.dart`, a new listener on a
-   key whose last request has emitted data but not yet its Complete event receives the old state
-   and no fetch starts, even for `networkOnly` endpoints.
-3. **Axiom WebSocket channel sends nothing on web.** In the 2026-11-20 results `openChannel` threw
-   `UnimplementedError`. After merging `flutter/parity` (unit c, `09ebeac`) the channel opens the
-   socket, but the bench server receives no frame from `send()` (with a token set for the guard,
-   listening before sending, as the fixture check does) and the socket closes with 1001. The
-   Axiom WebSocket result stays `blocked`; `BENCH_SERVER_LOG=1 tool/server.sh` shows the traffic.
-4. **Android**: `axiom_flutter` on this branch has no `android/` plugin, so the APK "with Axiom" contains
-   only the Dart code; the runtime `.so` is not in it (see the APK note in the results).
-5. **Wasm runtime ships on every platform.** The package lists `lib/assets/wasm/*` as Flutter
-   assets, so Android (and iOS/macOS) builds carry the 2.4 MB web runtime (942 KB compressed in the
-   APK) that they never load. That is nearly all of the measured APK delta today.
-6. `axiom pull` rewrites `AxiomDeps.toml` with an absolute contract path (the tooling script
-   restores the repo copy after each run).
+1. Web 16 ms polling floor: fixed by unit h (host notify, runtime 1265a1c). Axiom getItem p50 is now
+   ~2.8 ms (was 16 ms).
+2. Repeat identical query skipping the request: fixed by unit h (check `h.repeat_query_refetches`).
+   The bench keeps the per-call key removal so the workload is unchanged between runs.
+3. Axiom WebSocket channel on web: fixed by unit h; the Axiom WS case now runs (1 000 echoes). Its
+   throughput is not stable across runs (one run at half the others' rate).
+4. Android: the runtime `.so` is now bundled (`axiom_flutter/android/src/main/jniLibs`); it is most
+   of the APK delta (see the size table).
+5. The web runtime (wasm + glue, 934 KB in the APK) still ships on every platform (Flutter 3.32 has
+   no per-platform assets). Opt-out documented in `flutter/axiom_flutter/doc/wasm-size.md`.
+6. `axiom pull` (CLI 0.156.0) rewrites `AxiomDeps.toml` with an absolute contract path (the tooling
+   script restores the repo copy after each run).

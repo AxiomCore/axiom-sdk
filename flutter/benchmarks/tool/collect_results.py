@@ -86,11 +86,54 @@ def compare(a, b):
     return {"rows": rows, "within_10pct": within, "total": len(rows)}
 
 
+def _metrics(w):
+    """Every per-run figure that is compared across runs: (key, value, unit, lower_is_better)."""
+    d = {}
+    for c, v in w["cold"].items():
+        d[f"cold first_data {c}"] = (v["median_ms"], "ms")
+        d[f"cold init {c}"] = (v["init_median_ms"], "ms")
+    for x in w["latency"]:
+        d[f"latency {x['case']} {x['client']} p50"] = (x.get("p50_ms"), "ms")
+        d[f"latency {x['case']} {x['client']} p95"] = (x.get("p95_ms"), "ms")
+    for x in w["cache"]:
+        d[f"cache {x['case']} {x['client']} p50"] = (x.get("p50_ms"), "ms")
+        d[f"cache {x['case']} {x['client']} p95"] = (x.get("p95_ms"), "ms")
+    for x in w["decode"]:
+        d[f"decode {x['items']} {x['decoder']} p50"] = (x.get("p50_ms"), "ms")
+    for x in w["ws"]:
+        if x.get("status") == "ok":
+            d[f"ws echo {x['client']} round_trips_per_s"] = (x.get("round_trips_per_s"), "/s")
+    return d
+
+
+def web_stats(runs, max_spread):
+    """Median of the run medians and spread = (max - min) / median per metric."""
+    per = [_metrics(w) for w in runs]
+    out = {}
+    for k in per[0]:
+        vals = [m[k][0] for m in per if k in m and m[k][0] is not None]
+        if len(vals) != len(runs):
+            out[k] = {"runs": vals, "stable": False, "note": "missing in a run"}
+            continue
+        med = statistics.median(vals)
+        spread = (max(vals) - min(vals)) / med if med else None
+        out[k] = {"runs": vals, "median": round(med, 3), "unit": per[0][k][1],
+                  "spread_pct": None if spread is None else round(spread * 100, 1),
+                  "stable": spread is not None and spread <= max_spread}
+    n = sum(1 for v in out.values() if v["stable"])
+    return {"rule": f"median of {len(runs)} run medians; publishable if (max-min)/median <= {max_spread:.0%}",
+            "stable_count": n, "total": len(out), "metrics": out}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--label", default="linux-chrome")
     for k in ("web", "web_repeat", "tooling", "loc", "size"):
         ap.add_argument(f"--{k.replace('_', '-')}")
+    ap.add_argument("--web-runs", nargs="+", help="several full web runs (JSONL); adds web_runs + web_stats")
+    ap.add_argument("--max-spread", type=float, default=0.10)
+    ap.add_argument("--extra", help="JSON file merged into the top level (machine details, commits)")
+    ap.add_argument("--out", help="output path (default results/<date>-<label>.json)")
     ap.add_argument("--note", action="append", default=[], help="extra note line (repeatable)")
     a = ap.parse_args()
     date = datetime.date.today().isoformat()
@@ -114,11 +157,19 @@ def main():
     if a.web_repeat:
         res["web_repeat"] = web_summary(a.web_repeat)
         res["reproducibility"] = compare(res["web"], res["web_repeat"])
+    if a.web_runs:
+        runs = [web_summary(p) for p in a.web_runs]
+        res["web_runs"] = [{"file": os.path.relpath(p, ROOT), **w} for p, w in zip(a.web_runs, runs)]
+        res["web_stats"] = web_stats(runs, a.max_spread)
+    if a.extra:
+        ex = json.load(open(a.extra))
+        res["machine"].update(ex.pop("machine", {}))
+        res.update(ex)
     for k in ("tooling", "loc", "size"):
         p = getattr(a, k)
         if p:
             res[k] = json.load(open(p))
-    out = os.path.join(ROOT, "results", f"{date}-{a.label}.json")
+    out = a.out or os.path.join(ROOT, "results", f"{date}-{a.label}.json")
     json.dump(res, open(out, "w"), indent=2)
     print("wrote", out)
 
