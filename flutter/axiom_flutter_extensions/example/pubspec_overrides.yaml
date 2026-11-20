@@ -1,0 +1,4 @@
+# Development in this repository only (not published).
+dependency_overrides:
+  axiom_flutter:
+    path: ../../axiom_flutter

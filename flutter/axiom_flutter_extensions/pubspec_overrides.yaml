@@ -1,0 +1,5 @@
+# Development in this repository: resolve axiom_flutter from the sibling
+# folder. Not published (.pubignore).
+dependency_overrides:
+  axiom_flutter:
+    path: ../axiom_flutter

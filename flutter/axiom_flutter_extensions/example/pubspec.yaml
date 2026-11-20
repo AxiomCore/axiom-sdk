@@ -1,0 +1,14 @@
+name: axiom_flutter_extensions_example
+description: "Minimal app using axiom_flutter with the full runtime add-on."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  axiom_flutter: ^0.150.1
+  axiom_flutter_extensions:
+    path: ../

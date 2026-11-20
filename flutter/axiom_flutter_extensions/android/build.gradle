@@ -1,0 +1,78 @@
+// Android module of axiom_flutter_extensions (ffiPlugin: true, no Java/Kotlin).
+// It ships the FULL runtime (executable extensions, telemetry exporter) as
+// src/main/jniLibs/<abi>/libaxiom_runtime_full.so. axiom_flutter loads
+// libaxiom_runtime_full.so first and falls back to its lean libaxiom_runtime.so.
+group = "dev.axiomcore.axiom_flutter_extensions"
+version = "1.0"
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.7.3")
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: "com.android.library"
+
+android {
+    namespace = "dev.axiomcore.axiom_flutter_extensions"
+    compileSdk = 35
+
+    defaultConfig {
+        minSdk = 24
+        consumerProguardFiles "consumer-rules.pro"
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ["src/main/jniLibs"]
+        }
+    }
+
+    packagingOptions {
+        jniLibs {
+            // Uncompressed and page aligned in the APK (16 KB page devices).
+            useLegacyPackaging = false
+        }
+    }
+}
+
+// With this add-on the app needs only libaxiom_runtime_full.so. Remove
+// axiom_flutter's lean libaxiom_runtime.so (~5 MB per ABI) from the app's
+// merged native libraries, after the merge and strip tasks write them (same
+// technique as axiom_flutter's web-asset hook). The pattern matches the exact
+// file name, never libaxiom_runtime_full.so. Keep both libraries with
+// `axiom.keepLeanRuntime=true` in the app's android/gradle.properties.
+def axiomKeepLeanRuntime = (rootProject.findProperty("axiom.keepLeanRuntime") ?: "false").toString().toBoolean()
+if (!axiomKeepLeanRuntime) {
+    gradle.projectsEvaluated {
+        rootProject.allprojects { p ->
+            p.plugins.withId("com.android.application") {
+                p.tasks.matching {
+                    it.name ==~ /merge\w*NativeLibs/ || it.name ==~ /strip\w*DebugSymbols/
+                }.configureEach { t ->
+                    t.doLast {
+                        t.outputs.files.each { out ->
+                            p.fileTree(out) { include "**/libaxiom_runtime.so" }.each { it.delete() }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

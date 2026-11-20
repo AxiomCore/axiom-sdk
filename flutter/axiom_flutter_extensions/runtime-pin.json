@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "package": "axiom_flutter_extensions",
+  "android": {
+    "distribution": "bundled",
+    "variant": "full",
+    "path": "flutter/axiom_flutter_extensions/android/src/main/jniLibs/<abi>/libaxiom_runtime_full.so",
+    "source": "axiom-runtime perf/rtlean 984335d65fbf0ef4cdeb9ff2f45ebe223c14f69f (unit rtlean artifact set, on flutter/perf f93a3b8; needs axiom-lib perf/rtlean c542aa2), scripts/build-android-so.sh NDK 26.3.11579264 API 24 16 KB pages --remap-path-prefix (full: default features, executable extensions + telemetry)",
+    "libraries": {
+      "arm64-v8a": {
+        "variant": "full",
+        "sha256": "847c998f2efd5c284cbca6abb5458c40afe17a3a33d475c29b1130e6a2929689",
+        "bytes": 7336144
+      },
+      "armeabi-v7a": {
+        "variant": "full",
+        "sha256": "dab37e661594b05b7e44c5379d0e98e0165ee8b8b52e99d7d3d90596335bf7a3",
+        "bytes": 5169420
+      },
+      "x86_64": {
+        "variant": "full",
+        "sha256": "a93102e8d0be0ab843015fdb2adc6e8e8dcdffa37b7bb227d3c7cc001bb7511c",
+        "bytes": 8809944
+      }
+    }
+  },
+  "apple": {
+    "variant": "full",
+    "note": "not bundled: iOS/macOS use axiom_flutter's published full runtime"
+  },
+  "wasm": {
+    "note": "not applicable: executable extensions are native only"
+  }
+}

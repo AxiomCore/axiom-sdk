@@ -2318,6 +2318,55 @@ class AxiomRuntimeIo implements AxiomRuntime {
     }
   }
 
+  /// Message used when a lean runtime (built without executable extensions)
+  /// is asked to load or invoke an extension.
+  static const String extensionsNeedAddonMessage =
+      'Executable extensions need the axiom_flutter_extensions package: the '
+      'runtime bundled with axiom_flutter is the lean build without '
+      'executable extensions. Add axiom_flutter_extensions to pubspec.yaml '
+      '(Android; iOS/macOS already ship the full runtime).';
+
+  bool? _extensionsCompiled;
+
+  /// False when the loaded runtime reports that executable extensions are
+  /// not compiled in (lean build: `axiom_extension_audit` says
+  /// `"compiled": false`). Older runtimes do not report it: treated as true.
+  bool _runtimeHasExtensions() {
+    final cached = _extensionsCompiled;
+    if (cached != null) return cached;
+    var compiled = true;
+    if (_has('axiom_extension_audit')) {
+      try {
+        final fn = _lib.lookupFunction<_AxiomExtAuditNative, _AxiomExtAudit>(
+          'axiom_extension_audit',
+        );
+        compiled = using((Arena arena) {
+          final out = arena<AxiomBuffer>();
+          out.ref
+            ..ptr = nullptr
+            ..len = 0;
+          fn(out);
+          final result = _takeJson(out);
+          return !(result is Map && result['compiled'] == false);
+        });
+      } catch (_) {
+        compiled = true;
+      }
+    }
+    return _extensionsCompiled = compiled;
+  }
+
+  Never _throwExtensionError(String operation, int status, String? message) {
+    final notCompiled =
+        (message != null && message.contains('not compiled')) ||
+        !_runtimeHasExtensions();
+    throw AxiomExtensionException(
+      operation,
+      status,
+      notCompiled ? extensionsNeedAddonMessage : message,
+    );
+  }
+
   @override
   Future<void> loadExtension(AxiomExtensionPackage package) async {
     _requireSymbol('axiom_extension_load_locked');
@@ -2335,11 +2384,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
       ),
     );
     if (status != FfiError.success) {
-      throw AxiomExtensionException(
-        'loadExtension',
-        status,
-        FfiError.name(status),
-      );
+      _throwExtensionError('loadExtension', status, FfiError.name(status));
     }
   }
 
@@ -2367,7 +2412,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
         final message = result is Map && result['error'] != null
             ? '${result['error']}'
             : FfiError.name(status);
-        throw AxiomExtensionException('invokeExtension', status, message);
+        _throwExtensionError('invokeExtension', status, message);
       }
       return result;
     });
@@ -2439,9 +2484,18 @@ class AxiomRuntimeIo implements AxiomRuntime {
 
   static DynamicLibrary _openPlatformLibrary() {
     if (Platform.isIOS || Platform.isMacOS) return DynamicLibrary.process();
+    // Android: the plugin ships the lean runtime as jniLibs/<abi>/
+    // libaxiom_runtime.so; the axiom_flutter_extensions add-on ships the full
+    // runtime (executable extensions) as libaxiom_runtime_full.so and removes
+    // the lean one from the app. Prefer the full library when it is present.
+    if (Platform.isAndroid) {
+      try {
+        return DynamicLibrary.open('libaxiom_runtime_full.so');
+      } on ArgumentError {
+        // No add-on: fall through to the lean runtime.
+      }
+    }
     try {
-      // Android: the plugin ships it in jniLibs/<abi>/, so the loader finds it
-      // by name in the app's native library directory.
       return DynamicLibrary.open('libaxiom_runtime.so');
     } on ArgumentError catch (e) {
       throw StateError(

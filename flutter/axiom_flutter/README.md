@@ -43,10 +43,10 @@ from `build_runner`.
 
 | Platform | Minimum | Runtime binary |
 | --- | --- | --- |
-| Android | API 24 | `libaxiom_runtime.so` for arm64-v8a, armeabi-v7a, x86_64, shipped in the package |
+| Android | API 24 | lean `libaxiom_runtime.so` for arm64-v8a, armeabi-v7a, x86_64, shipped in the package (full runtime with executable extensions: add `axiom_flutter_extensions`) |
 | iOS | 13.0 | `AxiomRuntime.xcframework`, downloaded by CocoaPods and checked against a pinned SHA-256 |
 | macOS | 11.0 | same XCFramework |
-| Web | any browser with WebAssembly | `axiom_runtime_bg.wasm`, bundled as a package asset |
+| Web | any browser with WebAssembly | lean `axiom_runtime_bg.wasm`, bundled as a package asset |
 
 Linux and Windows are not supported.
 
@@ -69,6 +69,12 @@ Nothing extra to install. Add the internet permission to
 
 Set `minSdk = 24` (or higher) in `android/app/build.gradle(.kts)`.
 
+Since 0.150.1 the bundled library is the LEAN runtime: no executable
+extensions and no telemetry exporter (arm64 library 7.3 MB -> 4.8 MB; an arm64
+release APK of the integration app went from 27.3 MB to 21.0 MB). Apps that
+use executable extensions add `axiom_flutter_extensions`, which ships the full
+runtime and removes the lean library from the app (see [Extensions](#extensions)).
+
 32-bit x86 emulators are not supported. Use an x86_64 or arm64 image.
 
 The Android emulator reaches your computer at `10.0.2.2`, not `127.0.0.1`.
@@ -90,6 +96,14 @@ On macOS, apps are sandboxed. Add this key to both
 
 For `http://localhost` on iOS, add `NSAllowsLocalNetworking` under
 `NSAppTransportSecurity` in `Info.plist`.
+
+iOS and macOS still use the published full AxiomRuntime 0.148.6 (executable
+extensions included), so the lean default and `axiom_flutter_extensions`
+change nothing there. The web runtime files are also copied into Apple app
+bundles (about 2.5 MB, never loaded); `ios/axiom_strip_web_assets.sh` (and
+the `macos/` copy) can remove them as an opt-in Run Script phase, see
+[doc/wasm-size.md](doc/wasm-size.md). That script is not verified on Apple
+hardware yet.
 
 ### Web
 
@@ -417,6 +431,22 @@ extensions from bytes embedded in the app: `loadExtension`,
 `invokeExtension`, `extensionLifecycle` and `extensionAudit` on
 `AxiomRuntime`. A failed call throws `AxiomExtensionException`. On web these
 methods throw `UnsupportedError`.
+
+On Android the runtime bundled with `axiom_flutter` is the lean build without
+executable extensions: `loadExtension` and `invokeExtension` throw
+`AxiomExtensionException` with the message "Executable extensions need the
+axiom_flutter_extensions package". Add the add-on to get the full runtime:
+
+```yaml
+dependencies:
+  axiom_flutter: ^0.150.1
+  axiom_flutter_extensions: ^0.150.1
+```
+
+It bundles `libaxiom_runtime_full.so`, which `axiom_flutter` loads in
+preference to `libaxiom_runtime.so`, and its Gradle build removes the lean
+library from the app (opt out with `axiom.keepLeanRuntime=true` in
+`android/gradle.properties`). iOS and macOS already ship the full runtime.
 
 <!-- VERIFY: runtime.extensions (SKIP in every receipt on the Linux box; needs a native extension build) -->
 

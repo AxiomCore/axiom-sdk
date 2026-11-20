@@ -6,7 +6,7 @@ runtime_pin = JSON.parse(File.read(File.join(__dir__, '..', 'runtime-pin.json'))
 
 Pod::Spec.new do |s|
   s.name             = 'axiom_flutter'
-  s.version          = '0.150.0'
+  s.version          = '0.150.1'
   s.summary          = 'Axiom Runtime'
   s.homepage         = 'https://axiomcore.dev'
   s.license          = { :file => '../LICENSE' }
