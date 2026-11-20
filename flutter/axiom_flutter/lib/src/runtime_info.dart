@@ -16,6 +16,7 @@ class AxiomRuntimeInfo {
   /// [minContractReaderVersion].
   final int contractReaderVersion;
 
+  /// Creates runtime version info.
   const AxiomRuntimeInfo({
     required this.abiVersion,
     required this.dataAbiVersion,
@@ -49,6 +50,7 @@ class AxiomRuntimeInfo {
     if (!isCompatible) throw AxiomVersionMismatch(this);
   }
 
+  /// Versions as a JSON map.
   Map<String, int> toJson() => {
     'abiVersion': abiVersion,
     'dataAbiVersion': dataAbiVersion,
@@ -64,9 +66,13 @@ class AxiomRuntimeInfo {
 /// Thrown (and reported in [AxiomInitResult.error]) when the loaded runtime
 /// library does not match this Dart package.
 class AxiomVersionMismatch implements Exception {
+  /// Versions reported by the loaded runtime.
   final AxiomRuntimeInfo actual;
+
+  /// Versions this package needs.
   final AxiomRuntimeInfo expected;
 
+  /// Creates the exception.
   AxiomVersionMismatch(
     this.actual, [
     this.expected = AxiomRuntimeInfo.expected,

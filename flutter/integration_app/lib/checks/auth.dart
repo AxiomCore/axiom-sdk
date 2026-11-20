@@ -7,12 +7,15 @@ final authChecks = <CheckDef>[
     expectEq(httpStatusOf(e), 401, 'status (error: $e)');
   }),
   CheckDef('auth.bearer_token', 'auth', (c) async {
-    c.api.axiom.setAuthToken('authBearer', fixtureBearerToken);
+    // The fixture contract publishes no client auth method ("auth": null), so
+    // the per-method runtime path cannot apply; the namespace-wide setter
+    // sends `Authorization: Bearer` (API.md "Explicit tokens").
+    c.sdk.runtime.setNamespaceAuthToken(namespace: 'fixture', token: fixtureBearerToken);
     try {
       final r = await data(c.api.authBearer());
       expectEq(r.method, 'bearer', 'method');
     } finally {
-      c.api.axiom.clearAuthToken('authBearer');
+      c.sdk.runtime.clearNamespaceAuthToken(namespace: 'fixture');
     }
   }),
   CheckDef('auth.api_key_header', 'auth', (c) async {

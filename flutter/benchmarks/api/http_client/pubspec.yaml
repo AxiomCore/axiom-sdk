@@ -1,0 +1,7 @@
+name: bench_http_client
+description: Plain package:http client with manual fromJson for the benchmark API.
+publish_to: none
+environment:
+  sdk: ^3.8.0
+dependencies:
+  http: ^1.6.0

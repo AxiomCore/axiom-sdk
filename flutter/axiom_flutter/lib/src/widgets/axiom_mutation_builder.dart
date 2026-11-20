@@ -1,9 +1,9 @@
-// FILE: lib/src/widgets/axiom_mutation_builder.dart
 import 'dart:async';
 import 'package:flutter/widgets.dart';
 import '../state.dart';
 import '../mutation.dart';
 
+/// Builds the UI of a mutation. Call `execute` with the arguments to run it.
 typedef AxiomMutationWidgetBuilder<T, Args> =
     Widget Function(
       BuildContext context,
@@ -13,9 +13,13 @@ typedef AxiomMutationWidgetBuilder<T, Args> =
 
 /// A reactive builder for Form Submissions and Mutations (POST, PUT, DELETE).
 class AxiomMutationBuilder<T, Args> extends StatefulWidget {
+  /// The mutation to run.
   final AxiomMutation<T, Args> mutation;
+
+  /// Builds the UI for the current state.
   final AxiomMutationWidgetBuilder<T, Args> builder;
 
+  /// Creates the builder.
   const AxiomMutationBuilder({
     super.key,
     required this.mutation,

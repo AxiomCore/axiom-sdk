@@ -1,0 +1,14 @@
+name: bench_dio_client
+description: Hand-written dio + retrofit + json_serializable client for the benchmark API.
+publish_to: none
+environment:
+  sdk: ^3.8.0
+dependencies:
+  dio: ^5.11.1
+  dio_cache_interceptor: ^4.0.7
+  json_annotation: ^4.9.0
+  retrofit: 4.9.0
+dev_dependencies:
+  build_runner: ^2.15.1
+  json_serializable: ^6.11.2
+  retrofit_generator: 10.1.4

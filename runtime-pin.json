@@ -7,9 +7,26 @@
     "sha256": "f8b394fe7be49091face20e142ae2c3f2c4ad2a47235d736c137493bbe014db6"
   },
   "android": {
+    "distribution": "bundled",
+    "path": "flutter/axiom_flutter/android/src/main/jniLibs/<abi>/libaxiom_runtime.so",
+    "source": "axiom-runtime flutter/r 539bd68 (in flutter/parity c4a36b0; r states the build source matches 539bd68), scripts/build-android-so.sh, NDK 26.3.11579264, API 24, 16 KB pages",
     "archive": null,
     "url": null,
-    "sha256": null
+    "sha256": null,
+    "libraries": {
+      "arm64-v8a": {
+        "sha256": "c81f4a6ca5abc9e4daab56d8f5af37a5e716bb5f6969a12d972be20839e0e3a8",
+        "bytes": 10095168
+      },
+      "armeabi-v7a": {
+        "sha256": "60b58326c69ecc6108ef265f4afc1459f796ff0ec23036ef6c14f11af85884a3",
+        "bytes": 7257044
+      },
+      "x86_64": {
+        "sha256": "07aa2d8bdf8e3ead91ebf0e185054ed24c8f3a86ed837027d23328d560a788c1",
+        "bytes": 12473872
+      }
+    }
   },
   "wasm": {
     "runtime_commit": "822224b1886e6aeb21cf9eeb9627ca08131cc668",

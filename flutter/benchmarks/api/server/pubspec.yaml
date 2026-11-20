@@ -1,0 +1,5 @@
+name: bench_server
+description: Local server behind all three benchmark clients (Axiom, dio/retrofit, http).
+publish_to: none
+environment:
+  sdk: ^3.8.0
