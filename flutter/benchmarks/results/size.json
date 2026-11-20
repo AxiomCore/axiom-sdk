@@ -1,0 +1,44 @@
+{
+  "method": "App size with and without the Axiom SDK.\n\n  python3 tool/bench_size.py [--out results/size.json] [--skip-apk] [--skip-web]\n\nbaseline = baseline_app/lib/main.dart (dio + http, one call each, no axiom_flutter dependency)\naxiom    = app/lib/size_main.dart (the same screen plus one Axiom call; app depends on axiom_flutter)\nBuilds: `flutter build apk --release --split-per-abi` and `flutter build web --release`.\nWeb sizes: main.dart.js, every file under build/web, the Axiom wasm/js assets, and gzip -9\nsizes of the largest files (what a server with gzip would transfer).",
+  "apk": {
+    "baseline": {
+      "arm64-v8a": 6859851,
+      "armeabi-v7a": 6295778,
+      "x86_64": 6988748
+    },
+    "axiom": {
+      "arm64-v8a": 7861366,
+      "armeabi-v7a": 7301619,
+      "x86_64": 7993601
+    }
+  },
+  "web": {
+    "baseline": {
+      "total_bytes": 23827408,
+      "main_dart_js": 1741584,
+      "main_dart_js_gzip": 512450
+    },
+    "axiom": {
+      "total_bytes": 26350475,
+      "main_dart_js": 1767411,
+      "main_dart_js_gzip": 520380,
+      "axiom_asset:axiom_runtime.js": 37935,
+      "axiom_asset:axiom_runtime.js:gzip": 6931,
+      "axiom_asset:axiom_runtime_bg.wasm": 2427799,
+      "axiom_asset:axiom_runtime_bg.wasm:gzip": 938661,
+      "contract_asset": 7389
+    }
+  },
+  "apk_delta": {
+    "arm64-v8a": 1001515,
+    "armeabi-v7a": 1005841,
+    "x86_64": 1004853
+  },
+  "web_delta": {
+    "total_bytes": 2523067,
+    "main_dart_js": 25827,
+    "main_dart_js_gzip": 7930
+  },
+  "flutter": "Flutter 3.32.0 \u2022 channel stable \u2022 https://github.com/flutter/flutter.git",
+  "apk_note": "No Android runtime .so: axiom_flutter on this branch has no android/ plugin, so the APK cannot make Axiom calls yet. The ~1 MB delta is almost all the web wasm runtime (axiom_runtime_bg.wasm, 942 KB compressed in the APK) that the package declares as a Flutter asset and therefore ships on every platform; app Dart code (libapp.so) differs by the rest. The real Android delta will be the .so per ABI minus the wasm if the asset is made web-only."
+}
