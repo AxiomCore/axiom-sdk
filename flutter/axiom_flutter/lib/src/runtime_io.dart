@@ -8,6 +8,7 @@ import 'dart:typed_data';
 
 import 'package:ansicolor/ansicolor.dart';
 import 'package:ffi/ffi.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'call_options.dart';
 import 'channel.dart';
@@ -324,7 +325,8 @@ class AxiomRuntimeIo implements AxiomRuntime {
     });
 
     await Isolate.spawn(_runRustEventLoop, [mainIsolatePort.sendPort]);
-    using((Arena arena) => _initFfi(_toAxiomString(dbPath ?? '', arena)));
+    final resolvedDbPath = dbPath ?? await _defaultDbPath();
+    using((Arena arena) => _initFfi(_toAxiomString(resolvedDbPath, arena)));
     return _initCompleter!.future;
   }
 
@@ -578,10 +580,33 @@ class AxiomRuntimeIo implements AxiomRuntime {
     print(pen('${dir == 'OUT' ? '➔ CALL' : '← RESP'} [#$id] $details'));
   }
 
-  static DynamicLibrary _openPlatformLibrary() =>
-      Platform.isIOS || Platform.isMacOS
-      ? DynamicLibrary.process()
-      : DynamicLibrary.open('libaxiom_runtime.so');
+  static DynamicLibrary _openPlatformLibrary() {
+    if (Platform.isIOS || Platform.isMacOS) return DynamicLibrary.process();
+    try {
+      // Android: the plugin ships it in jniLibs/<abi>/, so the loader finds it
+      // by name in the app's native library directory.
+      return DynamicLibrary.open('libaxiom_runtime.so');
+    } on ArgumentError catch (e) {
+      throw StateError(
+        'axiom_flutter: could not load libaxiom_runtime.so on '
+        '${Platform.operatingSystem}. On Android the library is bundled for '
+        'arm64-v8a, armeabi-v7a and x86_64 only. Cause: $e',
+      );
+    }
+  }
+
+  /// Default sled cache directory when [init] gets no `dbPath`.
+  /// Android: `<app support dir>/axiom` (the app's private files directory).
+  /// Other platforms keep the previous behaviour (empty path, cache disabled).
+  static Future<String> _defaultDbPath() async {
+    if (!Platform.isAndroid) return '';
+    try {
+      final dir = await getApplicationSupportDirectory();
+      return '${dir.path}${Platform.pathSeparator}axiom';
+    } catch (_) {
+      return '';
+    }
+  }
 
   @override
   Future<void> startup({

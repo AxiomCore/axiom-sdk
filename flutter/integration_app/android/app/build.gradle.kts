@@ -24,7 +24,8 @@ android {
         applicationId = "dev.axiomcore.fixture.axiom_fixture_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // axiom_flutter needs API 24 (libaxiom_runtime.so is built for android-24).
+        minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
