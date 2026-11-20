@@ -110,6 +110,7 @@ final dChecks = <CheckDef>[
       })),
   CheckDef('gen.ws_channel', 'streams', (c) => _pendingAware(() async {
         // Same server, token and Origin as stream.websocket_echo.
+        skipBearerWsOnWeb();
         final api = await c.wsApi();
         c.setWsToken();
         final channel = api.wsEchoChannel(

@@ -144,7 +144,9 @@ final checksC = <CheckDef>[
         if (s.hasError && !s.error!.isCancelled) errors.add(s.error!);
       }, onDone: done.complete);
       await Future<void>.delayed(const Duration(milliseconds: 300));
-      expectThat(errors.isEmpty, 'ws failed before cancel: $errors');
+      // Native only: a browser cannot authorize this upgrade (see
+      // skipBearerWsOnWeb); cancel still has to work while it connects.
+      if (!kIsWeb) expectThat(errors.isEmpty, 'ws failed before cancel: $errors');
       expectThat(_rt(c).cancel(r.requestId), 'cancel(ws) returned false');
       await done.future.timeout(const Duration(seconds: 5),
           onTimeout: () => throw CheckFailure('ws stream not closed by cancel'));

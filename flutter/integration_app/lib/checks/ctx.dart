@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:axiom_flutter/axiom_flutter.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart' show rootBundle;
 
 import '../axiom_generated/axiom_sdk.dart';
@@ -102,6 +103,17 @@ void resetAuthState(Ctx c) {
   }
   for (final m in _authMethodNames) {
     quiet(() => c.api.axiom.clearAuthToken(m));
+  }
+}
+
+/// Skips a bearer-token WebSocket check in browsers: a browser cannot send
+/// Authorization (or a chosen Origin) on a WebSocket upgrade. Web WebSockets
+/// are covered by g.websocket_echo_web_session (cookie session fixture).
+void skipBearerWsOnWeb() {
+  if (kIsWeb) {
+    skip('web: browsers cannot send Authorization on a WebSocket upgrade; '
+        'covered by g.websocket_echo_web_session / '
+        'g.websocket_initial_message_web_session (FIXTURE_AUTH=session)');
   }
 }
 

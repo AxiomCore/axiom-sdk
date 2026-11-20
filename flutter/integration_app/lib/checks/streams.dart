@@ -19,6 +19,7 @@ final streamChecks = <CheckDef>[
     expectEq(r.seq, 1, 'frame seq');
   }),
   CheckDef('stream.websocket_echo', 'streams', (c) async {
+    skipBearerWsOnWeb();
     final api = await c.wsApi();
     // Guarded endpoint, no contract auth metadata: global token -> header.
     c.sdk.runtime.setGlobalAuthToken(fixtureBearerToken);
