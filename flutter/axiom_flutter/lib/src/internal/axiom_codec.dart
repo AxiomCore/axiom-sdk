@@ -45,7 +45,33 @@ class AxiomCodec {
       return decoder(null);
     }
 
-    final dynamic jsonObject = jsonDecode(jsonString);
+    final dynamic jsonObject = jsonDecode(sseData(jsonString) ?? jsonString);
     return decoder(jsonObject);
+  }
+
+  /// When [text] is a raw server-sent event (`id:`/`event:`/`data:` lines),
+  /// returns the joined `data:` payload; otherwise null.
+  static String? sseData(String text) {
+    final first = text.trimLeft();
+    if (first.startsWith('{') || first.startsWith('[') || first.startsWith('"')) {
+      return null;
+    }
+    final lines = const LineSplitter().convert(text);
+    final data = <String>[];
+    var sawField = false;
+    for (final line in lines) {
+      if (line.isEmpty) continue;
+      final colon = line.indexOf(':');
+      if (colon <= 0 && !line.startsWith(':')) return null;
+      if (line.startsWith(':')) continue; // comment / heartbeat
+      final field = line.substring(0, colon);
+      if (!const {'id', 'event', 'data', 'retry'}.contains(field)) return null;
+      sawField = true;
+      var value = line.substring(colon + 1);
+      if (value.startsWith(' ')) value = value.substring(1);
+      if (field == 'data') data.add(value);
+    }
+    if (!sawField || data.isEmpty) return null;
+    return data.join('\n');
   }
 }

@@ -34,7 +34,6 @@ const fixtureBearerToken =
 const epEverything = 1643923642;
 const epEcho = 1421147111;
 const epCacheFirst = 3177318534;
-const epNetworkOnly = 837292962;
 const epAuthBearer = 1404635741;
 const epClaim = 3649530469;
 
@@ -83,11 +82,23 @@ AxiomQuery<Object?> nonce(
   endpointId: ep,
   method: 'GET',
   path: path,
-  headers: {'x-fixture-nonce': value},
+  queryParams: {'nonce': value},
   args: args ?? {'nonce': value},
   decoder: (j) => j,
   options: options,
 );
+
+AxiomQuery<Object?> apiKey(AxiomRuntime rt, String key, {AxiomCallOptions? options}) =>
+    rt.send<Object?>(
+      namespace: 'fixture',
+      endpointId: 1256260924,
+      method: 'GET',
+      path: '/auth/api-key-header',
+      headers: {'x-api-key': key},
+      args: {'x-api-key': key, 'o': options?.headers?.toString()},
+      decoder: (j) => j,
+      options: options,
+    );
 
 /// Waits until the query has a live request id.
 Future<int> liveId(AxiomQuery q) async {
@@ -262,10 +273,10 @@ void main() {
   });
 
   test('7 per-call headers and cache mode refresh', () async {
-    final a = await settle(nonce(rt, epNetworkOnly, '/cache/network-only', 'h1',
-            options: const AxiomCallOptions(headers: {'x-fixture-nonce': 'h2'}))
+    final a = await settle(apiKey(rt, 'nope',
+            options: const AxiomCallOptions(headers: {'x-api-key': 'fixture-api-key'}))
         .stream);
-    expect((a.data as Map)['key'], 'h2', reason: 'options.headers override');
+    expect(a.isSuccess, isTrue, reason: 'options.headers override: ${a.error}');
 
     final first = await settle(nonce(rt, epCacheFirst, '/cache/cache-first', 'n1').stream);
     expect((first.data as Map)['key'], 'n1');
@@ -356,15 +367,7 @@ void main() {
   });
 
   test('7 typed failure fields from contract failure body', () async {
-    final q = rt.send<Object?>(
-      namespace: 'fixture',
-      endpointId: 1256260924,
-      method: 'GET',
-      path: '/auth/api-key-header',
-      headers: {'x-api-key': 'nope'},
-      args: {'x-api-key': 'nope'},
-      decoder: (j) => j,
-    );
+    final q = apiKey(rt, 'nope');
     final s = await settle(q.stream);
     expect(s.hasError, isTrue);
     expect(s.error!.failureCode, 'unauthorized', reason: '${s.error} ${s.error!.details}');

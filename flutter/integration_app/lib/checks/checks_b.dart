@@ -12,7 +12,6 @@ import 'ctx.dart';
 
 // Fixture endpoint ids (see axiom_generated/axiom_sdk.dart).
 const _epEverything = 1643923642;
-const _epNetworkOnly = 837292962;
 const _epApiKeyHeader = 1256260924;
 
 /// Namespace whose base URL never answers (non-routable address), so its
@@ -162,20 +161,20 @@ final checksB = <CheckDef>[
       _rt(c)
           .send<Object?>(
             namespace: 'fixture',
-            endpointId: _epNetworkOnly,
+            endpointId: _epApiKeyHeader,
             method: 'GET',
-            path: '/cache/network-only',
-            headers: {'x-fixture-nonce': 'base'},
-            args: {'b': 'headers'},
+            path: '/auth/api-key-header',
+            headers: {'x-api-key': 'nope'},
+            args: {'x-api-key': 'nope', 'b': 'headers'},
             decoder: (j) => j,
             options: const AxiomCallOptions(
-              headers: {'x-fixture-nonce': 'override'},
+              headers: {'x-api-key': fixtureApiKey},
               cacheMode: AxiomCacheMode.refresh,
             ),
           )
           .stream,
     );
-    expectEq((headers.data as Map?)?['key'], 'override', 'options.headers');
+    expectThat(headers.isSuccess, 'options.headers override: ${headers.error}');
   }),
   CheckDef('b.error_listener_typed_failure', 'runtime', (c) async {
     final events = <AxiomErrorEvent>[];

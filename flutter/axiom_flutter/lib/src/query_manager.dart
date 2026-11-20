@@ -24,6 +24,7 @@ class ActiveQuery<T> {
   StreamSubscription? _rustSubscription;
   bool _streamClosed = false;
   bool _forceNext = false;
+  bool _seededPending = false;
 
   /// Runtime request id of the current (or last) fetch.
   int? currentReqId;
@@ -59,8 +60,9 @@ class ActiveQuery<T> {
 
   void _onListen() {
     if (_rustSubscription == null || _streamClosed) {
-      if (_lastState.hasData) {
-        // Show the cached value immediately while the fetch runs.
+      if (_seededPending && _lastState.hasData) {
+        // Show a value written by setQueryData while the fetch runs.
+        _seededPending = false;
         _controller?.add(
           AxiomState<T>.success(
             _lastState.data as T,
@@ -196,7 +198,11 @@ class ActiveQuery<T> {
   /// Writes [data] as the current value and pushes it to listeners.
   void setData(Object? data) {
     _lastState = AxiomState<T>.success(data as T, AxiomSource.cache);
-    if (!(_controller?.isClosed ?? true)) _controller?.add(_lastState);
+    if (hasListener) {
+      _controller?.add(_lastState);
+    } else {
+      _seededPending = true;
+    }
   }
 
   /// Forgets the cached value (listeners keep what they showed).
