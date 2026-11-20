@@ -40,7 +40,17 @@ clean() {
   if [ "$n" != "0" ]; then echo "NOT PATH CLEAN ($n hits): $1" >&2; exit 1; fi
 }
 
+RE="$(command -v llvm-readelf || ls "${ANDROID_NDK_HOME:-/nonexistent}"/toolchains/llvm/prebuilt/*/bin/llvm-readelf 2>/dev/null | head -1 || true)"
+aligned() {
+  [ -n "$RE" ] || { echo "warning: llvm-readelf not found, 16 KB alignment not checked" >&2; return 0; }
+  if "$RE" -lW "$1" | awk '$1=="LOAD"{print $NF}' | grep -qv '^0x4000$'; then
+    echo "LOAD segment not 16 KB aligned: $1" >&2; exit 1
+  fi
+}
+
 for abi in "${ABIS[@]}"; do
+  aligned "$LEAN/android/$abi/libaxiom_runtime.so"
+  aligned "$FULL/android/$abi/libaxiom_runtime.so"
   clean "$LEAN/android/$abi/libaxiom_runtime.so"
   clean "$FULL/android/$abi/libaxiom_runtime.so"
 done

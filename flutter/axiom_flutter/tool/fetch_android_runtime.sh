@@ -8,6 +8,8 @@
 # as written by axiom-runtime/scripts/build-android-so.sh <dir>.
 # AXIOM_ANDROID_RUNTIME_DIR can be used instead of the first argument.
 # --check verifies the committed libraries against runtime-pin.json and exits.
+# The libraries must be the LEAN build (variant "lean"). To refresh lean,
+# wasm and the full add-on runtime together use tool/bundle_runtime.sh.
 set -euo pipefail
 PKG="$(cd "$(dirname "$0")/.." && pwd)"
 JNI="$PKG/android/src/main/jniLibs"
@@ -56,9 +58,10 @@ pin = json.load(open(path))
 libs = {}
 for abi in abis:
     f = f"{jni}/{abi}/libaxiom_runtime.so"
-    libs[abi] = {"sha256": hashlib.sha256(open(f, "rb").read()).hexdigest(), "bytes": os.path.getsize(f)}
+    libs[abi] = {"variant": "lean", "sha256": hashlib.sha256(open(f, "rb").read()).hexdigest(), "bytes": os.path.getsize(f)}
 pin["android"] = {
     "distribution": "bundled",
+    "variant": "lean",
     "path": "flutter/axiom_flutter/android/src/main/jniLibs/<abi>/libaxiom_runtime.so",
     "source": desc,
     "archive": None, "url": None, "sha256": None,

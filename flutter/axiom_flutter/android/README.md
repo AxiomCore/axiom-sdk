@@ -1,10 +1,20 @@
 # axiom_flutter Android module
 
-This module ships the prebuilt AxiomCore runtime, `libaxiom_runtime.so`, for
+This module ships the prebuilt LEAN AxiomCore runtime (no executable
+extensions, no telemetry exporter; variant `lean` in `runtime-pin.json`),
+`libaxiom_runtime.so`, for
 `arm64-v8a`, `armeabi-v7a` and `x86_64` under `src/main/jniLibs/<abi>/`. It has
 no Java or Kotlin code: the plugin is declared `ffiPlugin: true` in
 `pubspec.yaml`, and Dart opens the library with
-`DynamicLibrary.open('libaxiom_runtime.so')` (`lib/src/runtime_io.dart`).
+`DynamicLibrary.open('libaxiom_runtime_full.so')` first (shipped by the
+`axiom_flutter_extensions` add-on, which also removes the lean library from
+the app) and then `DynamicLibrary.open('libaxiom_runtime.so')`
+(`lib/src/runtime_io.dart`).
+
+To refresh all bundled runtimes at once (lean Android + lean wasm here, full
+Android in `axiom_flutter_extensions`), with pins and the pin check:
+`flutter/axiom_flutter/tool/bundle_runtime.sh <artifact-root>` (layout
+`lean/{android,wasm}`, `full/android`; see the script header).
 
 ## Requirements for apps
 - `minSdk 24` or higher (the library is built against android-24). New Flutter
