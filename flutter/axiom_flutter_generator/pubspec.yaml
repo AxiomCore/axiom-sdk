@@ -1,6 +1,6 @@
 name: axiom_flutter_generator
 description: AxiomCore Flutter Generator
-version: 0.146.6
+version: 0.147.5
 homepage: https://github.com/AxiomCore/axiom-sdk
 repository: https://github.com/AxiomCore/axiom-sdk
 issue_tracker: https://github.com/AxiomCore/axiom-sdk/issues
@@ -15,6 +15,7 @@ dependencies:
   args: ^2.4.0
   toml: ^0.15.0
   collection: ^1.18.0
+  crypto: ^3.0.6
 
 dev_dependencies:
   lints: ^5.0.0
