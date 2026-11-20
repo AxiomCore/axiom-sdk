@@ -118,4 +118,46 @@ void main() {
     expect(source.hasListener, isFalse);
     await source.close();
   });
+
+  test('watching after final data starts a fresh call; during a call joins it', () async {
+    final sources = <StreamController<AxiomState<String>>>[];
+    AxiomQuery<String> q() => AxiomQuery<String>(
+      'fresh',
+      (_) => AxiomQueryManager().watchRaw<String>(
+        'fresh',
+        null,
+        create: (_) {
+          final c = StreamController<AxiomState<String>>.broadcast();
+          sources.add(c);
+          return AxiomActiveStream<String>(sources.length, c.stream);
+        },
+        cancel: (_) => true,
+      ),
+    );
+    final a = <AxiomState<String>>[];
+    final subA = q().stream.listen(a.add);
+    await Future<void>.delayed(Duration.zero);
+    expect(sources.length, 1);
+    // Joins the running call and gets the current state, no new request.
+    final b = <AxiomState<String>>[];
+    final subB = q().stream.listen(b.add);
+    await Future<void>.delayed(Duration.zero);
+    expect(sources.length, 1);
+    sources[0].add(AxiomState.success('v1', AxiomSource.network));
+    await Future<void>.delayed(Duration.zero);
+    expect(b.last.data, 'v1');
+    // Final data delivered but Complete not yet received: a new watcher
+    // starts a fresh call (networkOnly endpoints must hit the network).
+    final c = <AxiomState<String>>[];
+    final subC = q().stream.listen(c.add);
+    await Future<void>.delayed(Duration.zero);
+    expect(sources.length, 2);
+    sources[1].add(AxiomState.success('v2', AxiomSource.network));
+    await Future<void>.delayed(Duration.zero);
+    expect(a.last.data, 'v2');
+    expect(c.last.data, 'v2');
+    await subA.cancel();
+    await subB.cancel();
+    await subC.cancel();
+  });
 }

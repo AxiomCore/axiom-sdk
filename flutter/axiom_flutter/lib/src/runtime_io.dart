@@ -269,6 +269,10 @@ AxiomInitResult? _initResult;
 SendPort? _dataPort;
 _AxiomFreeResponseBuffer? _freeResponseFfiBackground;
 
+/// Requests dispatched but not yet completed, as seen by the event isolate
+/// ('start' messages from the main isolate, Complete events here).
+int _pumpInFlight = 0;
+
 /// Opens the runtime library. `AXIOM_RUNTIME_LIB` (only when set) points at
 /// an explicit library path, used by host tests on Linux/macOS.
 DynamicLibrary _openLibrary() {
@@ -284,6 +288,9 @@ void _axiomCallbackHandler(Pointer<AxiomResponseBuffer> responsePtr) {
   if (responsePtr == nullptr) return;
   try {
     final response = responsePtr.ref;
+    if (response.eventType == EventType.complete && _pumpInFlight > 0) {
+      _pumpInFlight--;
+    }
     // Native ownership ends in this callback. Send owned Dart bytes, never addresses.
     final data = response.data.ptr == nullptr || response.data.len == 0
         ? Uint8List(0)
@@ -316,11 +323,17 @@ Future<void> _runRustEventLoop(List<Object> args) async {
   final mainIsolate = args[1] as Isolate;
   final control = ReceivePort();
   var running = true;
+  Completer<void>? wake;
   control.listen((msg) {
-    if (msg == 'shutdown') {
+    if (msg == 'start') {
+      _pumpInFlight++;
+    } else if (msg == 'reset') {
+      _pumpInFlight = 0;
+    } else if (msg == 'shutdown') {
       running = false;
       control.close();
     }
+    if (wake != null && !wake!.isCompleted) wake!.complete();
   });
   mainIsolate.addOnExitListener(control.sendPort, response: 'shutdown');
   _dataPort = mainIsolateDataPort;
@@ -342,10 +355,19 @@ Future<void> _runRustEventLoop(List<Object> args) async {
 
   mainIsolateDataPort.send(control.sendPort);
 
+  // axiom_process_responses waits up to 100 ms for an event while holding
+  // the runtime session lock that axiom_call also takes, so polling while
+  // idle delays every new call. Pump only while requests are in flight.
   while (running) {
-    processResponses();
-    // Yield so the control port can deliver 'shutdown'.
-    await Future<void>.delayed(Duration.zero);
+    if (_pumpInFlight > 0) {
+      processResponses();
+      // Yield so control messages ('start', 'shutdown') are delivered.
+      await Future<void>.delayed(Duration.zero);
+    } else {
+      wake = Completer<void>();
+      await wake!.future;
+      wake = null;
+    }
   }
   mainIsolateDataPort.send('stopped');
 }
@@ -882,11 +904,16 @@ class AxiomRuntimeIo implements AxiomRuntime {
   static AxiomError parseRuntimeError(int code, Uint8List bytes) {
     final text = bytes.isEmpty ? '' : utf8.decode(bytes, allowMalformed: true);
     if (code == FfiError.cancelled) {
+      var message = text;
+      try {
+        final j = jsonDecode(text);
+        if (j is Map && j['message'] != null) message = '${j['message']}';
+      } catch (_) {}
       return AxiomError(
         stage: ErrorStage.runtime,
         category: ErrorCategory.runtime,
         code: const Cancelled(),
-        message: text.isEmpty ? 'Request cancelled' : text,
+        message: message.isEmpty ? 'Request cancelled' : message,
         retryable: false,
       );
     }
@@ -1336,6 +1363,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
         );
       });
 
+      if (callStatus == 0) _eventControl?.send('start');
       if (callStatus != 0) {
         final err = AxiomError(
           stage: ErrorStage.requestBuild,
@@ -1661,6 +1689,8 @@ class AxiomRuntimeIo implements AxiomRuntime {
     // axiom_reset_session aborts in-flight tasks and drains queued events
     // without delivering a Cancelled/Complete pair, so close streams here.
     _resetSessionFfi?.call();
+    // Reset drains queued events without Complete: stop the pump.
+    _eventControl?.send('reset');
     _closeAllCalls('Request cancelled by resetSession');
     // Let the Cancelled events reach query listeners before disposing.
     await Future<void>.delayed(Duration.zero);

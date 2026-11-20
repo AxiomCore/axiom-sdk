@@ -52,7 +52,43 @@ class ActiveQuery<T> {
     );
   }
 
-  Stream<AxiomState<T>> get stream => _controller!.stream;
+  /// Shared stream of this query. Every new subscription is a "watch": when
+  /// the previous call already delivered its final state (or completed), a
+  /// fresh call starts (the endpoint's cache strategy decides whether it is
+  /// served from cache); while a call is still running the new subscriber
+  /// joins it and first receives the current state.
+  Stream<AxiomState<T>> get stream => Stream<AxiomState<T>>.multi((m) {
+    final controller = _controller!;
+    if (controller.isClosed) {
+      m.close();
+      return;
+    }
+    final hadListener = controller.hasListener;
+    final sub = controller.stream.listen(
+      m.add,
+      onError: m.addError,
+      onDone: m.close,
+    );
+    m.onCancel = sub.cancel;
+    if (hadListener) _onExtraListener(m);
+  }, isBroadcast: true);
+
+  /// The current call delivered its final (non-fetching, non-streaming)
+  /// state, or completed.
+  bool get _finalDelivered =>
+      _streamClosed ||
+      (_settledThisFetch &&
+          !_lastState.isLoading &&
+          !_lastState.isFetching &&
+          !_lastState.isStreaming);
+
+  void _onExtraListener(MultiStreamController<AxiomState<T>> m) {
+    if (_rustSubscription == null || _finalDelivered) {
+      refetch();
+    } else if (!_lastState.isLoading || _lastState.hasData) {
+      m.add(_lastState);
+    }
+  }
   AxiomState<T> get state => _lastState;
 
   /// True while at least one listener is subscribed.
@@ -75,6 +111,8 @@ class ActiveQuery<T> {
         );
       }
       _connect();
+    } else if (_finalDelivered) {
+      refetch();
     } else {
       _controller?.add(_lastState);
     }
@@ -177,7 +215,8 @@ class ActiveQuery<T> {
     }
     final previous = _rustSubscription;
     final previousId = currentReqId;
-    final wasInFlight = isInFlight;
+    // A call that already delivered its final state is not cancelled.
+    final wasInFlight = isInFlight && !_finalDelivered;
     _rustSubscription = null;
     previous?.cancel();
     if (wasInFlight && previousId != null && previousId != 0) {
