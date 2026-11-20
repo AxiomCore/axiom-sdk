@@ -1,0 +1,32 @@
+project(id: "docs.talks", version: "1.0.0")
+variant default(include: ["*"])
+
+model Talk { id: String title: String speaker: String }
+model TalkList { talks: List<Models.Talk> }
+model NewTalk { title: String speaker: String }
+model TalkRef { id: String }
+
+action listTalks(kind: ActionKind.query, output: Models.TalkList) {
+  managed { return {talks: [{id: "t1", title: "Typed APIs in Flutter", speaker: "Ada"}]} }
+}
+endpoint listTalks(method: GET, path: "/talks") {
+  handle(action: Actions.listTalks)
+  response(type: Models.TalkList)
+  cache(strategy: CacheStrategy.staleWhileRevalidate, ttl: 1m)
+}
+action getTalk(kind: ActionKind.query, input: Models.TalkRef, output: Models.Talk) {
+  managed { return {id: Input.id, title: "Typed APIs in Flutter", speaker: "Ada"} }
+}
+endpoint getTalk(method: GET, path: "/talks/{id}") {
+  request { path("id", type: String) }
+  handle(action: Actions.getTalk, input: {id: Input.path.id})
+  response(type: Models.Talk)
+}
+action createTalk(kind: ActionKind.command, input: Models.NewTalk, output: Models.Talk) {
+  managed { return {id: "t3", title: Input.title, speaker: Input.speaker} }
+}
+endpoint createTalk(method: POST, path: "/talks") {
+  request { body("title", type: String) body("speaker", type: String) }
+  handle(action: Actions.createTalk, input: {title: Input.body.title, speaker: Input.body.speaker})
+  response(type: Models.Talk, status: 201)
+}

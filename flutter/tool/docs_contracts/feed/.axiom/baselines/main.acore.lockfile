@@ -1,0 +1,181 @@
+{
+  "endpoints": {
+    "ticks": {
+      "id": 639364286,
+      "method": "GET",
+      "parameters": [
+        {
+          "isOptional": true,
+          "name": "last-event-id",
+          "source": "header",
+          "typeRef": {
+            "kind": "string"
+          }
+        }
+      ],
+      "path": "/ticks",
+      "returnIsOptional": false,
+      "returnType": {
+        "kind": "named",
+        "value": "Tick"
+      },
+      "streaming": {
+        "responseType": {
+          "kind": "named",
+          "value": "Tick"
+        },
+        "type": "sse"
+      },
+      "name": "ticks"
+    }
+  },
+  "models": {
+    "Cursor": {
+      "fields": {
+        "last": {
+          "isOptional": true,
+          "name": "last",
+          "typeRef": {
+            "kind": "string"
+          }
+        }
+      },
+      "name": "Cursor"
+    },
+    "Tick": {
+      "fields": {
+        "id": {
+          "isOptional": false,
+          "name": "id",
+          "typeRef": {
+            "kind": "string"
+          }
+        },
+        "value": {
+          "isOptional": false,
+          "name": "value",
+          "typeRef": {
+            "kind": "int32"
+          }
+        }
+      },
+      "name": "Tick"
+    }
+  },
+  "project": {
+    "id": "docs.feed",
+    "version": "1.0.0"
+  },
+  "server": {
+    "actions": {
+      "ticks": {
+        "implementation": {
+          "handler": "ticks",
+          "kind": "managed"
+        },
+        "input": {
+          "kind": "named",
+          "value": "Cursor"
+        },
+        "kind": "stream",
+        "output": {
+          "kind": "named",
+          "value": "Tick"
+        },
+        "program": {
+          "flow": [
+            {
+              "provenance": {
+                "end": 278,
+                "origin": "inferred",
+                "source": "action.ticks",
+                "start": 251
+              },
+              "statement": {
+                "kind": "return",
+                "value": {
+                  "fields": [
+                    [
+                      "id",
+                      {
+                        "kind": "literal",
+                        "value": "t1"
+                      }
+                    ],
+                    [
+                      "value",
+                      {
+                        "integer": true,
+                        "kind": "numeric",
+                        "representation": "1"
+                      }
+                    ]
+                  ],
+                  "kind": "record"
+                }
+              }
+            }
+          ],
+          "result": {
+            "kind": "literal",
+            "value": null
+          },
+          "steps": []
+        },
+        "settings": {
+          "admission": {},
+          "guards": [],
+          "scopes": [],
+          "successStatus": null,
+          "typedFailures": []
+        }
+      }
+    },
+    "endpointPolicies": {
+      "ticks": {
+        "admission": {},
+        "guards": [],
+        "handle": {
+          "action": "ticks",
+          "input": {
+            "last": {
+              "name": "last-event-id",
+              "source": "header"
+            }
+          }
+        },
+        "scopes": [],
+        "successStatus": null,
+        "typedFailures": []
+      }
+    },
+    "integrations": {
+      "caches": {},
+      "outbound": {},
+      "streams": {
+        "ticks": {
+          "buffer": 2,
+          "endpoint": "ticks",
+          "heartbeatMs": 10000,
+          "idField": "id",
+          "maxConnections": 16,
+          "maxFrameBytes": 16384,
+          "maxFrames": 100,
+          "origins": [],
+          "stallTimeoutMs": 5000
+        }
+      },
+      "uploads": {}
+    },
+    "language": {
+      "enabled": true
+    }
+  },
+  "variants": {
+    "default": {
+      "include": [
+        "*"
+      ]
+    }
+  }
+}

@@ -152,6 +152,7 @@ and the package agree on their ABI version, and throws if start-up fails.
 Every generated endpoint method returns an `AxiomQuery<T>`. Show it with
 `AxiomBuilder`:
 
+<!-- verify: continued -->
 ```dart
 class HelloPage extends StatelessWidget {
   const HelloPage({super.key});

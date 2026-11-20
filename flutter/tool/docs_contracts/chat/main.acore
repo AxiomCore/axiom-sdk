@@ -1,0 +1,21 @@
+project(id: "docs.chat", version: "1.0.0")
+variant default(include: ["*"])
+
+model Outgoing { text: String }
+model Message { text: String }
+model RoomIn { message: Models.Outgoing }
+
+guard signedIn(kind: GuardKind.authenticated)
+
+action room(kind: ActionKind.stream, input: Models.RoomIn, output: Models.Message) {
+  require(guard: Guards.signedIn)
+  managed { return {text: Input.message.text} }
+}
+endpoint room(method: WS, path: "/room") {
+  request { body("message", type: Models.Outgoing) }
+  handle(action: Actions.room, input: {message: Input.body.message})
+  response(type: Models.Message)
+  streaming(WebSocketDef(direction: "bidirectional", reconnect: "auto",
+    client: WsMessageDef(model: Models.Outgoing), server: WsMessageDef(model: Models.Message)))
+}
+streamPolicy room(endpoint: Routes.room, maxFrameBytes: 16384, maxFrames: 100, heartbeat: 10s, stallTimeout: 5s, maxConnections: 16, origins: ["http://localhost:5000"])
