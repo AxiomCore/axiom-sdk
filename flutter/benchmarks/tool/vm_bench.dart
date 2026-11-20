@@ -1,13 +1,14 @@
 // Native Dart VM harness driver: the "native (Linux VM)" column (a server CPU, not a phone).
 //
-//   dart run tool/vm_bench.dart --lib /abs/libaxiom_runtime.so [--runs 3] [--out results/raw-vm.jsonl]
+//   dart run tool/vm_bench.dart --lib /abs/libaxiom_runtime.so [--runs 3] [--out results/raw-vm]
 //       [--base http://127.0.0.1:8771] [--bench latency,cache,decode,extra] [--h2 clients,parallel]
 //       [--calls 200] [--cold 5]
 //
 // Each run is one fresh `flutter test test/vm_bench_test.dart` process in ../app (Dart VM, JIT:
 // axiom_flutter imports the Flutter SDK, so `dart run`/`dart compile exe` cannot load it; the
 // flutter_tester VM is the closest native host). Run i writes records with "run": "vm-<i>" (h1)
-// and "vm-h2-<i>" (HTTPS listener, BENCH_PROTO=h2). The bench server must be running with its
+// and "vm-h2-<i>" (HTTPS listener, BENCH_PROTO=h2) into <out>-run<i>.jsonl (merge with
+// tool/collect_results.py --web-runs <out>-run{1,2,3}.jsonl --label linux-vm). The bench server must be running with its
 // TLS listener: tool/server.sh 8771 8773.
 import 'dart:convert';
 import 'dart:io';
@@ -24,14 +25,14 @@ Future<void> main(List<String> argv) async {
   }
   final root = File.fromUri(Platform.script).parent.parent.path;
   final runs = int.parse(a['runs'] ?? '3');
-  final out = File(a['out'] ?? '$root/results/raw-vm.jsonl');
+  final outPrefix = a['out'] ?? '$root/results/raw-vm';
   final base = a['base'] ?? 'http://127.0.0.1:8771';
   final bench = a['bench'] ?? 'latency,cache,decode,extra';
   final h2 = a['h2'] ?? 'clients,parallel';
   final calls = a['calls'] ?? '200';
   final cold = int.parse(a['cold'] ?? '5');
-  out.parent.createSync(recursive: true);
-  final sink = out.openWrite();
+  File(outPrefix).parent.createSync(recursive: true);
+  late IOSink sink;
   Future<void> one(String sel, String proto, String label) async {
     stdout.writeln('== $label ($proto: $sel)');
     final p = await Process.start(
@@ -61,6 +62,8 @@ Future<void> main(List<String> argv) async {
   }
 
   for (var r = 1; r <= runs; r++) {
+    final out = File('$outPrefix-run$r.jsonl');
+    sink = out.openWrite();
     // Cold start: one fresh process per measurement (timer starts in the test body; the VM and
     // test-runner start-up before it are not counted, as engine start-up is not on the app side).
     for (var i = 1; i <= cold; i++) {
@@ -70,7 +73,7 @@ Future<void> main(List<String> argv) async {
     }
     await one(bench, 'h1', 'vm-$r');
     if (h2.isNotEmpty && h2 != 'none') await one(h2, 'h2', 'vm-h2-$r');
+    await sink.close();
+    stdout.writeln('wrote ${out.path}');
   }
-  await sink.close();
-  stdout.writeln('wrote ${out.path}');
 }
