@@ -13,14 +13,14 @@ export 'src/generator/utils.dart' show GeneratorException;
 /// Version written into every generated file header.
 const String generatorVersion = '0.147.5';
 
-
 /// Generates `axiom_sdk.dart` and `models.dart` for [contracts].
 ///
 /// [variant]: when set, only endpoints of that variant are emitted. A
 /// contract built for another variant (`project.variant`) is rejected.
 /// Returns file name -> content.
 Map<String, String> generate(List<ContractInput> contracts, {String? variant}) {
-  final sorted = [...contracts]..sort((a, b) => a.namespace.compareTo(b.namespace));
+  final sorted = [...contracts]
+    ..sort((a, b) => a.namespace.compareTo(b.namespace));
   for (final c in sorted) {
     _normalize(c.contract);
     if (variant != null && variant.isNotEmpty) _applyVariant(c, variant);
@@ -29,7 +29,11 @@ Map<String, String> generate(List<ContractInput> contracts, {String? variant}) {
   final schema = Schema({for (final c in sorted) c.namespace: c.contract});
   final header = _header(sorted, variant);
   return {
-    'axiom_sdk.dart': SdkWriter(contracts: sorted, schema: schema, header: header).write(),
+    'axiom_sdk.dart': SdkWriter(
+      contracts: sorted,
+      schema: schema,
+      header: header,
+    ).write(),
     'models.dart': ModelWriter(schema, header: header).write(),
   };
 }

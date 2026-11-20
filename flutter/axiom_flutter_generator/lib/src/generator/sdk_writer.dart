@@ -24,7 +24,8 @@ class ContractInput {
     this.sha256,
   });
 
-  Map<String, dynamic> get ir => (contract['ir'] ?? contract) as Map<String, dynamic>;
+  Map<String, dynamic> get ir =>
+      (contract['ir'] ?? contract) as Map<String, dynamic>;
 }
 
 class _Param {
@@ -66,7 +67,8 @@ class _Endpoint {
     required this.idempotent,
   });
 
-  bool get isMutation => const {'POST', 'PUT', 'PATCH', 'DELETE'}.contains(method);
+  bool get isMutation =>
+      const {'POST', 'PUT', 'PATCH', 'DELETE'}.contains(method);
   Iterable<_Param> by(String source) => params.where((p) => p.source == source);
 }
 
@@ -105,7 +107,8 @@ class SdkWriter {
     b.writeln();
     final text = body.toString();
     final dartImports = [
-      if (RegExp(r'jsonEncode|jsonDecode|utf8\.').hasMatch(text)) 'dart:convert',
+      if (RegExp(r'jsonEncode|jsonDecode|utf8\.').hasMatch(text))
+        'dart:convert',
       if (_usesIdempotency) 'dart:math',
       if (text.contains('Uint8List')) 'dart:typed_data',
     ];
@@ -127,32 +130,51 @@ class SdkWriter {
   // ---------------------------------------------------------------------------
 
   void _writeConfig(StringBuffer b) {
-    final allSigned = contracts.every((c) => c.signature != null && c.publicKey != null);
+    final allSigned = contracts.every(
+      (c) => c.signature != null && c.publicKey != null,
+    );
     b.writeln('/// Contract configuration written by `axiom pull`.');
     b.writeln('abstract final class AxiomDefaultConfig {');
-    final usesRelease = allSigned ||
-        contracts.any((c) => c.sha256 != null && c.signature != null && c.publicKey != null);
+    final usesRelease =
+        allSigned ||
+        contracts.any(
+          (c) => c.sha256 != null && c.signature != null && c.publicKey != null,
+        );
     if (usesRelease) {
-      b.writeln("  static const bool _release = bool.fromEnvironment('dart.vm.product');");
+      b.writeln(
+        "  static const bool _release = bool.fromEnvironment('dart.vm.product');",
+      );
       b.writeln();
     }
     b.writeln('  static const AxiomConfig config = AxiomConfig(');
     b.writeln('    contracts: {');
     for (final c in contracts) {
-      b.writeln('      ${GeneratorUtils.str(c.namespace)}: AxiomContractConfig(');
+      b.writeln(
+        '      ${GeneratorUtils.str(c.namespace)}: AxiomContractConfig(',
+      );
       if (c.baseUrl == null) {
-        b.writeln('        // Neither the contract nor the pull config names a base URL;');
-        b.writeln('        // override with AxiomEnvironment or --dart-define=AXIOM_BASE_URL.');
+        b.writeln(
+          '        // Neither the contract nor the pull config names a base URL;',
+        );
+        b.writeln(
+          '        // override with AxiomEnvironment or --dart-define=AXIOM_BASE_URL.',
+        );
         b.writeln("        baseUrl: 'http://localhost:8000',");
       } else {
         b.writeln('        baseUrl: ${GeneratorUtils.str(c.baseUrl!)},');
       }
       b.writeln('        assetPath: ${GeneratorUtils.str(c.assetPath)},');
-      if (c.signature != null) b.writeln('        signature: ${GeneratorUtils.str(c.signature!)},');
-      if (c.publicKey != null) b.writeln('        publicKey: ${GeneratorUtils.str(c.publicKey!)},');
+      if (c.signature != null) {
+        b.writeln('        signature: ${GeneratorUtils.str(c.signature!)},');
+      }
+      if (c.publicKey != null) {
+        b.writeln('        publicKey: ${GeneratorUtils.str(c.publicKey!)},');
+      }
       if (c.sha256 != null && c.signature != null && c.publicKey != null) {
         b.writeln('        // Release builds use the hash-locked load.');
-        b.writeln('        sha256: _release ? ${GeneratorUtils.str(c.sha256!)} : null,');
+        b.writeln(
+          '        sha256: _release ? ${GeneratorUtils.str(c.sha256!)} : null,',
+        );
       }
       b.writeln('      ),');
     }
@@ -165,7 +187,9 @@ class SdkWriter {
       b.writeln('  /// sha256 of each contract asset at generation time.');
       b.writeln('  static const Map<String, String> contractSha256 = {');
       for (final c in hashes) {
-        b.writeln('    ${GeneratorUtils.str(c.namespace)}: ${GeneratorUtils.str(c.sha256!)},');
+        b.writeln(
+          '    ${GeneratorUtils.str(c.namespace)}: ${GeneratorUtils.str(c.sha256!)},',
+        );
       }
       b.writeln('  };');
     }
@@ -176,8 +200,12 @@ class SdkWriter {
   void _writeSdk(StringBuffer b) {
     b.writeln('/// Entry point of the generated client.');
     b.writeln('class AxiomSdk {');
-    b.writeln('  /// Wraps an already initialized [runtime] (tests, custom start-up).');
-    b.write('  AxiomSdk.fromRuntime(this.runtime, [this.initResult = const AxiomInitResult(ok: true)])');
+    b.writeln(
+      '  /// Wraps an already initialized [runtime] (tests, custom start-up).',
+    );
+    b.write(
+      '  AxiomSdk.fromRuntime(this.runtime, [this.initResult = const AxiomInitResult(ok: true)])',
+    );
     final inits = [
       for (final c in contracts)
         '${_prop(c)} = ${_moduleClass(c)}._(runtime, ${GeneratorUtils.str(c.namespace)})',
@@ -200,8 +228,12 @@ class SdkWriter {
     b.writeln();
     b.writeln('  /// Starts the runtime and loads the contracts.');
     b.writeln('  ///');
-    b.writeln('  /// Base URL priority: [baseUrlOverrides] > [environment] (or the');
-    b.writeln('  /// config\'s, else `--dart-define=AXIOM_ENV` / `AXIOM_BASE_URL`) >');
+    b.writeln(
+      '  /// Base URL priority: [baseUrlOverrides] > [environment] (or the',
+    );
+    b.writeln(
+      '  /// config\'s, else `--dart-define=AXIOM_ENV` / `AXIOM_BASE_URL`) >',
+    );
     b.writeln('  /// the generated default. Throws when initialization fails.');
     b.writeln('  static Future<AxiomSdk> create({');
     b.writeln('    AxiomConfig? config,');
@@ -212,7 +244,9 @@ class SdkWriter {
     b.writeln('    final base = config ?? AxiomDefaultConfig.config;');
     b.writeln('    final cfg = base.copyWith(');
     b.writeln('      environment:');
-    b.writeln('          environment ?? base.environment ?? AxiomEnvironment.fromDartDefines(),');
+    b.writeln(
+      '          environment ?? base.environment ?? AxiomEnvironment.fromDartDefines(),',
+    );
     b.writeln('      baseUrlOverrides: baseUrlOverrides,');
     b.writeln('    );');
     b.writeln('    final runtime = AxiomRuntime();');
@@ -222,9 +256,13 @@ class SdkWriter {
     }
     b.writeln('    AxiomInitResult result;');
     b.writeln('    try {');
-    b.writeln('      result = await runtime.initialize(cfg, assetLoader: assetLoader);');
+    b.writeln(
+      '      result = await runtime.initialize(cfg, assetLoader: assetLoader);',
+    );
     b.writeln('    } on UnimplementedError {');
-    b.writeln('      // Runtime package without initialize(): legacy start-up.');
+    b.writeln(
+      '      // Runtime package without initialize(): legacy start-up.',
+    );
     b.writeln('      result = await _legacyInit(runtime, cfg, assetLoader);');
     b.writeln('    }');
     b.writeln('    result.requireOk();');
@@ -242,7 +280,12 @@ class SdkWriter {
   late final (Map<String, String>, Map<String, String>) _names = () {
     final classes = <String, String>{};
     final props = <String, String>{};
-    final usedProps = <String>{'runtime', 'initResult', 'create', 'fromRuntime'};
+    final usedProps = <String>{
+      'runtime',
+      'initResult',
+      'create',
+      'fromRuntime',
+    };
     final owner = <String, String>{};
     for (final c in contracts) {
       final cls = '${GeneratorUtils.pascalCase(c.namespace)}Module';
@@ -257,7 +300,10 @@ class SdkWriter {
         owner[t] = c.namespace;
       }
       classes[c.namespace] = cls;
-      props[c.namespace] = GeneratorUtils.uniqueIdentifier(c.namespace, usedProps);
+      props[c.namespace] = GeneratorUtils.uniqueIdentifier(
+        c.namespace,
+        usedProps,
+      );
     }
     return (classes, props);
   }();
@@ -292,24 +338,43 @@ class SdkWriter {
     // / `nameChannel` for streaming endpoints (endpoints are sorted, so `foo`
     // claims `fooStream` before a `foo_stream` endpoint is named).
     final used = <String>{
-      'axiom', 'cacheIdentities', 'endpointIds', 'authMethods', 'invalidateIdentity',
+      'axiom',
+      'cacheIdentities',
+      'endpointIds',
+      'authMethods',
+      'invalidateIdentity',
     };
     final names = <String, String>{};
     String? helperSuffix(Map<String, dynamic> ep) {
-      final st = ep['streaming'] is Map ? (ep['streaming'] as Map)['type'] : null;
-      return st == 'sse' || st == 'http_stream' ? 'Stream' : st == 'websocket' ? 'Channel' : null;
+      final st = ep['streaming'] is Map
+          ? (ep['streaming'] as Map)['type']
+          : null;
+      return st == 'sse' || st == 'http_stream'
+          ? 'Stream'
+          : st == 'websocket'
+          ? 'Channel'
+          : null;
     }
+
     // Endpoints whose name is already an identifier (`getUser`) go first,
     // so `get_user` becomes `getUser2`, not the other way round.
     bool exact(Map<String, dynamic> ep) =>
-        GeneratorUtils.identifier(ep['name'] as String, avoid: GeneratorUtils.objectMembers) == ep['name'];
+        GeneratorUtils.identifier(
+          ep['name'] as String,
+          avoid: GeneratorUtils.objectMembers,
+        ) ==
+        ep['name'];
     for (final ep in [...raw.where(exact), ...raw.where((e) => !exact(e))]) {
       final name = ep['name'] as String;
       final suffix = helperSuffix(ep);
-      final base = GeneratorUtils.identifier(name, avoid: GeneratorUtils.objectMembers);
+      final base = GeneratorUtils.identifier(
+        name,
+        avoid: GeneratorUtils.objectMembers,
+      );
       var dartName = base;
       var n = 2;
-      while (used.contains(dartName) || (suffix != null && used.contains('$dartName$suffix'))) {
+      while (used.contains(dartName) ||
+          (suffix != null && used.contains('$dartName$suffix'))) {
         dartName = '$base${n++}';
       }
       used.add(dartName);
@@ -318,8 +383,21 @@ class SdkWriter {
     }
     // Locals and top-level names the generated method bodies refer to.
     const paramAvoid = {
-      'options', 'idempotencyKey', 'reconnect', 'headers', 'query', 'response',
-      'extra', 'e', 'k', 'v', 'json', 'models', 'jsonEncode', 'utf8', 'identical',
+      'options',
+      'idempotencyKey',
+      'reconnect',
+      'headers',
+      'query',
+      'response',
+      'extra',
+      'e',
+      'k',
+      'v',
+      'json',
+      'models',
+      'jsonEncode',
+      'utf8',
+      'identical',
     };
     final out = <_Endpoint>[];
     for (final ep in raw) {
@@ -328,7 +406,8 @@ class SdkWriter {
       final op = ops[name] ?? const {};
       final params = <_Param>[];
       final rawParams = [
-        for (final p in (ep['parameters'] as List? ?? const [])) (p as Map).cast<String, dynamic>(),
+        for (final p in (ep['parameters'] as List? ?? const []))
+          (p as Map).cast<String, dynamic>(),
       ];
       final paramNames = GeneratorUtils.uniqueNames(
         [for (final pm in rawParams) pm['name'] as String],
@@ -341,13 +420,18 @@ class SdkWriter {
           _Param(
             pm['name'] as String,
             dart,
-            m.resolve((pm['typeRef'] as Map? ?? const {'kind': 'json'}).cast<String, dynamic>()),
+            m.resolve(
+              (pm['typeRef'] as Map? ?? const {'kind': 'json'})
+                  .cast<String, dynamic>(),
+            ),
             pm['isOptional'] as bool? ?? false,
             pm['source'] as String? ?? 'query',
           ),
         );
       }
-      final streaming = ep['streaming'] is Map ? (ep['streaming'] as Map)['type'] as String? : null;
+      final streaming = ep['streaming'] is Map
+          ? (ep['streaming'] as Map)['type'] as String?
+          : null;
       out.add(
         _Endpoint(
           raw: ep,
@@ -357,7 +441,10 @@ class SdkWriter {
           method: (ep['method'] as String? ?? 'GET').toUpperCase(),
           path: ep['path'] as String? ?? '/',
           params: params,
-          returnType: m.resolve((ep['returnType'] as Map? ?? const {'kind': 'void'}).cast<String, dynamic>()),
+          returnType: m.resolve(
+            (ep['returnType'] as Map? ?? const {'kind': 'void'})
+                .cast<String, dynamic>(),
+          ),
           returnOptional: ep['returnIsOptional'] as bool? ?? false,
           streaming: streaming,
           invalidates: [
@@ -366,7 +453,8 @@ class SdkWriter {
               ...(op['invalidates'] as List? ?? const []).cast<String>(),
             },
           ]..sort(),
-          cacheIdentity: (ep['cacheIdentity'] ?? op['cacheIdentity']) as String?,
+          cacheIdentity:
+              (ep['cacheIdentity'] ?? op['cacheIdentity']) as String?,
           idempotent: op['idempotent'] == true,
         ),
       );
@@ -379,7 +467,8 @@ class SdkWriter {
     final endpoints = _endpoints(c);
     final project = c.contract['project'];
     final ident = project is Map
-        ? ' (${project['project_id'] ?? ''} ${project['version'] ?? ''})'.replaceAll(' )', ')')
+        ? ' (${project['project_id'] ?? ''} ${project['version'] ?? ''})'
+              .replaceAll(' )', ')')
         : '';
 
     // Cache identity -> endpoint ids (deterministic).
@@ -398,7 +487,9 @@ class SdkWriter {
       final auth = e.raw['auth'];
       if (auth is Map && auth['methods'] is List) {
         for (final am in auth['methods'] as List) {
-          if (am is Map && am['name'] is String) authMethods.add(am['name'] as String);
+          if (am is Map && am['name'] is String) {
+            authMethods.add(am['name'] as String);
+          }
         }
       }
     }
@@ -408,9 +499,13 @@ class SdkWriter {
     b.writeln('  $cls._(this._runtime, this._namespace)');
     b.writeln('    : axiom = ${cls}AxiomNamespace._(_runtime, _namespace);');
     b.writeln();
-    b.writeln('  /// Binds this client to another namespace of [runtime], for example the same');
+    b.writeln(
+      '  /// Binds this client to another namespace of [runtime], for example the same',
+    );
     b.writeln('  /// contract loaded a second time with a different base URL.');
-    b.writeln('  $cls(AxiomRuntime runtime, String namespace) : this._(runtime, namespace);');
+    b.writeln(
+      '  $cls(AxiomRuntime runtime, String namespace) : this._(runtime, namespace);',
+    );
     b.writeln();
     b.writeln('  final AxiomRuntime _runtime;');
     b.writeln('  final String _namespace;');
@@ -428,7 +523,9 @@ class SdkWriter {
     b.writeln('  /// Endpoint ids by contract cache identity.');
     b.writeln('  static const Map<String, List<int>> cacheIdentities = {');
     for (final k in identities.keys.toList()..sort()) {
-      b.writeln('    ${GeneratorUtils.str(k)}: [${(identities[k]!..sort()).join(', ')}],');
+      b.writeln(
+        '    ${GeneratorUtils.str(k)}: [${(identities[k]!..sort()).join(', ')}],',
+      );
     }
     b.writeln('  };');
     b.writeln();
@@ -451,7 +548,9 @@ class SdkWriter {
       }
     }
     b.writeln();
-    b.writeln('  /// Refetches the active queries of every endpoint with [identity].');
+    b.writeln(
+      '  /// Refetches the active queries of every endpoint with [identity].',
+    );
     b.writeln('  void invalidateIdentity(String identity) {');
     b.writeln('    final ids = cacheIdentities[identity];');
     b.writeln('    if (ids == null) return;');
@@ -470,23 +569,31 @@ class SdkWriter {
     b.writeln('  final String _namespace;');
     b.writeln();
     b.writeln('  void setAuthToken(String methodName, String token) {');
-    b.writeln('    _runtime.setAuthToken(namespace: _namespace, methodName: methodName, token: token);');
+    b.writeln(
+      '    _runtime.setAuthToken(namespace: _namespace, methodName: methodName, token: token);',
+    );
     b.writeln('  }');
     b.writeln();
     b.writeln('  void clearAuthToken(String methodName) {');
-    b.writeln('    _runtime.clearAuthToken(namespace: _namespace, methodName: methodName);');
+    b.writeln(
+      '    _runtime.clearAuthToken(namespace: _namespace, methodName: methodName);',
+    );
     b.writeln('  }');
     b.writeln();
     b.writeln('  /// Sets [token] for every auth method of this namespace.');
     b.writeln('  void setNamespaceToken(String token) {');
-    b.writeln('    _runtime.setNamespaceAuthToken(namespace: _namespace, token: token);');
+    b.writeln(
+      '    _runtime.setNamespaceAuthToken(namespace: _namespace, token: token);',
+    );
     b.writeln('  }');
     b.writeln();
     b.writeln('  void clearNamespaceToken() {');
     b.writeln('    _runtime.clearNamespaceAuthToken(namespace: _namespace);');
     b.writeln('  }');
     b.writeln();
-    b.writeln('  /// Marks every cached query of this namespace stale and refetches.');
+    b.writeln(
+      '  /// Marks every cached query of this namespace stale and refetches.',
+    );
     b.writeln('  void invalidateAll() {');
     b.writeln('    _runtime.invalidate(namespace: _namespace);');
     b.writeln('  }');
@@ -496,7 +603,11 @@ class SdkWriter {
 
   // ---------------------------------------------------------------------------
 
-  String _signature(_Endpoint e, {bool includeBody = true, List<String> extra = const []}) {
+  String _signature(
+    _Endpoint e, {
+    bool includeBody = true,
+    List<String> extra = const [],
+  }) {
     final parts = <String>[];
     for (final p in e.params) {
       if (!includeBody && p.source == 'body') continue;
@@ -523,7 +634,9 @@ class SdkWriter {
     if (t is VoidType) return '${m.codec}.asVoid';
     if (e.returnOptional) return '(json) => ${m.decodeNullable(t, 'json')}';
     if (t is JsonType) return '${m.codec}.asJson';
-    if (t is ListType || t is MapType) return '(json) => ${m.decode(t, 'json')}';
+    if (t is ListType || t is MapType) {
+      return '(json) => ${m.decode(t, 'json')}';
+    }
     return m.decodeFn(t);
   }
 
@@ -612,7 +725,9 @@ class SdkWriter {
 
   void _writeDoc(StringBuffer b, _Endpoint e) {
     b.write(GeneratorUtils.docComment(e.raw['doc'] as String?, '  '));
-    b.writeln('  /// `${e.method} ${e.path}`${e.streaming != null ? ' (${e.streaming})' : ''}.');
+    b.writeln(
+      '  /// `${e.method} ${e.path}`${e.streaming != null ? ' (${e.streaming})' : ''}.',
+    );
     final cache = e.raw['cache'];
     if (cache is Map && cache['strategy'] != null) {
       b.writeln('  ///');
@@ -627,7 +742,9 @@ class SdkWriter {
     }
     if (e.invalidates.isNotEmpty) {
       b.writeln('  ///');
-      b.writeln('  /// On success invalidates: ${e.invalidates.map((i) => '`$i`').join(', ')}.');
+      b.writeln(
+        '  /// On success invalidates: ${e.invalidates.map((i) => '`$i`').join(', ')}.',
+      );
     }
     final failures = schema.endpointFailures[e.name];
     if (failures != null && failures.isNotEmpty) {
@@ -639,7 +756,11 @@ class SdkWriter {
     }
   }
 
-  void _writeEndpoint(StringBuffer b, _Endpoint e, Map<String, List<int>> identities) {
+  void _writeEndpoint(
+    StringBuffer b,
+    _Endpoint e,
+    Map<String, List<int>> identities,
+  ) {
     final rt = _returnType(e);
     final idem = e.isMutation;
     if (idem && e.idempotent) _usesIdempotency = true;
@@ -648,20 +769,27 @@ class SdkWriter {
       'AxiomCallOptions? options',
     ];
     _writeDoc(b, e);
-    b.writeln('  AxiomQuery<$rt> ${e.dartName}(${_signature(e, extra: extra)}) {');
+    b.writeln(
+      '  AxiomQuery<$rt> ${e.dartName}(${_signature(e, extra: extra)}) {',
+    );
     final parts = _requestParts(b, e, idempotency: idem);
-    if ((e.streaming == 'sse' || e.streaming == 'http_stream') && !e.isMutation) {
+    if ((e.streaming == 'sse' || e.streaming == 'http_stream') &&
+        !e.isMutation) {
       _usesStreams = true;
       final bodyIdx = parts.indexWhere((p) => p.startsWith('body: '));
       String? body;
-      if (bodyIdx >= 0) body = parts.removeAt(bodyIdx).substring('body: '.length);
+      if (bodyIdx >= 0) {
+        body = parts.removeAt(bodyIdx).substring('body: '.length);
+      }
       final hIdx = parts.indexWhere((p) => p.startsWith('headers: '));
       final h = parts[hIdx].substring('headers: '.length);
       parts[hIdx] = h.endsWith('?? headers')
           ? 'headers: {...($h), ...extra}'
           : 'headers: {...?($h), ...extra}';
       b.writeln('    return _streamQuery<$rt>(');
-      b.writeln("      '\${_namespace}_${e.id}_stream_\${jsonEncode(${_argsMap(e)})}',");
+      b.writeln(
+        "      '\${_namespace}_${e.id}_stream_\${jsonEncode(${_argsMap(e)})}',",
+      );
       b.writeln('      _runtime,');
       b.writeln('      (extra) => _runtime.callStream(');
       b.writeln('        namespace: _namespace,');
@@ -671,9 +799,11 @@ class SdkWriter {
       for (final p in parts) {
         b.writeln('        $p,');
       }
-      b.writeln(body == null
-          ? '        requestBytes: Uint8List(0),'
-          : '        requestBytes: _utf8Bytes($body),');
+      b.writeln(
+        body == null
+            ? '        requestBytes: Uint8List(0),'
+            : '        requestBytes: _utf8Bytes($body),',
+      );
       b.writeln('        options: options,');
       b.writeln('      ),');
       b.writeln('      ${m.decodeFn(e.returnType)},');
@@ -684,8 +814,7 @@ class SdkWriter {
     final call = e.isMutation ? 'sendMutation' : 'send';
     final invalidated = <int>{
       for (final i in e.invalidates) ...?identities[i],
-    }.toList()
-      ..sort();
+    }.toList()..sort();
     final prefix = invalidated.isEmpty ? 'return' : 'final query =';
     b.writeln('    $prefix _runtime.$call<$rt>(');
     b.writeln('      namespace: _namespace,');
@@ -702,7 +831,9 @@ class SdkWriter {
     if (invalidated.isNotEmpty) {
       _usesInvalidation = true;
       b.writeln('    return _onSuccess(query, _runtime, () {');
-      b.writeln('      _invalidateEndpoints(_runtime, _namespace, const [${invalidated.join(', ')}]);');
+      b.writeln(
+        '      _invalidateEndpoints(_runtime, _namespace, const [${invalidated.join(', ')}]);',
+      );
       b.writeln('    });');
     }
     b.writeln('  }');
@@ -711,9 +842,13 @@ class SdkWriter {
   void _writeStreamHelper(StringBuffer b, _Endpoint e) {
     _usesStreams = true;
     final rt = m.dartType(e.returnType);
-    b.writeln('  /// Frames of `${e.name}` as a typed stream. Cancelling the subscription');
+    b.writeln(
+      '  /// Frames of `${e.name}` as a typed stream. Cancelling the subscription',
+    );
     b.writeln('  /// cancels the request.');
-    b.writeln('  Stream<$rt> ${e.dartName}Stream(${_signature(e, extra: ['AxiomCallOptions? options'])}) {');
+    b.writeln(
+      '  Stream<$rt> ${e.dartName}Stream(${_signature(e, extra: ['AxiomCallOptions? options'])}) {',
+    );
     final parts = _requestParts(b, e);
     final bodyIdx = parts.indexWhere((p) => p.startsWith('body: '));
     String? body;
@@ -733,7 +868,9 @@ class SdkWriter {
     );
     b.writeln('      options: options,');
     b.writeln('    );');
-    b.writeln('    return _frames(response, _runtime, ${m.decodeFn(e.returnType)});');
+    b.writeln(
+      '    return _frames(response, _runtime, ${m.decodeFn(e.returnType)});',
+    );
     b.writeln('  }');
   }
 
@@ -749,16 +886,18 @@ class SdkWriter {
 
     final bodyParams = e.by('body').toList();
     final receive = msg('server') ?? e.returnType;
-    final send = msg('client') ??
+    final send =
+        msg('client') ??
         (bodyParams.length == 1 ? bodyParams.single.type : const JsonType());
     final rt = m.dartType(receive);
     final st = m.dartType(send);
     final auto = s['reconnect'] == 'auto';
-    b.writeln('  /// Typed WebSocket channel for `${e.name}`: send [$st], receive [$rt].');
-    b.writeln('  AxiomChannel<$rt, $st> ${e.dartName}Channel(${_signature(e, includeBody: false, extra: [
-      'AxiomReconnectPolicy reconnect = AxiomReconnectPolicy.${auto ? 'auto' : 'none'}',
-      'AxiomCallOptions? options',
-    ])}) {');
+    b.writeln(
+      '  /// Typed WebSocket channel for `${e.name}`: send [$st], receive [$rt].',
+    );
+    b.writeln(
+      '  AxiomChannel<$rt, $st> ${e.dartName}Channel(${_signature(e, includeBody: false, extra: ['AxiomReconnectPolicy reconnect = AxiomReconnectPolicy.${auto ? 'auto' : 'none'}', 'AxiomCallOptions? options'])}) {',
+    );
     final parts = _requestParts(b, e, includeBody: false);
     b.writeln('    return _runtime.openChannel<$rt, $st>(');
     b.writeln('      namespace: _namespace,');
@@ -768,7 +907,9 @@ class SdkWriter {
     for (final p in parts) {
       b.writeln('      $p,');
     }
-    b.writeln('      decoder: ${receive is JsonType ? '${m.codec}.asJson' : m.decodeFn(receive)},');
+    b.writeln(
+      '      decoder: ${receive is JsonType ? '${m.codec}.asJson' : m.decodeFn(receive)},',
+    );
     b.writeln('      reconnect: reconnect,');
     b.writeln('      options: options,');
     b.writeln('    );');

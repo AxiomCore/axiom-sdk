@@ -17,7 +17,9 @@ final _root = Directory('test/golden');
 
 ContractInput _input(String file, String namespace) => ContractInput(
   namespace: namespace,
-  contract: jsonDecode(File('${_root.path}/$file').readAsStringSync()) as Map<String, dynamic>,
+  contract:
+      jsonDecode(File('${_root.path}/$file').readAsStringSync())
+          as Map<String, dynamic>,
   assetPath: 'assets/axiom/$namespace.axiom',
 );
 
@@ -47,15 +49,24 @@ Future<ProcessResult> _run(String models, String main) async {
   final dir = Directory.systemTemp.createTempSync('axiom_models_');
   File('${dir.path}/axiom_flutter.dart').writeAsStringSync(_stub);
   File('${dir.path}/models.dart').writeAsStringSync(
-    models.replaceFirst("import 'package:axiom_flutter/axiom_flutter.dart';", "import 'axiom_flutter.dart';"),
+    models.replaceFirst(
+      "import 'package:axiom_flutter/axiom_flutter.dart';",
+      "import 'axiom_flutter.dart';",
+    ),
   );
   File('${dir.path}/main.dart').writeAsStringSync(main);
-  return Process.run(Platform.resolvedExecutable, ['run', '${dir.path}/main.dart']);
+  return Process.run(Platform.resolvedExecutable, [
+    'run',
+    '${dir.path}/main.dart',
+  ]);
 }
 
 void main() {
   late Map<String, String> files;
-  setUpAll(() => files = generate([_input('collisions/collisions.axiom', 'collisions')]));
+  setUpAll(
+    () =>
+        files = generate([_input('collisions/collisions.axiom', 'collisions')]),
+  );
 
   test('collisions golden', () async {
     final update = Platform.environment['UPDATE_GOLDENS'] == '1';
@@ -68,7 +79,11 @@ void main() {
           ..writeAsStringSync(out);
         continue;
       }
-      expect(out, golden.readAsStringSync(), reason: '${e.key} differs from ${golden.path}');
+      expect(
+        out,
+        golden.readAsStringSync(),
+        reason: '${e.key} differs from ${golden.path}',
+      );
     }
   });
 
@@ -79,13 +94,30 @@ void main() {
         '$name({AxiomCallOptions? options}) {\n    return _runtime.send<models.Todo>(\n'
         '      namespace: _namespace,\n      endpointId: $id,';
     for (final decl in [
-      'final String userId;', 'final String? userId2;', 'final String userId3;', 'final TodoLevel2 level;', 'final TodoLevel3? level2;',
-      r'final String $toJson;', r'final String $copyWith;', r'final String $hashCode;',
-      r'final int $hashCode2;', r'final String $class;', r'final String $other;', r'final String? $identical;',
+      'final String userId;',
+      'final String? userId2;',
+      'final String userId3;',
+      'final TodoLevel2 level;',
+      'final TodoLevel3? level2;',
+      r'final String $toJson;',
+      r'final String $copyWith;',
+      r'final String $hashCode;',
+      r'final int $hashCode2;',
+      r'final String $class;',
+      r'final String $other;',
+      r'final String? $identical;',
     ]) {
       expect(models, contains(decl));
     }
-    for (final key in ["'user_id'", "'userId'", "'user-id'", "'toJson'", "'copy_with'", "'hash_code'", "'hashCode'"]) {
+    for (final key in [
+      "'user_id'",
+      "'userId'",
+      "'user-id'",
+      "'toJson'",
+      "'copy_with'",
+      "'hash_code'",
+      "'hashCode'",
+    ]) {
       expect(models, contains('$key: '), reason: 'JSON key $key kept');
     }
     // Endpoints: `getUser` keeps its name; get-user, get_user (sorted) follow.
@@ -98,8 +130,14 @@ void main() {
     expect(sdk, contains('AxiomQuery<models.Todo> feedStream2('));
     // Parameters of get_user: unique and not shadowing generated locals.
     for (final p in [
-      'required String userId', 'required String userId2', r'required String $headers', r'required String $options',
-      r'required String $models', r'required String $e', r'required String $jsonEncode', r'required String $class',
+      'required String userId',
+      'required String userId2',
+      r'required String $headers',
+      r'required String $options',
+      r'required String $models',
+      r'required String $e',
+      r'required String $jsonEncode',
+      r'required String $class',
     ]) {
       expect(sdk, contains(p));
     }
@@ -109,17 +147,26 @@ void main() {
     expect(models, contains('class NotFoundFailure2 '));
   });
 
-  test('every generated models.dart compiles; unknown enum values round-trip', () async {
-    final all = {
-      'collisions': files['models.dart']!,
-      'fixture': generate([_input('fixture/fixture.axiom', 'fixture')])['models.dart']!,
-      'extras': generate([_input('extras/extras.axiom', 'extras')])['models.dart']!,
-    };
-    for (final e in all.entries.where((e) => e.key != 'collisions')) {
-      final r = await _run(e.value, "import 'models.dart';\nvoid main() { print(AxiomGeneratedCodec.asInt('1')); }\n");
-      expect(r.exitCode, 0, reason: '${e.key}: ${r.stdout}\n${r.stderr}');
-    }
-    final r = await _run(all['collisions']!, r'''
+  test(
+    'every generated models.dart compiles; unknown enum values round-trip',
+    () async {
+      final all = {
+        'collisions': files['models.dart']!,
+        'fixture': generate([
+          _input('fixture/fixture.axiom', 'fixture'),
+        ])['models.dart']!,
+        'extras': generate([
+          _input('extras/extras.axiom', 'extras'),
+        ])['models.dart']!,
+      };
+      for (final e in all.entries.where((e) => e.key != 'collisions')) {
+        final r = await _run(
+          e.value,
+          "import 'models.dart';\nvoid main() { print(AxiomGeneratedCodec.asInt('1')); }\n",
+        );
+        expect(r.exitCode, 0, reason: '${e.key}: ${r.stdout}\n${r.stderr}');
+      }
+      final r = await _run(all['collisions']!, r'''
 import 'dart:convert';
 import 'models.dart';
 
@@ -167,9 +214,10 @@ void main() {
   print('ok');
 }
 ''');
-    expect(r.exitCode, 0, reason: '${r.stdout}\n${r.stderr}');
-    expect('${r.stdout}', contains('ok'));
-  });
+      expect(r.exitCode, 0, reason: '${r.stdout}\n${r.stderr}');
+      expect('${r.stdout}', contains('ok'));
+    },
+  );
 
   test('contract type names that collide are rejected', () {
     final c = _input('collisions/collisions.axiom', 'collisions');
@@ -177,13 +225,22 @@ void main() {
     models['todo'] = {'name': 'todo', 'fields': <String, dynamic>{}};
     expect(
       () => generate([c]),
-      throwsA(isA<GeneratorException>().having((e) => e.message, 'message', contains('"Todo"'))),
+      throwsA(
+        isA<GeneratorException>().having(
+          (e) => e.message,
+          'message',
+          contains('"Todo"'),
+        ),
+      ),
     );
   });
 
   test('namespaces mapping to one module class are rejected', () {
     expect(
-      () => generate([_input('fixture/fixture.axiom', 'my_api'), _input('fixture/fixture.axiom', 'myApi')]),
+      () => generate([
+        _input('fixture/fixture.axiom', 'my_api'),
+        _input('fixture/fixture.axiom', 'myApi'),
+      ]),
       throwsA(isA<GeneratorException>()),
     );
   });

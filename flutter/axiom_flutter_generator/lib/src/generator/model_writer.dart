@@ -229,7 +229,13 @@ abstract interface class AxiomGeneratedEnum {
 
   void _writeEnum(StringBuffer b, EnumSpec e) {
     final used = <String>{
-      'values', 'index', 'name', 'value', 'fromJson', 'toJson', 'isUnknown',
+      'values',
+      'index',
+      'name',
+      'value',
+      'fromJson',
+      'toJson',
+      'isUnknown',
       ...GeneratorUtils.objectMembers,
     };
     final members = <(String, String)>[];
@@ -255,7 +261,9 @@ abstract interface class AxiomGeneratedEnum {
       b.writeln('  $id(${GeneratorUtils.str(v)}),');
     }
     b.writeln('');
-    b.writeln('  /// A value this client version does not know. Models keep the');
+    b.writeln(
+      '  /// A value this client version does not know. Models keep the',
+    );
     b.writeln('  /// original wire value and send it back unchanged.');
     b.writeln('  $unknown(null);');
     b.writeln();
@@ -274,10 +282,14 @@ abstract interface class AxiomGeneratedEnum {
     b.writeln('  @override');
     b.writeln('  bool get isUnknown => value == null;');
     b.writeln();
-    b.writeln('  /// The wire value. Throws for [$unknown], which has none: a model');
+    b.writeln(
+      '  /// The wire value. Throws for [$unknown], which has none: a model',
+    );
     b.writeln('  /// decoded from JSON sends the original value back instead.');
     b.writeln('  String toJson() =>');
-    b.writeln('      value ?? (throw StateError(${GeneratorUtils.str('${e.dartName}.$unknown has no wire value')}));');
+    b.writeln(
+      '      value ?? (throw StateError(${GeneratorUtils.str('${e.dartName}.$unknown has no wire value')}));',
+    );
     b.writeln('}');
     b.writeln();
   }
@@ -295,7 +307,9 @@ abstract interface class AxiomGeneratedEnum {
     b.writeln('  factory ${u.dartName}.fromJson(Object? json) {');
     b.writeln('    if (json is Map) {');
     if (u.discriminator != null) {
-      b.writeln('      final tag = json[${GeneratorUtils.str(u.discriminator!)}];');
+      b.writeln(
+        '      final tag = json[${GeneratorUtils.str(u.discriminator!)}];',
+      );
       b.writeln('      if (tag is String) {');
       b.writeln('        switch (tag.toLowerCase()) {');
       for (final (model, variant) in variants) {
@@ -309,16 +323,19 @@ abstract interface class AxiomGeneratedEnum {
       b.writeln('      }');
     }
     // Shape match: most specific option (most required keys) first.
-    final ordered = [...variants]..sort((a, b) {
-      final ka = _requiredKeys(a.$1).length;
-      final kb = _requiredKeys(b.$1).length;
-      return kb.compareTo(ka);
-    });
+    final ordered = [...variants]
+      ..sort((a, b) {
+        final ka = _requiredKeys(a.$1).length;
+        final kb = _requiredKeys(b.$1).length;
+        return kb.compareTo(ka);
+      });
     for (final (model, variant) in ordered) {
       final keys = _requiredKeys(model);
       final cond = keys.isEmpty
           ? 'true'
-          : keys.map((k) => 'json.containsKey(${GeneratorUtils.str(k)})').join(' && ');
+          : keys
+                .map((k) => 'json.containsKey(${GeneratorUtils.str(k)})')
+                .join(' && ');
       b.writeln('      if ($cond) {');
       b.writeln('        return $variant($model.fromJson(json));');
       b.writeln('      }');
@@ -361,7 +378,9 @@ abstract interface class AxiomGeneratedEnum {
     b.writeln();
     b.writeln('  @override');
     b.writeln('  bool operator ==(Object other) =>');
-    b.writeln('      other is $unknown && AxiomGeneratedCodec.deepEquals(other.raw, raw);');
+    b.writeln(
+      '      other is $unknown && AxiomGeneratedCodec.deepEquals(other.raw, raw);',
+    );
     b.writeln();
     b.writeln('  @override');
     b.writeln('  int get hashCode => AxiomGeneratedCodec.deepHash(raw);');
@@ -375,7 +394,10 @@ abstract interface class AxiomGeneratedEnum {
   List<String> _requiredKeys(String modelDart) {
     final model = schema.models[modelDart];
     if (model == null) return const [];
-    return [for (final f in model.fields) if (!f.optional) f.wire];
+    return [
+      for (final f in model.fields)
+        if (!f.optional) f.wire,
+    ];
   }
 
   /// Tag values selecting [modelDart]: literal/enum rule values of the
@@ -422,7 +444,10 @@ abstract interface class AxiomGeneratedEnum {
   }) {
     b.write(GeneratorUtils.docComment(doc, ''));
     b.writeln('class $name${extendsClause ?? ''} {');
-    final rawFields = [for (final f in fields) if (_hasEnum(f.type)) f];
+    final rawFields = [
+      for (final f in fields)
+        if (_hasEnum(f.type)) f,
+    ];
 
     // Constructor
     if (fields.isEmpty) {
@@ -442,7 +467,9 @@ abstract interface class AxiomGeneratedEnum {
     } else {
       b.writeln('  factory $name.fromJson(Object? json) {');
       b.writeln('    final map = AxiomGeneratedCodec.asObject(json);');
-      b.writeln(rawFields.isEmpty ? '    return $name(' : '    final out = $name(');
+      b.writeln(
+        rawFields.isEmpty ? '    return $name(' : '    final out = $name(',
+      );
       for (final f in fields) {
         final access = 'map[${GeneratorUtils.str(f.wire)}]';
         final expr = f.optional
@@ -452,7 +479,9 @@ abstract interface class AxiomGeneratedEnum {
       }
       b.writeln('    );');
       if (rawFields.isNotEmpty) {
-        final entries = rawFields.map((f) => '${GeneratorUtils.str(f.wire)}: out.${f.dart}').join(', ');
+        final entries = rawFields
+            .map((f) => '${GeneratorUtils.str(f.wire)}: out.${f.dart}')
+            .join(', ');
         b.writeln('    _keepRaw(out, map, {$entries});');
         b.writeln('    return out;');
       }
@@ -480,10 +509,14 @@ abstract interface class AxiomGeneratedEnum {
         final raw = rawFields.contains(f);
         if (f.optional) {
           final enc = m.encode(f.type, 'v');
-          b.writeln('    if (${f.dart} case final v?) $key: ${raw ? '_rawOr(this, $key, () => $enc)' : enc},');
+          b.writeln(
+            '    if (${f.dart} case final v?) $key: ${raw ? '_rawOr(this, $key, () => $enc)' : enc},',
+          );
         } else {
           final enc = m.encode(f.type, f.dart);
-          b.writeln('    $key: ${raw ? '_rawOr(this, $key, () => $enc)' : enc},');
+          b.writeln(
+            '    $key: ${raw ? '_rawOr(this, $key, () => $enc)' : enc},',
+          );
         }
       }
       b.writeln('  };');
@@ -503,7 +536,9 @@ abstract interface class AxiomGeneratedEnum {
           b.writeln('    ${t.endsWith('?') ? t : '$t?'} ${f.dart},');
         }
       }
-      b.writeln(rawFields.isEmpty ? '  }) => $name(' : '  }) => _carryRaw(this, $name(');
+      b.writeln(
+        rawFields.isEmpty ? '  }) => $name(' : '  }) => _carryRaw(this, $name(',
+      );
       for (final f in fields) {
         final t = m.dartType(f.type);
         if (f.optional) {
@@ -573,7 +608,10 @@ abstract interface class AxiomGeneratedEnum {
     // toString
     b.writeln('  @override');
     final parts = fields
-        .map((f) => '${f.dart.replaceAll('\$', '')}: ${GeneratorUtils.interp(f.dart)}')
+        .map(
+          (f) =>
+              '${f.dart.replaceAll('\$', '')}: ${GeneratorUtils.interp(f.dart)}',
+        )
         .join(', ');
     b.writeln("  String toString() => '$name($parts)';");
     extra?.call(b);
@@ -581,7 +619,8 @@ abstract interface class AxiomGeneratedEnum {
     b.writeln();
   }
 
-  bool _simpleEq(TypeNode t) => t is PrimType && t.kind != 'bytes' || t is RefType;
+  bool _simpleEq(TypeNode t) =>
+      t is PrimType && t.kind != 'bytes' || t is RefType;
 
   // ---------------------------------------------------------------------------
 
@@ -590,7 +629,9 @@ abstract interface class AxiomGeneratedEnum {
     for (final f in model.fields) {
       final v = f.validate;
       if (v == null) continue;
-      if (v['type'] == 'string' || v['type'] == 'number' || v['type'] == 'enum') {
+      if (v['type'] == 'string' ||
+          v['type'] == 'number' ||
+          v['type'] == 'enum') {
         rules[f] = v;
       }
     }
@@ -600,7 +641,9 @@ abstract interface class AxiomGeneratedEnum {
     final names = {
       for (final f in rules.keys) f: GeneratorUtils.unique(f.dart, used),
     };
-    b.writeln('/// Form validators for [${model.dartName}] built from the contract field');
+    b.writeln(
+      '/// Form validators for [${model.dartName}] built from the contract field',
+    );
     b.writeln('/// rules. Each has the `TextFormField.validator` signature.');
     b.writeln('abstract final class $cls {');
     for (final entry in rules.entries) {
@@ -616,7 +659,12 @@ abstract interface class AxiomGeneratedEnum {
     b.writeln();
   }
 
-  void _writeValidator(StringBuffer b, String fn, FieldSpec f, Map<String, dynamic> v) {
+  void _writeValidator(
+    StringBuffer b,
+    String fn,
+    FieldSpec f,
+    Map<String, dynamic> v,
+  ) {
     final rule = v['type'];
     b.writeln('  static String? $fn(String? value) {');
     if (f.optional) {
@@ -629,22 +677,32 @@ abstract interface class AxiomGeneratedEnum {
     if (rule == 'string') {
       final min = n('min'), max = n('max'), len = n('length');
       if (len != null) {
-        b.writeln("    if (value.length != ${len.toInt()}) return 'Must be exactly ${len.toInt()} characters';");
+        b.writeln(
+          "    if (value.length != ${len.toInt()}) return 'Must be exactly ${len.toInt()} characters';",
+        );
       }
       if (min != null) {
-        b.writeln("    if (value.length < ${min.toInt()}) return 'Must be at least ${min.toInt()} characters';");
+        b.writeln(
+          "    if (value.length < ${min.toInt()}) return 'Must be at least ${min.toInt()} characters';",
+        );
       }
       if (max != null) {
-        b.writeln("    if (value.length > ${max.toInt()}) return 'Must be at most ${max.toInt()} characters';");
+        b.writeln(
+          "    if (value.length > ${max.toInt()}) return 'Must be at most ${max.toInt()} characters';",
+        );
       }
       if (v['email'] == true) {
-        b.writeln(r"    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value)) {");
+        b.writeln(
+          r"    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value)) {",
+        );
         b.writeln("      return 'Must be a valid email address';");
         b.writeln('    }');
       }
       if (v['url'] == true) {
         b.writeln('    final uri = Uri.tryParse(value);');
-        b.writeln("    if (uri == null || !uri.hasScheme || uri.host.isEmpty) return 'Must be a valid URL';");
+        b.writeln(
+          "    if (uri == null || !uri.hasScheme || uri.host.isEmpty) return 'Must be a valid URL';",
+        );
       }
       if (v['uuid'] == true) {
         b.writeln(
@@ -654,30 +712,39 @@ abstract interface class AxiomGeneratedEnum {
         b.writeln('    }');
       }
       if (v['regex'] is String) {
-        b.writeln('    if (!RegExp(${GeneratorUtils.str(v['regex'] as String)}).hasMatch(value)) {');
+        b.writeln(
+          '    if (!RegExp(${GeneratorUtils.str(v['regex'] as String)}).hasMatch(value)) {',
+        );
         b.writeln("      return 'Invalid format';");
         b.writeln('    }');
       }
       if (v['starts_with'] is String) {
         final s = GeneratorUtils.str(v['starts_with'] as String);
         b.writeln('    if (!value.startsWith($s)) {');
-        b.writeln("      return ${GeneratorUtils.str('Must start with ${v['starts_with']}')};");
+        b.writeln(
+          "      return ${GeneratorUtils.str('Must start with ${v['starts_with']}')};",
+        );
         b.writeln('    }');
       }
       if (v['ends_with'] is String) {
         final s = GeneratorUtils.str(v['ends_with'] as String);
         b.writeln('    if (!value.endsWith($s)) {');
-        b.writeln("      return ${GeneratorUtils.str('Must end with ${v['ends_with']}')};");
+        b.writeln(
+          "      return ${GeneratorUtils.str('Must end with ${v['ends_with']}')};",
+        );
         b.writeln('    }');
       }
       if (v['includes'] is String) {
         final s = GeneratorUtils.str(v['includes'] as String);
         b.writeln('    if (!value.contains($s)) {');
-        b.writeln("      return ${GeneratorUtils.str('Must contain ${v['includes']}')};");
+        b.writeln(
+          "      return ${GeneratorUtils.str('Must contain ${v['includes']}')};",
+        );
         b.writeln('    }');
       }
     } else if (rule == 'number') {
-      final isInt = v['int'] == true ||
+      final isInt =
+          v['int'] == true ||
           (f.type is PrimType && (f.type as PrimType).kind == 'int');
       b.writeln('    final number = num.tryParse(value.trim());');
       b.writeln("    if (number == null) return 'Must be a number';");
@@ -686,10 +753,14 @@ abstract interface class AxiomGeneratedEnum {
       }
       final min = n('min'), max = n('max');
       if (min != null) {
-        b.writeln("    if (number < ${lit(min)}) return 'Must be at least ${lit(min)}';");
+        b.writeln(
+          "    if (number < ${lit(min)}) return 'Must be at least ${lit(min)}';",
+        );
       }
       if (max != null) {
-        b.writeln("    if (number > ${lit(max)}) return 'Must be at most ${lit(max)}';");
+        b.writeln(
+          "    if (number > ${lit(max)}) return 'Must be at most ${lit(max)}';",
+        );
       }
     } else if (rule == 'enum') {
       final values = (v['values'] as List).map((e) => '$e').toList();
@@ -697,7 +768,9 @@ abstract interface class AxiomGeneratedEnum {
         '    const allowed = {${values.map(GeneratorUtils.str).join(', ')}};',
       );
       b.writeln('    if (!allowed.contains(value)) {');
-      b.writeln("      return ${GeneratorUtils.str('Must be one of: ${values.join(', ')}')};");
+      b.writeln(
+        "      return ${GeneratorUtils.str('Must be one of: ${values.join(', ')}')};",
+      );
       b.writeln('    }');
     }
     b.writeln('    return null;');
@@ -709,7 +782,9 @@ abstract interface class AxiomGeneratedEnum {
 
   void _writeFailures(StringBuffer b) {
     if (schema.failures.isEmpty) return;
-    b.writeln('/// A typed failure declared by the contract (`failure` / `errors(...)`).');
+    b.writeln(
+      '/// A typed failure declared by the contract (`failure` / `errors(...)`).',
+    );
     b.writeln('sealed class ContractFailure {');
     b.writeln('  const ContractFailure();');
     b.writeln();
@@ -720,7 +795,9 @@ abstract interface class AxiomGeneratedEnum {
     b.writeln();
     b.writeln('  /// Decodes the failure carried by [error], or null.');
     b.writeln('  static ContractFailure? fromError(AxiomError error) {');
-    b.writeln('    final (code, payload) = AxiomGeneratedCodec.failureParts(error);');
+    b.writeln(
+      '    final (code, payload) = AxiomGeneratedCodec.failureParts(error);',
+    );
     b.writeln('    switch (code) {');
     for (final code in schema.failures.keys.toList()..sort()) {
       final f = schema.failures[code]!;
@@ -731,7 +808,9 @@ abstract interface class AxiomGeneratedEnum {
     b.writeln('    return null;');
     b.writeln('  }');
     b.writeln();
-    b.writeln('  /// Registers every failure decoder with [AxiomFailureRegistry].');
+    b.writeln(
+      '  /// Registers every failure decoder with [AxiomFailureRegistry].',
+    );
     b.writeln('  static void registerAll({String? namespace}) {');
     for (final code in schema.failures.keys.toList()..sort()) {
       final f = schema.failures[code]!;
@@ -755,7 +834,9 @@ abstract interface class AxiomGeneratedEnum {
 
     for (final code in schema.failures.keys.toList()..sort()) {
       final f = schema.failures[code]!;
-      final ifaces = (f.endpoints.toList()..sort()).map((e) => ifaceOf[e]!).toList();
+      final ifaces = (f.endpoints.toList()..sort())
+          .map((e) => ifaceOf[e]!)
+          .toList();
       _writeRecordClass(
         b,
         name: f.dartName,
@@ -765,7 +846,9 @@ abstract interface class AxiomGeneratedEnum {
             ' extends ContractFailure${ifaces.isEmpty ? '' : ' implements ${ifaces.join(', ')}'}',
         extra: (b) {
           b.writeln();
-          b.writeln('  static const String failureCode = ${GeneratorUtils.str(code)};');
+          b.writeln(
+            '  static const String failureCode = ${GeneratorUtils.str(code)};',
+          );
           b.writeln();
           b.writeln('  @override');
           b.writeln('  String get code => failureCode;');
@@ -777,14 +860,25 @@ abstract interface class AxiomGeneratedEnum {
     b.writeln('/// Typed access to contract failures on [AxiomError].');
     b.writeln('extension AxiomErrorContractFailures on AxiomError {');
     b.writeln('  /// The typed contract failure, or null for other errors.');
-    b.writeln('  ContractFailure? get contractFailure => ContractFailure.fromError(this);');
+    b.writeln(
+      '  ContractFailure? get contractFailure => ContractFailure.fromError(this);',
+    );
     b.writeln();
-    final members = <String>{'contractFailure', ...GeneratorUtils.objectMembers};
+    final members = <String>{
+      'contractFailure',
+      ...GeneratorUtils.objectMembers,
+    };
     for (final ep in epNames) {
       final codes = schema.endpointFailures[ep]!;
       final iface = ifaceOf[ep]!;
-      final fn = GeneratorUtils.unique('when${GeneratorUtils.pascalCase(ep)}', members);
-      final getter = GeneratorUtils.unique('${GeneratorUtils.camelCase(ep)}Failure', members);
+      final fn = GeneratorUtils.unique(
+        'when${GeneratorUtils.pascalCase(ep)}',
+        members,
+      );
+      final getter = GeneratorUtils.unique(
+        '${GeneratorUtils.camelCase(ep)}Failure',
+        members,
+      );
       final params = <String>{'orElse'};
       final handlers = {
         for (final code in codes)
@@ -796,11 +890,15 @@ abstract interface class AxiomGeneratedEnum {
       b.writeln('    return f is $iface ? f : null;');
       b.writeln('  }');
       b.writeln();
-      b.writeln('  /// Pattern match on the failures of `$ep`; [orElse] gets any other error.');
+      b.writeln(
+        '  /// Pattern match on the failures of `$ep`; [orElse] gets any other error.',
+      );
       b.writeln('  R $fn<R>({');
       for (final code in codes) {
         final f = schema.failures[code]!;
-        b.writeln('    required R Function(${f.dartName} failure) ${handlers[code]},');
+        b.writeln(
+          '    required R Function(${f.dartName} failure) ${handlers[code]},',
+        );
       }
       b.writeln('    required R Function(AxiomError error) orElse,');
       b.writeln('  }) {');
