@@ -5,6 +5,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:axiom_flutter/axiom_flutter.dart';
+import 'package:axiom_flutter_auth/axiom_flutter_auth.dart'
+    show RefreshRecord, SecureStorageAdapter, secureStorage;
 // ignore: depend_on_referenced_packages
 import 'package:crypto/crypto.dart' as crypto; // via axiom_flutter_auth
 import 'package:flutter/services.dart' show rootBundle;
@@ -419,5 +421,27 @@ final List<CheckDef> checksG = [
     expectThat(tp != null, 'no traceparent header on the backend request: ${calls.last['headers']}');
     expectThat(RegExp(r'^00-[0-9a-f]{32}-[0-9a-f]{16}-0[0-9a-f]$').hasMatch(tp!),
         'malformed traceparent: $tp');
+  }),
+  CheckDef('g.secure_storage_platform_not_memory', 'auth_f', (c) async {
+    // auth_f.platform_storage passes even when the store silently falls back
+    // to memory; this one requires the real platform store: a second adapter
+    // instance must read what the first wrote, with no memory fallback.
+    if (gIsWeb) skip('web uses sessionStorage (auth_f.platform_storage)');
+    const key = 'axiom-auth:refresh:g-check';
+    const rec = RefreshRecord(
+        refreshToken: 'g.r1',
+        refreshExpiresAt: '2030-01-01T00:00:00.000Z',
+        issuer: 'https://auth.g.test/p',
+        audience: 'api',
+        sessionId: 'g');
+    final SecureStorageAdapter a = secureStorage();
+    await a.set(key, rec);
+    expectThat(!a.usingMemoryFallback,
+        'platform secure store unavailable; fell back to memory (see the axiom_flutter_auth warning)');
+    final b = secureStorage();
+    expectEq((await b.get(key))?.refreshToken, 'g.r1', 'read back through a new adapter');
+    await b.remove(key);
+    expectEq(await secureStorage().get(key), null, 'after remove');
+    expectThat(!b.usingMemoryFallback, 'second adapter fell back to memory');
   }),
 ];

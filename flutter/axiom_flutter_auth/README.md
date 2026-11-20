@@ -71,11 +71,30 @@ memory.
 | Adapter | Where | Trade-off |
 | --- | --- | --- |
 | `memoryStorage()` (default) | process memory | Nothing touches disk. The user signs in again after a restart (or a reload on web). |
-| `secureStorage()` | `flutter_secure_storage` 10: iOS/macOS Keychain (`first_unlock_this_device`), Android Keystore-backed ciphers | The recommended choice on mobile and desktop. macOS needs the Keychain Sharing entitlement. |
+| `secureStorage()` | `flutter_secure_storage` 10: iOS/macOS Keychain (`first_unlock_this_device`), Android Keystore-backed ciphers | The recommended choice on mobile and desktop. On macOS see the two keychain modes below. |
 | `sessionStorageAdapter()` | web `window.sessionStorage` (per tab, survives a reload) | Same trade-off as auth-web: **any script on the page (XSS) can read the refresh token.** Use it only with a strict Content-Security-Policy. Otherwise keep `memoryStorage()`. Do not use `secureStorage()` on web: it encrypts with a key kept beside the data in `localStorage`. |
-| `platformStorage()` | `sessionStorageAdapter()` on web, `secureStorage()` elsewhere | |
+| `platformStorage()` | `sessionStorageAdapter()` on web, `secureStorage()` elsewhere | Takes the same `macOsDataProtectionKeychain` option. |
 
 You can also implement `AuthStorageAdapter` (`get`/`set`/`remove`) yourself.
+
+### macOS keychain modes
+
+| Mode | How | Requirements |
+| --- | --- | --- |
+| Legacy login keychain (default) | `secureStorage()` / `platformStorage()` | None. Works in unsigned, ad-hoc signed and `flutter run` builds. Do **not** add `keychain-access-groups` to the entitlements for this mode. |
+| Data-protection keychain | `secureStorage(macOsDataProtectionKeychain: true)` | A team-signed app with the Keychain Sharing capability (Xcode > Signing & Capabilities > Keychain Sharing, which adds `keychain-access-groups`). |
+
+Do not ship the `keychain-access-groups` entitlement in an app that is not signed with a
+development team: macOS kills such an app at launch, before any Dart code runs. Records written in
+one mode are not visible in the other, so pick one before release.
+
+### When the platform store is unavailable
+
+`secureStorage()` never throws at start-up because of the platform store. If a keychain or
+keystore call fails (no keychain, missing plugin, missing entitlement such as `-34018`), the
+adapter prints one warning and keeps the session in memory for the rest of the process, so the user
+stays signed in until the app quits. `adapter.usingMemoryFallback` tells you this happened. Pass
+`fallbackToMemory: false` to get the platform error instead.
 
 ## Platform requirements
 

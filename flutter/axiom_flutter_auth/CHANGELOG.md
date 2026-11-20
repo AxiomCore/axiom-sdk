@@ -3,6 +3,13 @@
 - `flutter_secure_storage` ^10 (was ^9.2.2): apps using this package now build with
   `flutter build web --wasm`. Android apps need `minSdk 23` and `compileSdk 36`.
   The deprecated `encryptedSharedPreferences` option is no longer passed.
+- macOS: `secureStorage()` now uses the legacy login keychain by default (no entitlement, works in
+  unsigned and ad-hoc builds). Opt in to the data-protection keychain with
+  `secureStorage(macOsDataProtectionKeychain: true)` (team-signed app with Keychain Sharing).
+  `platformStorage()` takes the same option.
+- `secureStorage()` returns `SecureStorageAdapter`. If the platform store fails it prints one warning
+  and keeps the session in memory (`usingMemoryFallback`) instead of throwing;
+  `fallbackToMemory: false` restores the error.
 
 ## 0.1.0 (2026-11-20)
 
