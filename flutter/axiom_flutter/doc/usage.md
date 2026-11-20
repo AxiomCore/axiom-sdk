@@ -13,8 +13,11 @@ How these steps were checked (20 Nov 2026, Debian 12 x86_64, Flutter 3.32.0,
 on pub.dev yet): steps 1 to 6 were run as written, and every Dart block on this
 page analyzes with no issues. The backend answered `curl`, `axiom pull`
 succeeded, and `flutter build web --release` and
-`flutter build apk --release --split-per-abi` succeeded. The app was not run on
-a device, emulator or browser for this page.
+`flutter build apk --release --split-per-abi` succeeded after step 5 (it fails
+with a manifest merger error before `minSdk = 24`). With the add-on of step 10
+in the app, the arm64 APK contains only `lib/arm64-v8a/libaxiom_runtime_full.so`
+(7,375,344 bytes) and no web runtime files. The app was not run on a device,
+emulator or browser for this page.
 
 ## 0. Tools
 
