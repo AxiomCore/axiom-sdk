@@ -50,7 +50,13 @@ from `build_runner`.
 
 Linux and Windows are not supported.
 
-<!-- VERIFY: platform runs on Android emulator, iOS simulator and macOS (lead receipt) -->
+Tested for 0.150.0 with the qualification suite in `flutter/integration_app`:
+Android emulator (arm64, API 36), iOS simulator and macOS (81 of 84 run
+checks pass with the published runtime; the 3 WebSocket checks need the next
+AxiomRuntime), and web in headless Chrome (debug, release with a strict CSP,
+and dart2wasm).
+
+<!-- VERIFY: physical Android and iOS devices; Safari and Firefox; 32-bit ARM hardware (armeabi-v7a) -->
 
 ### Android
 
@@ -209,7 +215,6 @@ method refetches the active queries of that identity after the command
 succeeds. If the contract marks a command idempotent, the generated method
 takes an `idempotencyKey` and creates one when you do not pass it.
 
-<!-- VERIFY: gen.mutation_invalidates_active_query -->
 
 ## Streams and channels
 
@@ -227,8 +232,13 @@ WebSocket endpoints generate a `...Channel()` method that returns an
 `AxiomChannel<Receive, Send>`. The channel reconnects with exponential
 back-off when the contract says `reconnect: "auto"`.
 
-<!-- VERIFY: gen.ws_channel -->
-<!-- VERIFY: stream.websocket_echo -->
+WebSocket limits in 0.150.0:
+- iOS and macOS need the next AxiomRuntime release; with the pinned 0.148.6
+  runtime a channel fails with an error that names the cause.
+- On web, a browser cannot send `Authorization` on a WebSocket upgrade, so a
+  WebSocket endpoint must accept a cookie session.
+
+<!-- VERIFY: gen.ws_channel / stream.websocket_echo on web with a cookie session (FAIL in the h2 web receipts) -->
 
 ```dart
 final channel = sdk.fixture.wsEchoChannel();
@@ -253,8 +263,7 @@ sdk.todos.axiom.setNamespaceToken(token);
 sdk.runtime.setGlobalAuthToken(token);
 ```
 
-<!-- VERIFY: auth.bearer_token -->
-<!-- VERIFY: c.namespace_global_token -->
+<!-- VERIFY: c.namespace_global_token (SKIP in the web and Linux host receipts) -->
 
 For tokens that expire, register a provider. The runtime asks it for a token
 when a call needs one, so you can refresh first:
@@ -265,7 +274,7 @@ sdk.runtime.setAuthProvider((namespace, methodName) async {
 });
 ```
 
-<!-- VERIFY: c.auth_provider -->
+<!-- VERIFY: c.auth_provider (SKIP in the web and Linux host receipts) -->
 
 On logout, call `await sdk.runtime.resetSession();`. It cancels in-flight
 requests, clears the session cache, the tokens and the provider. Loaded
@@ -321,8 +330,6 @@ query.cancel();
 
 A timeout ends the call with error code `NetworkTimeout`.
 
-<!-- VERIFY: c.cancel -->
-<!-- VERIFY: c.call_options_timeout -->
 
 ## Errors and typed failures
 
@@ -359,7 +366,6 @@ sdk.runtime.onError.listen((event) {
 });
 ```
 
-<!-- VERIFY: c.error_listener -->
 
 ## Signed and hash-locked contracts
 
@@ -383,7 +389,6 @@ An unsigned contract prints a warning in debug mode. Set
 `requireSignedContracts: true` in `AxiomConfig` to make start-up fail
 instead.
 
-<!-- VERIFY: c.locked_load_rejects_bad_hash -->
 
 ## Environments and base URLs
 
@@ -413,7 +418,7 @@ extensions from bytes embedded in the app: `loadExtension`,
 `AxiomRuntime`. A failed call throws `AxiomExtensionException`. On web these
 methods throw `UnsupportedError`.
 
-<!-- VERIFY: runtime.extensions -->
+<!-- VERIFY: runtime.extensions (SKIP in every receipt on the Linux box; needs a native extension build) -->
 
 ## Troubleshooting
 
@@ -423,7 +428,12 @@ methods throw `UnsupportedError`.
 | `The platform deployment target ... is lower than ...` or a linker error on iOS/macOS | Set iOS 13.0 / macOS 11.0 in the `Podfile` and in the Xcode project, then run `pod install` again. |
 | `axiom pull` says `dart pub get failed` | Run `flutter pub get` in the project and fix the reported dependency conflict. `axiom_flutter` and `axiom_flutter_generator` must have the same minor version. |
 | `axiom build` or `axiom check` cannot find `AxiomDeps.toml` | A backend contract needs an `AxiomDeps.toml` next to `main.acore` with `type = "backend"`, `targets = ["server"]` and `audiences = ["web"]`. |
-| Web: every call fails, the browser console shows a CORS error | Add the app's origin to `cors(origins: [...])` in the backend contract and allow the `x-axiom-*` headers. Run the app on that exact origin (`--web-port`). |
+| Web: every call fails, the browser console shows a CORS error | Add the app's origin to `cors(origins: [...])` in the backend contract and allow the headers the SDK sends: `accept`, `content-type`, `x-axiom-request-id`, `x-axiom-cache-mode`, `traceparent`, `tracestate` (plus `authorization` if you send tokens). Run the app on that exact origin (`--web-port`). |
+| Web release build: `Null check operator used on a null value` in your own code | A dart2js bug in Dart 3.8.0 / Flutter 3.32.0, not an SDK bug: any `async` function literally named `result` crashes in release web builds (the compiler's internal `$async$result` name shadows the awaited value). Rename the function. |
+| Web: after a rebuild the browser still runs the old app | Flutter's service worker can serve the previous build. Hard-reload, or test each build in a fresh browser profile (Chrome `--user-data-dir=<new dir>`). |
+| Web: WebSocket endpoint gets 401 or never opens | Browsers cannot send `Authorization` on a WebSocket upgrade. Use a cookie session for WebSocket endpoints on web. |
+| Web (dart2js): a 64-bit id changes its last digits | JavaScript numbers lose precision above 2^53. Use `String` for 64-bit ids, or build with `--wasm`. Native builds are not affected. |
+| An endpoint that returns `204 No Content` fails with a decode error | The SDK reports success for an empty body, but the current runtime rejects an empty body when the endpoint declares a typed response. Fixed in the next runtime release; until then, return a body from that endpoint. |
 | Debug console: unsigned contract warning | The contract has no signature. Fine during development. For release, sign it and pass the proof, or set `requireSignedContracts` to fail fast. |
 | Android emulator: connection refused | Use `http://10.0.2.2:<port>`, add the `INTERNET` permission, and allow cleartext HTTP for debug builds. |
 | `AxiomVersionMismatch` at start-up | The native runtime and the Dart package come from different releases. Upgrade them together (`flutter pub upgrade axiom_flutter`, then `pod install` / rebuild). |

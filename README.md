@@ -23,7 +23,11 @@ compiler shows what broke.
 | Web | WebAssembly | bundled wasm |
 | Linux, Windows | not supported | |
 
-<!-- VERIFY: platform runs on Android emulator, iOS simulator and macOS (lead receipt) -->
+Tested for 0.150.0 on the Android emulator (arm64, API 36), the iOS
+simulator and macOS (81 of 84 run checks; the 3 WebSocket checks need the
+next AxiomRuntime), and web in headless Chrome.
+
+<!-- VERIFY: physical Android and iOS devices; Safari and Firefox; 32-bit ARM hardware (armeabi-v7a) -->
 
 ### Quickstart (5 minutes)
 
