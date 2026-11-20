@@ -691,9 +691,6 @@ class AxiomRuntimeWeb implements AxiomRuntime {
         return null;
       }
     }
-    // Start the download and compile now; read the assets meanwhile.
-    final loading = _ensureLoaded();
-    loading.ignore();
     final load =
         assetLoader ??
         (String path) async =>
@@ -710,6 +707,10 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     } catch (_) {
       return null; // normal start-up reports the error
     }
+    // Start the wasm download and compile only now: started earlier it
+    // competes with the contract asset read that initialize() waits for.
+    final loading = _ensureLoaded();
+    loading.ignore();
     final results = <String, AxiomContractLoadResult>{};
     assets.forEach((ns, a) {
       _contracts[ns] = a.$3;
