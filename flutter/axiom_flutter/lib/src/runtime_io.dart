@@ -265,6 +265,10 @@ class _Call {
   /// An auth error arrived and [retryAuth] runs when its Complete arrives.
   bool authRetryPending = false;
 
+  /// Network success held until its Complete reports how it was validated
+  /// (runtimes with `axiom_set_validation_policy` only).
+  AxiomState<Uint8List>? pendingSuccess;
+
   /// WebSocket call (method `WS`).
   bool isWebSocket = false;
 
@@ -1025,6 +1029,16 @@ class AxiomRuntimeIo implements AxiomRuntime {
       return;
     }
 
+    final held = call.pendingSuccess;
+    if (held != null) {
+      call.pendingSuccess = null;
+      controller.add(
+        eventTypeValue == EventType.complete
+            ? held.withValidation(AxiomValidationMode.fromCompleteData(data))
+            : held,
+      );
+    }
+
     if (eventTypeValue == EventType.complete) {
       if (call.authRetryPending) {
         call.authRetryPending = false;
@@ -1113,6 +1127,12 @@ class AxiomRuntimeIo implements AxiomRuntime {
     // A successful empty body (204, void endpoints) is still a success:
     // emit it (null data downstream) as web does, or mutations never settle.
     if (data.isNotEmpty || eventTypeValue == EventType.networkSuccess) {
+      if (eventTypeValue == EventType.networkSuccess &&
+          call.sseParser == null &&
+          _reportsValidation) {
+        call.pendingSuccess = AxiomState.success(data, AxiomSource.network);
+        return;
+      }
       controller.add(
         AxiomState.success(
           data,
@@ -1337,6 +1357,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
     final watch = Stopwatch()..start();
     debug = config.debug;
     decodeIsolateThreshold = config.decodeIsolateThreshold;
+    _configValidation = config.validation;
     objectCache
       ..maxEntries = config.objectCacheMaxEntries
       ..maxBytes = config.objectCacheMaxBytes;
@@ -1597,7 +1618,9 @@ class AxiomRuntimeIo implements AxiomRuntime {
 
       final withOptions = _callWithOptionsFfi;
       final timeout = options?.timeout;
-      final nativeTimeout = withOptions != null && timeout != null;
+      final validation = options?.validation;
+      final nativeTimeout =
+          withOptions != null && (timeout != null || validation != null);
       final callStatus = using((Arena arena) {
         final bPtr = arena<Uint8>(requestBytes.length);
         bPtr.asTypedList(requestBytes.length).setAll(0, requestBytes);
@@ -1618,11 +1641,13 @@ class AxiomRuntimeIo implements AxiomRuntime {
             _toAxiomString(
               jsonEncode({
                 // timeoutMs 0 means "no timeout" to the runtime: round up.
-                'timeoutMs': (timeout.inMicroseconds + 999) ~/ 1000 < 1
-                    ? 1
-                    : (timeout.inMicroseconds + 999) ~/ 1000,
+                if (timeout != null)
+                  'timeoutMs': (timeout.inMicroseconds + 999) ~/ 1000 < 1
+                      ? 1
+                      : (timeout.inMicroseconds + 999) ~/ 1000,
                 if (options!.cacheMode == AxiomCacheMode.refresh)
                   'cacheMode': 'refresh',
+                if (validation != null) 'validation': validation.name,
               }),
               arena,
             ),
@@ -1881,6 +1906,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
           state.source,
           isFetching: state.isFetching,
           isStreaming: state.isStreaming,
+          validation: state.validation,
         );
         final cacheKey = state.isStreaming || objectCache.maxEntries <= 0
             ? null
@@ -2242,13 +2268,37 @@ class AxiomRuntimeIo implements AxiomRuntime {
   final Set<String> _purgedNs = {};
   final Set<String> _refreshedAfterPurge = {};
 
+  /// [AxiomConfig.validation] set at the last initialize.
+  AxiomValidationPolicy? _configValidation;
+
+  /// Runtimes with `axiom_set_validation_policy` (0.150.1+) mark sampled or
+  /// unvalidated responses in the Complete event's data.
+  late final bool _reportsValidation = _has('axiom_set_validation_policy');
+
+  /// [AxiomConfig.validation] (preferred) or
   /// `--dart-define=AXIOM_VALIDATION_POLICY=<json>` (e.g. `{"mode":"full"}`)
   /// sets the runtime's global response validation policy. Runtimes without
   /// `axiom_set_validation_policy` (published Apple 0.148.6) always validate
   /// fully, so the define is ignored there.
   void _applyValidationPolicyDefine() {
-    const policy = String.fromEnvironment('AXIOM_VALIDATION_POLICY');
-    if (policy.isEmpty || !_has('axiom_set_validation_policy')) return;
+    const define = String.fromEnvironment('AXIOM_VALIDATION_POLICY');
+    final configured = _configValidation;
+    final policy = configured != null
+        ? jsonEncode({'mode': configured.name})
+        : define;
+    if (policy.isEmpty) return;
+    if (!_has('axiom_set_validation_policy')) {
+      if (configured != null) {
+        if (debug) {
+          // ignore: avoid_print
+          print(
+            '[axiom] AxiomConfig.validation ignored: this runtime has no '
+            'axiom_set_validation_policy (it validates fully)',
+          );
+        }
+      }
+      return;
+    }
     final setPolicy = _lib
         .lookupFunction<_AxiomStr2StatusNative, _AxiomStr2Status>(
           'axiom_set_validation_policy',

@@ -232,6 +232,10 @@ class _Request {
   /// Server-Sent Events framing detected on the first chunk; null = unknown.
   bool? sse;
   AxiomSseParser? sseParser;
+
+  /// Network success held until its Complete reports how it was validated
+  /// (wasm with `axiom_wasm_set_validation_policy` only).
+  AxiomState<Uint8List>? pendingSuccess;
 }
 
 /// What the SDK knows about a `send` query key (for invalidate/setQueryData).
@@ -562,12 +566,33 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     if (_authProvider != null) _applyAuthProvider();
   }
 
+  /// [AxiomConfig.validation] set at the last initialize.
+  AxiomValidationPolicy? _configValidation;
+
+  /// Runtimes with the validation policy export (0.150.1+) mark sampled or
+  /// unvalidated responses in the Complete event's data.
+  bool get _reportsValidation =>
+      _hasExport('axiom_wasm_set_validation_policy');
+
+  /// [AxiomConfig.validation] (preferred) or
   /// `--dart-define=AXIOM_VALIDATION_POLICY=<json>` (e.g. `{"mode":"full"}`)
   /// sets the runtime's global response validation policy. Ignored by
   /// runtimes without `axiom_wasm_set_validation_policy`.
   void _applyValidationPolicyDefine() {
-    const policy = String.fromEnvironment('AXIOM_VALIDATION_POLICY');
-    if (policy.isEmpty || !_hasExport('axiom_wasm_set_validation_policy')) {
+    const define = String.fromEnvironment('AXIOM_VALIDATION_POLICY');
+    final configured = _configValidation;
+    final policy = configured != null
+        ? jsonEncode({'mode': configured.name})
+        : define;
+    if (policy.isEmpty) return;
+    if (!_hasExport('axiom_wasm_set_validation_policy')) {
+      if (configured != null && debug) {
+        // ignore: avoid_print
+        print(
+          '[axiom] AxiomConfig.validation ignored: this runtime has no '
+          'axiom_wasm_set_validation_policy (it validates fully)',
+        );
+      }
       return;
     }
     final n = _alloc('');
@@ -640,6 +665,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   ) async {
     final sw = Stopwatch()..start();
     debug = config.debug;
+    _configValidation = config.validation;
     _runtimeStartError = null;
     final fast = await _tryFastStart(config, assetLoader, sw);
     if (fast != null) return fast;
@@ -1122,6 +1148,18 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     if (req == null) return;
     final controller = req.controller;
 
+    final held = req.pendingSuccess;
+    if (held != null) {
+      req.pendingSuccess = null;
+      if (!controller.isClosed) {
+        controller.add(
+          evt == EventType.complete
+              ? held.withValidation(AxiomValidationMode.fromCompleteData(data))
+              : held,
+        );
+      }
+    }
+
     switch (evt) {
       case EventType.complete:
         if (req.sse == true && !controller.isClosed) {
@@ -1210,6 +1248,12 @@ class AxiomRuntimeWeb implements AxiomRuntime {
           if (events.isNotEmpty) data = events.last;
         }
         if (parsed != null) _parsedBodies[data] = parsed;
+        if (evt == EventType.networkSuccess &&
+            req.sse != true &&
+            _reportsValidation) {
+          req.pendingSuccess = AxiomState.success(data, AxiomSource.network);
+          return;
+        }
         if (!controller.isClosed) {
           controller.add(
             AxiomState.success(
@@ -1570,8 +1614,12 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     void dispatch() {
       if (!_requests.containsKey(id)) return; // cancelled before dispatch
       final hStr = merged.isNotEmpty ? jsonEncode(merged) : '';
-      final oStr = nativeOptions && timeoutMs != null
-          ? jsonEncode({'timeoutMs': timeoutMs})
+      final validation = options?.validation;
+      final oStr = nativeOptions && (timeoutMs != null || validation != null)
+          ? jsonEncode({
+              if (timeoutMs != null) 'timeoutMs': timeoutMs,
+              if (validation != null) 'validation': validation.name,
+            })
           : '';
       final allocs = <_WebAlloc>[];
       _WebAlloc a(_WebAlloc x) {
@@ -1907,6 +1955,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
         state.source,
         isFetching: state.isFetching,
         isStreaming: state.isStreaming,
+        validation: state.validation,
       );
     } catch (e) {
       return AxiomState<T>.error(

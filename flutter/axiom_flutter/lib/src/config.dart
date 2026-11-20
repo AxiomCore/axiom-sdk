@@ -1,3 +1,5 @@
+import 'call_options.dart';
+
 /// Configuration for one contract namespace.
 class AxiomContractConfig {
   /// Default base URL baked in by the generator. Overridden by
@@ -124,6 +126,14 @@ class AxiomConfig {
   /// Upper bound of the summed body sizes held by the object cache.
   final int objectCacheMaxBytes;
 
+  /// Global response validation policy, set with
+  /// `axiom_set_validation_policy` at initialization (native and web).
+  /// Null keeps the runtime default ([AxiomValidationPolicy.auto]) or the
+  /// `AXIOM_VALIDATION_POLICY` dart-define. Ignored (debug log) by runtimes
+  /// without the function, such as the published Apple runtime 0.148.6,
+  /// which always validate fully.
+  final AxiomValidationPolicy? validation;
+
   /// Creates a configuration.
   const AxiomConfig({
     required this.contracts,
@@ -135,6 +145,7 @@ class AxiomConfig {
     this.decodeIsolateThreshold = 256 * 1024,
     this.objectCacheMaxEntries = 0,
     this.objectCacheMaxBytes = 8 * 1024 * 1024,
+    this.validation,
   });
 
   /// Effective base URL for [namespace]:
@@ -166,7 +177,9 @@ class AxiomConfig {
     int? decodeIsolateThreshold,
     int? objectCacheMaxEntries,
     int? objectCacheMaxBytes,
+    AxiomValidationPolicy? validation,
   }) => AxiomConfig(
+    validation: validation ?? this.validation,
     contracts: contracts ?? this.contracts,
     debug: debug ?? this.debug,
     dbPath: dbPath ?? this.dbPath,

@@ -63,10 +63,18 @@ if (!axiomKeepWebAssets) {
     gradle.projectsEvaluated {
         rootProject.allprojects { p ->
             p.tasks.matching { it.name.startsWith("copyFlutterAssets") }.configureEach { t ->
+                // Configuration-cache safe: the output FileCollection is
+                // captured at configuration time; the action uses only
+                // java.io.File (no Project or Task access at execution).
+                def outs = t.outputs.files
                 t.doLast {
-                    t.outputs.files.each { out ->
-                        p.fileTree(out) { include "**/packages/axiom_flutter/lib/assets/wasm/**" }
-                            .each { it.delete() }
+                    outs.files.each { File out ->
+                        if (!out.isDirectory()) return
+                        out.eachFileRecurse(groovy.io.FileType.FILES) { File f ->
+                            if (f.path.replace('\\', '/').contains("/packages/axiom_flutter/lib/assets/wasm/")) {
+                                f.delete()
+                            }
+                        }
                     }
                 }
             }

@@ -64,6 +64,15 @@ Behaviour changes
   (`axiom_runtime_bg.wasm` and its JS glue). Set `axiom.keepWebAssets=true`
   in `android/gradle.properties` to keep the files.
 
+Changed
+- WebSocket connections over TLS on native now trust the bundled public root
+  certificates, the same set HTTPS already used, instead of the operating
+  system store; servers using a private CA installed only on the device no
+  longer connect over wss.
+- Responses of 64 KiB or more are validated by sampling by default;
+  `AxiomState.validation` reports it; set `AxiomConfig.validation` or the call
+  option to `full` to validate every item.
+
 Added
 - `AxiomConfig.decodeIsolateThreshold` (default 256 KB),
   `objectCacheMaxEntries` (default 0 = off), `objectCacheMaxBytes` (8 MB).
