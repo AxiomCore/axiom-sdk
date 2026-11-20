@@ -261,6 +261,9 @@ class _ContractMeta {
   /// credentials on every call of the namespace).
   bool cookieSession = false;
 
+  /// Some endpoint declares auth (any kind).
+  bool anyAuth = false;
+
   /// Parsed without errors (fast start needs the full picture).
   bool complete = false;
 
@@ -285,6 +288,7 @@ class _ContractMeta {
           final name = e['name'];
           if (name is String) meta.endpointIds[name] = id;
           final auth = e['auth'];
+          if (auth != null) meta.anyAuth = true;
           if (auth is Map && auth['methods'] is List) {
             final names = <String>[];
             for (final m in auth['methods'] as List) {
@@ -293,7 +297,14 @@ class _ContractMeta {
               final location = m['location'];
               final type = m['type'];
               // Cookie sessions are handled by the browser, not by tokens.
-              if (type == 'session' && location == 'cookie') {
+              // Same predicate as the runtime (engine.rs
+              // is_cookie_session_method): type "session" in any case, and a
+              // missing location counts as cookie.
+              if (type is String &&
+                  type.toLowerCase() == 'session' &&
+                  (location == null ||
+                      (location is String &&
+                          location.toLowerCase() == 'cookie'))) {
                 meta.cookieSession = true;
                 continue;
               }
@@ -310,6 +321,8 @@ class _ContractMeta {
               retKind == 'named' && validatorNames.contains('${ret['value']}');
           if (e['method'] == 'GET' &&
               auth == null &&
+              // Validated bodies need the runtime's own JSON check (M1).
+              !validated &&
               (cache == null ||
                   (cache is Map && cache['strategy'] == 'network_only')) &&
               e['retry_policy'] == null &&
@@ -336,7 +349,11 @@ class _ContractMeta {
           }
         }
       }
-      if (!meta.cookieSession) meta.fastGet.addAll(candidates);
+      // Review B3: a namespace with any auth declaration (cookie session or
+      // anything the Dart side does not reproduce) gets no fast start.
+      if (!meta.cookieSession && !meta.anyAuth) {
+        meta.fastGet.addAll(candidates);
+      }
       meta.complete = true;
     } catch (_) {
       // Non-JSON or unknown contract encoding: no metadata, runtime still
@@ -409,13 +426,17 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   /// Test hook: bodies received through `axiom_web_body` so far.
   static int debugExternalBodyCount = 0;
 
-  /// C3.1 fast start: initialize() returns once the contract assets are read
-  /// when no contract needs verification, and eligible GETs run as a plain
-  /// `fetch` until the wasm is ready. `--dart-define=AXIOM_WEB_FAST_START=false`
-  /// restores the old start-up (initialize waits for the runtime).
+  /// C3.1 fast start, OPT-IN (`--dart-define=AXIOM_WEB_FAST_START=true`):
+  /// initialize() returns once the contract assets are read when no contract
+  /// needs verification, and eligible GETs run as a plain `fetch` until the
+  /// wasm is ready. Caveat: the contract has then not been accepted by the
+  /// runtime yet (header/version checks run when the wasm is up); if that
+  /// fails later, the failure goes to onError, initResult is replaced and
+  /// every queued and later call fails with it. Default: initialize() waits
+  /// for the runtime (review B2).
   static bool fastStart = const bool.fromEnvironment(
     'AXIOM_WEB_FAST_START',
-    defaultValue: true,
+    defaultValue: false,
   );
 
   /// Test hook: calls served by the fast-start fetch so far.
@@ -596,6 +617,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   ) async {
     final sw = Stopwatch()..start();
     debug = config.debug;
+    _runtimeStartError = null;
     final fast = await _tryFastStart(config, assetLoader, sw);
     if (fast != null) return fast;
     try {
@@ -753,9 +775,25 @@ class AxiomRuntimeWeb implements AxiomRuntime {
         if (firstError != null) _runtimeStartError = firstError;
       } catch (e) {
         _runtimeStartError = e;
+      }
+      final failed = _runtimeStartError;
+      if (failed != null) {
+        _errors.add(
+          AxiomErrorEvent(
+            AxiomError(
+              stage: ErrorStage.runtime,
+              category: ErrorCategory.runtime,
+              code: const UnknownCode('RuntimeStartFailed'),
+              message: 'Axiom runtime failed to start after fast start: $failed',
+              retryable: false,
+            ),
+          ),
+        );
+      }
+      if (failed != null && _initResult?.ok != false) {
         _initResult = AxiomInitResult(
           ok: false,
-          error: e,
+          error: failed,
           duration: sw.elapsed,
         );
       }
@@ -772,6 +810,10 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     _initResult = result;
     return result;
   }
+
+  /// Test hook: fast-start eligible endpoint ids for raw contract bytes.
+  static Set<int> debugFastGetForContract(Uint8List bytes) =>
+      _ContractMeta.parse(bytes).fastGet;
 
   /// Test hook: endpoint ids of [namespace] the fast-start fetch may serve.
   Set<int> debugFastGetEndpoints(String namespace) => {
@@ -827,6 +869,8 @@ class AxiomRuntimeWeb implements AxiomRuntime {
         h.append(k, v);
       } catch (_) {}
     });
+    // Like runtime calls (http.rs: headers.set, replaces a caller value).
+    h.set('traceparent', AxiomTracing.generateTraceparent());
     final init = web.RequestInit(
       method: 'GET',
       headers: h,
@@ -1628,6 +1672,17 @@ class AxiomRuntimeWeb implements AxiomRuntime {
           }
         });
       }
+      return AxiomStreamResponse(id, controller.stream);
+    }
+    final startError = _runtimeStartError;
+    if (startError != null) {
+      // Fast start failed later (review B2): every call fails with it until
+      // initialize() succeeds again.
+      _failDispatch(
+        id,
+        FfiError.runtimeTooOld,
+        'Axiom runtime failed to start: $startError',
+      );
       return AxiomStreamResponse(id, controller.stream);
     }
     _dispatchWithAuth(namespace, endpointId, dispatch);
