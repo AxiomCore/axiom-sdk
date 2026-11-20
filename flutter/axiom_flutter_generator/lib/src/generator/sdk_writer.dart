@@ -349,6 +349,10 @@ class SdkWriter {
     b.writeln('  $cls._(this._runtime, this._namespace)');
     b.writeln('    : axiom = ${cls}AxiomNamespace._(_runtime, _namespace);');
     b.writeln();
+    b.writeln('  /// Binds this client to another namespace of [runtime], for example the same');
+    b.writeln('  /// contract loaded a second time with a different base URL.');
+    b.writeln('  $cls(AxiomRuntime runtime, String namespace) : this._(runtime, namespace);');
+    b.writeln();
     b.writeln('  final AxiomRuntime _runtime;');
     b.writeln('  final String _namespace;');
     b.writeln();
