@@ -132,11 +132,47 @@ extension WasmExportsExt on WasmExports {
   external void axiomSendMsg(JSNumber reqId, int ptr, int len);
 
   // Optional exports from unit r (runtime cache control).
-  @JS('axiom_wasm_invalidate_cache')
+  // Optional exports (runtime 0.157 additive ABI, unit r + c wrappers).
+  @JS('axiom_wasm_cache_invalidate_identity')
   external int axiomInvalidateCache(int nPtr, int nLen, int iPtr, int iLen);
 
-  @JS('axiom_wasm_clear_cache')
+  @JS('axiom_wasm_cache_clear_namespace')
   external int axiomClearCache(int nPtr, int nLen);
+
+  @JS('axiom_wasm_call_with_options')
+  external int axiomCallWithOptions(
+    JSNumber reqId,
+    int nPtr,
+    int nLen,
+    int epId,
+    int mPtr,
+    int mLen,
+    int pPtr,
+    int pLen,
+    int tpPtr,
+    int tpLen,
+    int hPtr,
+    int hLen,
+    int bPtr,
+    int bLen,
+    int oPtr,
+    int oLen,
+  );
+
+  @JS('axiom_wasm_register_auth_provider')
+  external void axiomRegisterAuthProvider();
+
+  @JS('axiom_wasm_clear_auth_provider')
+  external void axiomClearAuthProvider();
+
+  @JS('axiom_wasm_provide_auth_token')
+  external void axiomProvideAuthToken(JSNumber reqId, int tPtr, int tLen);
+
+  @JS('axiom_wasm_set_namespace_auth_token')
+  external int axiomSetNamespaceAuthToken(int nPtr, int nLen, int tPtr, int tLen);
+
+  @JS('axiom_wasm_clear_namespace_auth_tokens')
+  external int axiomClearNamespaceAuthTokens(int nPtr, int nLen);
 
   @JS('axiom_abi_version')
   external int axiomAbiVersion();
@@ -271,6 +307,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   final _namespaceTokens = <String, String>{};
   String? _globalToken;
   final _appliedTokens = <String, Map<String, String>>{};
+  final _runtimeNamespaceTokens = <String, String>{};
   AxiomAuthProvider? _authProvider;
 
   final _contracts = <String, _ContractMeta>{};
@@ -378,6 +415,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       _free(db);
       _started = true;
     }
+    if (_authProvider != null) _applyAuthProvider();
   }
 
   @override
@@ -850,37 +888,67 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     final fPath = _buildPath(path, pathParams, queryParams);
     final merged = options?.mergeHeaders(headers) ?? {...?headers};
 
+    // Runtime-enforced timeout when the wasm has axiom_wasm_call_with_options;
+    // otherwise a Dart timer cancels the request (see below).
+    final nativeOptions = _hasExport('axiom_wasm_call_with_options');
+    final timeoutMs = options?.timeout == null
+        ? null
+        : (options!.timeout!.inMicroseconds / 1000).ceil().clamp(1, 1 << 31);
+
     void dispatch() {
       if (!_requests.containsKey(id)) return; // cancelled before dispatch
       final hStr = merged.isNotEmpty ? jsonEncode(merged) : '';
+      final oStr = nativeOptions && timeoutMs != null
+          ? jsonEncode({'timeoutMs': timeoutMs})
+          : '';
       final n = _alloc(namespace),
           m = _alloc(method),
           p = _alloc(fPath),
           t = _alloc(AxiomTracing.generateTraceparent()),
           h = _alloc(hStr),
-          br = _allocBytes(requestBytes);
+          br = _allocBytes(requestBytes),
+          o = _alloc(oStr);
       int status;
       try {
-        status = _wasm.axiomCall(
-          id.toJS,
-          n.ptr,
-          n.len,
-          endpointId,
-          m.ptr,
-          m.len,
-          p.ptr,
-          p.len,
-          t.ptr,
-          t.len,
-          h.ptr,
-          h.len,
-          br.ptr,
-          br.len,
-        );
+        status = nativeOptions
+            ? _wasm.axiomCallWithOptions(
+                id.toJS,
+                n.ptr,
+                n.len,
+                endpointId,
+                m.ptr,
+                m.len,
+                p.ptr,
+                p.len,
+                t.ptr,
+                t.len,
+                h.ptr,
+                h.len,
+                br.ptr,
+                br.len,
+                o.ptr,
+                o.len,
+              )
+            : _wasm.axiomCall(
+                id.toJS,
+                n.ptr,
+                n.len,
+                endpointId,
+                m.ptr,
+                m.len,
+                p.ptr,
+                p.len,
+                t.ptr,
+                t.len,
+                h.ptr,
+                h.len,
+                br.ptr,
+                br.len,
+              );
       } catch (e) {
         status = FfiError.internalError;
       } finally {
-        for (final a in [n, m, p, t, h, br]) {
+        for (final a in [n, m, p, t, h, br, o]) {
           _free(a);
         }
       }
@@ -896,7 +964,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
         return;
       }
       final timeout = options?.timeout;
-      if (timeout != null) {
+      if (timeout != null && !nativeOptions) {
         req.timeout = Timer(timeout, () {
           if (!_requests.containsKey(id)) return;
           req.timedOut = true;
@@ -912,7 +980,9 @@ class AxiomRuntimeWeb implements AxiomRuntime {
 
     final provider = _authProvider;
     final methods = _contracts[namespace]?.authMethods[endpointId] ?? const [];
-    if (provider != null && methods.isNotEmpty) {
+    if (provider != null &&
+        methods.isNotEmpty &&
+        !_hasExport('axiom_wasm_register_auth_provider')) {
       // No runtime auth callback on web: ask the provider before dispatch
       // and hand its answer to the runtime token store.
       () async {
@@ -1202,6 +1272,25 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   /// into the runtime (or clears it).
   void _reapplyTokens(String namespace) {
     if (_wasmOrNull == null) return;
+    if (_hasExport('axiom_wasm_set_namespace_auth_token')) {
+      // Runtime-side namespace token (0.157): covers every auth method,
+      // per-method tokens keep precedence inside the runtime.
+      final nt = _namespaceTokens[namespace] ?? _globalToken;
+      if (nt != null) {
+        if (_runtimeNamespaceTokens[namespace] != nt) {
+          final n = _alloc(namespace), t = _alloc(nt);
+          _wasm.axiomSetNamespaceAuthToken(n.ptr, n.len, t.ptr, t.len);
+          _free(n);
+          _free(t);
+          _runtimeNamespaceTokens[namespace] = nt;
+        }
+      } else if (_runtimeNamespaceTokens.remove(namespace) != null) {
+        _clearRuntimeNamespaceTokens(namespace);
+        // That also dropped per-method tokens: restore the ones set from Dart.
+        _methodTokens[namespace]?.forEach((m, t) => _setToken(namespace, m, t));
+      }
+      return;
+    }
     final methods = {
       ...?_contracts[namespace]?.allAuthMethods,
       ...?_methodTokens[namespace]?.keys,
@@ -1272,9 +1361,46 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     }
   }
 
+  void _clearRuntimeNamespaceTokens(String namespace) {
+    final n = _alloc(namespace);
+    _wasm.axiomClearNamespaceAuthTokens(n.ptr, n.len);
+    _free(n);
+    _appliedTokens.remove(namespace);
+  }
+
   @override
   void setAuthProvider(AxiomAuthProvider? provider) {
     _authProvider = provider;
+    _applyAuthProvider();
+  }
+
+  /// With `axiom_wasm_register_auth_provider` the engine asks for a token
+  /// (namespace, method) when a required auth method has none; the answer
+  /// is always given asynchronously. Without it, [callStream] asks the
+  /// provider before dispatch.
+  void _applyAuthProvider() {
+    if (!_hasExport('axiom_wasm_register_auth_provider')) return;
+    final provider = _authProvider;
+    if (provider == null) {
+      _wasm.axiomClearAuthProvider();
+      return;
+    }
+    globalContext['axiom_web_auth_callback'] =
+        ((JSNumber reqId, JSString ns, JSString method) {
+          final id = reqId.toDartDouble;
+          Timer.run(() async {
+            String? token;
+            try {
+              token = await provider(ns.toDart, method.toDart);
+            } catch (_) {}
+            final w = _wasmOrNull;
+            if (w == null) return;
+            final t = _alloc(token ?? '');
+            w.axiomProvideAuthToken(id.toJS, t.ptr, t.len);
+            _free(t);
+          });
+        }).toJS;
+    _wasm.axiomRegisterAuthProvider();
   }
 
   // ---------------------------------------------------------------------------
@@ -1332,10 +1458,17 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       }
     }
     _appliedTokens.clear();
+    if (_hasExport('axiom_wasm_clear_namespace_auth_tokens')) {
+      for (final ns in _runtimeNamespaceTokens.keys.toList()) {
+        _clearRuntimeNamespaceTokens(ns);
+      }
+    }
+    _runtimeNamespaceTokens.clear();
     _methodTokens.clear();
     _namespaceTokens.clear();
     _globalToken = null;
     _authProvider = null;
+    if (_hasExport('axiom_wasm_clear_auth_provider')) _wasm.axiomClearAuthProvider();
   }
 
   @override
@@ -1404,7 +1537,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   }
 
   bool _runtimeInvalidate(String namespace, String identity) {
-    if (!_hasExport('axiom_wasm_invalidate_cache')) return false;
+    if (!_hasExport('axiom_wasm_cache_invalidate_identity')) return false;
     final n = _alloc(namespace), i = _alloc(identity);
     try {
       return _wasm.axiomInvalidateCache(n.ptr, n.len, i.ptr, i.len) == 0;
@@ -1490,13 +1623,17 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   /// namespace; otherwise only the whole web cache (localStorage keys
   /// `axiom_cache_acore-cache/v1:*`, revisions kept) can be dropped from Dart.
   bool _clearRuntimeCache(String? namespace) {
-    if (_hasExport('axiom_wasm_clear_cache')) {
-      final n = _alloc(namespace ?? '');
-      try {
-        return _wasm.axiomClearCache(n.ptr, n.len) == 0;
-      } finally {
-        _free(n);
+    if (_hasExport('axiom_wasm_cache_clear_namespace')) {
+      var ok = true;
+      for (final ns in namespace == null ? _contracts.keys.toList() : [namespace]) {
+        final n = _alloc(ns);
+        try {
+          ok = _wasm.axiomClearCache(n.ptr, n.len) == 0 && ok;
+        } finally {
+          _free(n);
+        }
       }
+      return ok;
     }
     if (namespace != null) return false;
     try {
