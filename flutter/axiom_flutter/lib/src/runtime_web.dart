@@ -1203,51 +1203,6 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     return AxiomStreamResponse(id, controller.stream);
   }
 
-  /// Query key of [send]. Declared endpoint headers are already in [args]
-  /// (generated code), but per-call [AxiomCallOptions] headers and timeout
-  /// are not: two calls that differ only there must not share one query and
-  /// its first caller's request factory (review F7). Calls without options
-  /// keep the plain args key, so setQueryData/getCachedQueryData by args
-  /// still find them.
-  static String _sendKey(
-    String namespace,
-    int endpointId,
-    Map<String, dynamic> args,
-    AxiomCallOptions? options,
-  ) {
-    final endpoint = '${namespace}_$endpointId';
-    final extra = <String, dynamic>{};
-    final h = options?.headers;
-    if (h != null && h.isNotEmpty) {
-      final keep = <String, String>{};
-      for (final e in h.entries) {
-        final name = e.key.toLowerCase();
-        if (_volatileKeyHeaders.contains(name)) continue;
-        keep[name] = e.value;
-      }
-      if (keep.isNotEmpty) {
-        extra['headers'] = {
-          for (final k in (keep.keys.toList()..sort())) k: keep[k],
-        };
-      }
-    }
-    final t = options?.timeout;
-    if (t != null) extra['timeoutMs'] = t.inMilliseconds;
-    if (extra.isEmpty) return AxiomQueryKey.build(endpoint: endpoint, args: args);
-    return AxiomQueryKey.build(
-      endpoint: endpoint,
-      args: {...args, r'$call': extra},
-    );
-  }
-
-  static const _volatileKeyHeaders = {
-    'traceparent',
-    'tracestate',
-    'idempotency-key',
-    'x-axiom-request-id',
-    axiomCacheModeHeader,
-  };
-
   @override
   AxiomQuery<T> send<T>({
     required String namespace,
@@ -1262,10 +1217,21 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     required T Function(dynamic json) decoder,
     AxiomCallOptions? options,
   }) {
-    final key = _sendKey(namespace, endpointId, args, options);
-    _queries[key] = _QueryMeta(namespace, endpointId, args);
+    // Headers and timeout are part of the key (F7, shared AxiomQueryKey rule,
+    // same as native): a call that differs only there must not join another
+    // call's request.
+    String keyFor(Map<String, String> customHeaders) => AxiomQueryKey.build(
+      endpoint: '${namespace}_$endpointId',
+      args: args,
+      headers: {...?headers, ...?options?.headers, ...customHeaders},
+      timeout: options?.timeout,
+    );
+    final baseKey = keyFor(const {});
+    _queries[baseKey] = _QueryMeta(namespace, endpointId, args);
 
-    return AxiomQuery<T>(key, (customHeaders) {
+    return AxiomQuery<T>(baseKey, (customHeaders) {
+      final key = keyFor(customHeaders);
+      _queries[key] = _QueryMeta(namespace, endpointId, args);
       return AxiomQueryManager().watchRaw<T>(
         key,
         null,
@@ -1309,7 +1275,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
           );
         },
       );
-    }, runtime: this);
+    }, runtime: this, keyForHeaders: keyFor);
   }
 
   @override
