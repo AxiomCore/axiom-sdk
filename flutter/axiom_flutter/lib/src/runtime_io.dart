@@ -34,13 +34,15 @@ AxiomRuntime getRuntime() => AxiomRuntimeIo();
 
 base class AxiomString extends Struct {
   external Pointer<Uint8> ptr;
-  @Uint64()
+  // size_t in axiom.h: 4 bytes on armeabi-v7a, 8 on 64-bit ABIs.
+  @Size()
   external int len;
 }
 
 base class AxiomBuffer extends Struct {
   external Pointer<Uint8> ptr;
-  @Uint64()
+  // size_t in axiom.h: 4 bytes on armeabi-v7a, 8 on 64-bit ABIs.
+  @Size()
   external int len;
 }
 
