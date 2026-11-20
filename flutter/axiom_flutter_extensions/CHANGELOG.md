@@ -1,5 +1,6 @@
 ## 0.150.1 - 2026-11-21
 
+- Requires Flutter 3.32 or newer (Dart 3.8), stated in `environment.flutter`. pub.dev rejects an Android-only plugin whose Flutter constraint allows versions before 1.20.
 - First release. Bundles the full AxiomCore runtime for Android
   (`libaxiom_runtime_full.so`, arm64-v8a, armeabi-v7a, x86_64; built from
   axiom-runtime with default features: executable extensions and telemetry
