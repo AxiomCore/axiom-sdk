@@ -99,6 +99,13 @@ python3 tool/collect_results.py --label linux-chrome --web results/raw-web.jsonl
 python3 tool/render_readme.py results/<date>-linux-chrome.json --insert ../../README.md
 ```
 
+## Results
+
+`results/2026-11-20-linux-chrome.json` (merged), `results/README-snippet.md` (rendered tables),
+raw inputs `results/raw-web*.jsonl`, `tooling.json`, `loc.json`, `size.json`. To add a platform,
+merge its JSONL with `tool/collect_results.py --label <platform>` and pass every results file to
+`tool/render_readme.py`.
+
 ## Method
 
 - **Cold start to first data**: fresh process (web: fresh Chrome profile, so no HTTP cache);
@@ -133,6 +140,10 @@ python3 tool/render_readme.py results/<date>-linux-chrome.json --insert ../../RE
 - Web timers: `Stopwatch` resolution in Chrome is 0.1 ms (or coarser without cross-origin isolation).
 - The bench server is the same for all clients, but its own cost is in every number.
 - The SDK is under active change on `flutter/parity`; results name the SDK commit they ran on.
+- **First results are preliminary.** `results/2026-11-20-linux-chrome.json` holds two web runs made
+  while other builds shared the box: only 5 of 25 medians repeat within 10% (the Axiom 16 ms
+  per-call floor and the cache medians do; cold start and decode do not). Rerun on an idle machine
+  before publishing web numbers. Tooling, LOC and size results are stable.
 - Physical-device runs (one mid-range Android, one iPhone) are still to do.
 
 ## Findings (SDK issues these benchmarks exposed)

@@ -37,7 +37,7 @@ def table(head, rows):
 def render(r):
     m = r.get("machine", {})
     md = [f"### {r.get('label')} ({r.get('date')})", "",
-          f"Machine: {m.get('cpu')}, {m.get('cores')} vCPU, {m.get('ram_gb')} GB RAM, {m.get('os')}"
+          f"Machine: {m.get('cpu') or 'CPU model not reported (gVisor)'}, {m.get('cores')} vCPU, {m.get('ram_gb')} GB RAM, {m.get('os')}"
           + (f", {m['virtualised']}" if m.get("virtualised") else "") + ". "
           f"{r.get('flutter')}. Axiom CLI {r.get('axiom_cli')}. SDK commit `{r.get('sdk_commit')}`."
           + (f" Browser: {m.get('chrome')}." if m.get("chrome") else ""), ""]
@@ -72,6 +72,12 @@ def render(r):
                      x.get("note", "")] for x in w["ws"]]
             md += ["WebSocket echo, sequential round trips (1 000 messages):", "",
                    table(["Client", "Status", "Round trips", "Mean RTT", "Note"], rows), ""]
+    rep = r.get("reproducibility")
+    if rep:
+        rows = [[x["metric"], f(x["run1_ms"], " ms", 2), f(x["run2_ms"], " ms", 2), f"{x['diff_pct']:+d}%"]
+                for x in rep["rows"]]
+        md += [f"#### Reproducibility: second web run ({rep['within_10pct']} of {rep['total']} medians within 10%)", "",
+               table(["Metric (p50 / median)", "Run 1", "Run 2", "Diff"], rows), ""]
     t = r.get("tooling")
     if t:
         rows = []

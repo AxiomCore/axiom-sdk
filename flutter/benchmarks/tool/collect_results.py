@@ -19,11 +19,12 @@ def cmd(c):
 
 
 def machine():
-    cpu = ""
+    cpu = ""  # gVisor does not report the model name
     try:
         for l in open("/proc/cpuinfo"):
             if l.startswith("model name"):
                 cpu = l.split(":", 1)[1].strip()
+                cpu = "" if cpu.lower() == "unknown" else cpu
                 break
         mem = next(l for l in open("/proc/meminfo") if l.startswith("MemTotal")).split()[1]
         mem_gb = round(int(mem) / 1024 / 1024, 1)
@@ -34,7 +35,7 @@ def machine():
         d = dict(l.rstrip().split("=", 1) for l in open("/etc/os-release") if "=" in l)
         osname = d.get("PRETTY_NAME", osname).strip('"') + f" (kernel {platform.release()})"
     chrome = cmd("google-chrome --version || chrome --version || chromium --version")
-    return {"cpu": cpu or platform.processor(), "cores": os.cpu_count(), "ram_gb": mem_gb, "os": osname,
+    return {"cpu": cpu or "", "cores": os.cpu_count(), "ram_gb": mem_gb, "os": osname,
             "chrome": chrome.split("\n")[0], "virtualised": "gVisor sandbox / container (shared host)"
             if "gvisor" in platform.release().lower() else ""}
 
@@ -62,11 +63,35 @@ def web_summary(path):
     return out
 
 
+def _p50s(w):
+    d = {f"cold {c}": v["median_ms"] for c, v in w["cold"].items()}
+    for x in w["latency"]:
+        d[f"latency {x['case']} {x['client']}"] = x.get("p50_ms")
+    for x in w["cache"]:
+        d[f"cache {x['case']} {x['client']}"] = x.get("p50_ms")
+    for x in w["decode"]:
+        d[f"decode {x['items']} {x['decoder']}"] = x.get("p50_ms")
+    return d
+
+
+def compare(a, b):
+    """p50 (cold: median) of run 1 vs run 2 and the relative difference."""
+    pa, pb = _p50s(a), _p50s(b)
+    rows = []
+    for k, x in pa.items():
+        y = pb.get(k)
+        if x and y is not None:
+            rows.append({"metric": k, "run1_ms": x, "run2_ms": y, "diff_pct": round((y - x) / x * 100)})
+    within = sum(1 for r in rows if abs(r["diff_pct"]) <= 10)
+    return {"rows": rows, "within_10pct": within, "total": len(rows)}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--label", default="linux-chrome")
-    for k in ("web", "tooling", "loc", "size"):
-        ap.add_argument(f"--{k}")
+    for k in ("web", "web_repeat", "tooling", "loc", "size"):
+        ap.add_argument(f"--{k.replace('_', '-')}")
+    ap.add_argument("--note", action="append", default=[], help="extra note line (repeatable)")
     a = ap.parse_args()
     date = datetime.date.today().isoformat()
     res = {
@@ -83,8 +108,12 @@ def main():
             "All three clients call the same local Dart server (api/server); see README for method.",
         ],
     }
+    res["notes"] += a.note
     if a.web:
         res["web"] = web_summary(a.web)
+    if a.web_repeat:
+        res["web_repeat"] = web_summary(a.web_repeat)
+        res["reproducibility"] = compare(res["web"], res["web_repeat"])
     for k in ("tooling", "loc", "size"):
         p = getattr(a, k)
         if p:
