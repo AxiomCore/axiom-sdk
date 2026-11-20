@@ -19,7 +19,7 @@ Pod::Spec.new do |s|
   runtime_version = '0.148.6' # Independent, verified AxiomRuntime release pin.
   url = "https://github.com/AxiomCore/AxiomCore/releases/download/v#{runtime_version}/#{zip_name}"
 
-  runtime_sha256 = 'caa3e80dcb9374d633ffeb4fed3fe3797e832056154daab1f157bbfe13dbb1a5'
+  runtime_sha256 = 'f8b394fe7be49091face20e142ae2c3f2c4ad2a47235d736c137493bbe014db6'
   # Download and verify on every preparation so a stale framework cannot
   # bypass the release pin. Failed downloads/checks leave the existing one intact.
   s.prepare_command = <<-CMD
