@@ -2,8 +2,8 @@
 
 Behaviour changes
 - Android and web bundle the LEAN runtime: no executable extensions and no
-  telemetry exporter (arm64 library 10.1 MB -> 5.0 MB; integration app arm64
-  release APK 27.3 MB -> 21.3 MB). To get the old full runtime on Android add
+  telemetry exporter (arm64 library 7.3 MB -> 4.8 MB; integration app arm64
+  release APK 27.3 MB -> 21.0 MB). To get the old full runtime on Android add
   `axiom_flutter_extensions` 0.150.1. iOS and macOS keep the published full
   runtime 0.148.6.
 - On a lean runtime `loadExtension`/`invokeExtension` throw

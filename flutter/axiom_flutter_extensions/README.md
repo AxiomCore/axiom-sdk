@@ -6,7 +6,7 @@ through `AxiomRuntime.loadExtension` / `invokeExtension`) and the telemetry
 exporter.
 
 Since 0.150.1 `axiom_flutter` bundles a lean runtime on Android and web that
-leaves these out (about 5 MB smaller per Android ABI). Add this package only
+leaves these out (2.6 MB smaller for arm64). Add this package only
 if your app uses executable extensions.
 
 ## Install
@@ -54,8 +54,8 @@ axiom.keepLeanRuntime=true
 ## Size
 
 Measured on the `axiom_flutter` integration app, arm64 release APK, Flutter
-3.32.0: 21.3 MB with the lean default, 26.4 MB with this package
-(`libaxiom_runtime_full.so` is 10.1 MB uncompressed for arm64).
+3.32.0: 21.0 MB with the lean default, 23.6 MB with this package
+(`libaxiom_runtime_full.so` is 7.3 MB uncompressed for arm64, the lean library 4.8 MB).
 
 ## Versions
 

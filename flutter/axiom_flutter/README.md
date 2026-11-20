@@ -70,8 +70,8 @@ Nothing extra to install. Add the internet permission to
 Set `minSdk = 24` (or higher) in `android/app/build.gradle(.kts)`.
 
 Since 0.150.1 the bundled library is the LEAN runtime: no executable
-extensions and no telemetry exporter (about 5 MB smaller per ABI; an arm64
-release APK of the integration app went from 27.3 MB to 21.3 MB). Apps that
+extensions and no telemetry exporter (arm64 library 7.3 MB -> 4.8 MB; an arm64
+release APK of the integration app went from 27.3 MB to 21.0 MB). Apps that
 use executable extensions add `axiom_flutter_extensions`, which ships the full
 runtime and removes the lean library from the app (see [Extensions](#extensions)).
 
