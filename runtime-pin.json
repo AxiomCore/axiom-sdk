@@ -11,33 +11,33 @@
   "android": {
     "distribution": "bundled",
     "path": "flutter/axiom_flutter/android/src/main/jniLibs/<abi>/libaxiom_runtime.so",
-    "source": "axiom-runtime flutter/perf f93a3b8ad1e7c24c7d431d2202893637fb29447c (unit p1 artifact set), scripts/build-android-so.sh NDK 26.3.11579264 API 24 16 KB pages --remap-path-prefix (lean: no executable extensions, no telemetry exporter)",
+    "source": "axiom-runtime perf/rtlean 984335d65fbf0ef4cdeb9ff2f45ebe223c14f69f (unit rtlean artifact set, on flutter/perf f93a3b8; needs axiom-lib perf/rtlean c542aa2), scripts/build-android-so.sh NDK 26.3.11579264 API 24 16 KB pages --remap-path-prefix (lean: no executable extensions, no telemetry exporter)",
     "archive": null,
     "url": null,
     "sha256": null,
     "libraries": {
       "arm64-v8a": {
         "variant": "lean",
-        "sha256": "b74a0e85df2d4ac6d2268fc39d320a84e8f60ecac85fa8ae0c48914568986f84",
-        "bytes": 5025888
+        "sha256": "96c32b114d319c9b5171a83a66eccb0e37809d86113b286c5aabb8062819db71",
+        "bytes": 4766760
       },
       "armeabi-v7a": {
         "variant": "lean",
-        "sha256": "a739f379f7e8655b49ed3daae841c9965b93ea86fe4f802d5d0fa2179d2f75fa",
-        "bytes": 3538792
+        "sha256": "6f127f6725f981d68e53d0e74a920ade1b4a28fde64815bed175bf59b94c1272",
+        "bytes": 3382984
       },
       "x86_64": {
         "variant": "lean",
-        "sha256": "0ed827670cf55f53fd2c0f04674ab7b029a26e99b98a1f74102df2b25573f3d1",
-        "bytes": 5957296
+        "sha256": "9a227665b423879af50cde9f06e23ef0bfdf716bfb4733304070b87f039a6858",
+        "bytes": 5646576
       }
     },
     "variant": "lean"
   },
   "wasm": {
     "variant": "lean",
-    "runtime_branch": "axiom-runtime flutter/perf f93a3b8ad1e7c24c7d431d2202893637fb29447c (unit p1 artifact set), scripts/build-android-so.sh NDK 26.3.11579264 API 24 16 KB pages --remap-path-prefix (lean), scripts/build-wasm-flutter.sh, --remap-path-prefix",
-    "axiom_runtime_js_sha256": "7ebf9a58c1b5cc5f6cf297fed9a21f1284049096be03b17b5e45146bf7ce5369",
-    "axiom_runtime_bg_wasm_sha256": "0625796c6e192ebb74ae6fb5414be3a7953b71baf0c9ee7243808d9a31fbd799"
+    "runtime_branch": "axiom-runtime perf/rtlean 984335d65fbf0ef4cdeb9ff2f45ebe223c14f69f (unit rtlean artifact set, on flutter/perf f93a3b8; needs axiom-lib perf/rtlean c542aa2), scripts/build-android-so.sh NDK 26.3.11579264 API 24 16 KB pages --remap-path-prefix (lean), scripts/build-wasm-flutter.sh, --remap-path-prefix",
+    "axiom_runtime_js_sha256": "c84160fd08bea44b46016c76cbe531d6e876dfab3bf17bfa45d2c4c2a702a8ce",
+    "axiom_runtime_bg_wasm_sha256": "4f6a3eaccd7d1a79a7b13723e71fb7ac9b04c40e25acb44d8736a43c58b9a88e"
   }
 }
