@@ -46,7 +46,7 @@ final checksF = <CheckDef>[
   CheckDef('auth_f.binding_authorizes_calls', 'auth_f', (c) async {
     final auth = AxiomAuth(AxiomAuthOptions(issuer: _issuer, httpClient: _scriptedIssuer()));
     final binding = AxiomAuthBinding.attach(auth,
-        runtime: c.sdk.runtime, authMethods: const {'fixture': ['authBearer']}, resetSessionOnSignOut: false);
+        runtime: c.sdk.runtime, namespaces: const ['fixture'], authMethods: const {'fixture': ['authBearer']}, resetSessionOnSignOut: false);
     try {
       c.api.axiom.clearAuthToken('authBearer');
       await auth.signInWithPassword('fixture@example.com', 'irrelevant');
@@ -64,7 +64,8 @@ final checksF = <CheckDef>[
   }),
   CheckDef('auth_f.provider_answers_runtime', 'auth_f', (c) async {
     final auth = AxiomAuth(AxiomAuthOptions(issuer: _issuer, httpClient: _scriptedIssuer()));
-    final binding = AxiomAuthBinding.attach(auth, runtime: c.sdk.runtime, resetSessionOnSignOut: false);
+    final binding = AxiomAuthBinding.attach(auth,
+        runtime: c.sdk.runtime, namespaces: const ['fixture'], resetSessionOnSignOut: false);
     try {
       if (!binding.providerRegistered) skip('runtime has no setAuthProvider yet (f1)');
       await auth.signInWithPassword('fixture@example.com', 'irrelevant');

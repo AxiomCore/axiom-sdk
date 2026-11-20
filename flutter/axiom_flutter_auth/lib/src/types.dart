@@ -46,8 +46,8 @@ class PublicPrincipal {
     required this.tenant,
     required List<String> roles,
     required List<String> permissions,
-  })  : roles = _frozen(roles),
-        permissions = _frozen(permissions);
+  }) : roles = _frozen(roles),
+       permissions = _frozen(permissions);
 
   final String subject;
   final String? tenant;
@@ -61,11 +61,11 @@ class PublicPrincipal {
       _sameList(permissions, other.permissions);
 
   Map<String, Object?> toJson() => {
-        'subject': subject,
-        'tenant': tenant,
-        'roles': roles,
-        'permissions': permissions,
-      };
+    'subject': subject,
+    'tenant': tenant,
+    'roles': roles,
+    'permissions': permissions,
+  };
 
   @override
   String toString() => 'PublicPrincipal($subject, tenant: $tenant)';
@@ -84,8 +84,11 @@ class PublicSession {
     this.authTime = 0,
   });
 
-  static const PublicSession initial =
-      PublicSession(id: '', status: AuthStatus.unknown, principal: null);
+  static const PublicSession initial = PublicSession(
+    id: '',
+    status: AuthStatus.unknown,
+    principal: null,
+  );
 
   final String id;
   final AuthStatus status;
@@ -97,7 +100,8 @@ class PublicSession {
   /// `auth_time` of the access token (epoch seconds); 0 while signed out.
   final int authTime;
 
-  bool get isAuthenticated => status == AuthStatus.authenticated ||
+  bool get isAuthenticated =>
+      status == AuthStatus.authenticated ||
       (status == AuthStatus.refreshing && principal != null);
 
   bool sameAs(PublicSession o) =>
@@ -108,15 +112,16 @@ class PublicSession {
       authTime == o.authTime;
 
   Map<String, Object?> toJson() => {
-        'id': id,
-        'status': status.name,
-        'principal': principal?.toJson(),
-        'acr': acr.name,
-        'authTime': authTime,
-      };
+    'id': id,
+    'status': status.name,
+    'principal': principal?.toJson(),
+    'acr': acr.name,
+    'authTime': authTime,
+  };
 
   @override
-  String toString() => 'PublicSession(${status.name}, id: $id, '
+  String toString() =>
+      'PublicSession(${status.name}, id: $id, '
       'subject: ${principal?.subject}, acr: ${acr.name})';
 }
 
@@ -186,24 +191,30 @@ class Factor {
       label: v['label'] as String,
       status: v['status'] as String,
       createdAt: v['created_at'] is String ? v['created_at'] as String : '',
-      lastUsedOn: v['last_used_on'] is String ? v['last_used_on'] as String : null,
+      lastUsedOn: v['last_used_on'] is String
+          ? v['last_used_on'] as String
+          : null,
     );
   }
 
   Factor withRecoveryCodes(List<String>? codes) => Factor(
-        id: id,
-        type: type,
-        label: label,
-        status: status,
-        createdAt: createdAt,
-        lastUsedOn: lastUsedOn,
-        recoveryCodes: codes,
-      );
+    id: id,
+    type: type,
+    label: label,
+    status: status,
+    createdAt: createdAt,
+    lastUsedOn: lastUsedOn,
+    recoveryCodes: codes,
+  );
 }
 
 /// Trusted UI memory only: show the secret or QR code once, never store or log it.
 class TotpEnrollment {
-  const TotpEnrollment({required this.factorId, required this.secret, required this.otpauthUri});
+  const TotpEnrollment({
+    required this.factorId,
+    required this.secret,
+    required this.otpauthUri,
+  });
   final String factorId;
   final String secret;
   final String otpauthUri;
@@ -246,7 +257,8 @@ class AxiomAuthError implements Exception {
   String get message => code;
 
   @override
-  String toString() => 'AxiomAuthError($code'
+  String toString() =>
+      'AxiomAuthError($code'
       '${status != 0 ? ', status: $status' : ''}'
       '${retryAfterSeconds != null ? ', retryAfter: ${retryAfterSeconds}s' : ''})';
 }
@@ -269,18 +281,33 @@ class RefreshRecord {
   final String sessionId;
 
   Map<String, String> toJson() => {
-        'refreshToken': refreshToken,
-        'refreshExpiresAt': refreshExpiresAt,
-        'issuer': issuer,
-        'audience': audience,
-        'sessionId': sessionId,
-      };
+    'refreshToken': refreshToken,
+    'refreshExpiresAt': refreshExpiresAt,
+    'issuer': issuer,
+    'audience': audience,
+    'sessionId': sessionId,
+  };
 
   static RefreshRecord? tryParse(Object? v) {
     if (v is! Map) return null;
-    final r = v['refreshToken'], e = v['refreshExpiresAt'], i = v['issuer'], a = v['audience'], s = v['sessionId'];
-    if (r is! String || e is! String || i is! String || a is! String || s is! String) return null;
-    return RefreshRecord(refreshToken: r, refreshExpiresAt: e, issuer: i, audience: a, sessionId: s);
+    final r = v['refreshToken'],
+        e = v['refreshExpiresAt'],
+        i = v['issuer'],
+        a = v['audience'],
+        s = v['sessionId'];
+    if (r is! String ||
+        e is! String ||
+        i is! String ||
+        a is! String ||
+        s is! String)
+      return null;
+    return RefreshRecord(
+      refreshToken: r,
+      refreshExpiresAt: e,
+      issuer: i,
+      audience: a,
+      sessionId: s,
+    );
   }
 
   @override
@@ -289,7 +316,11 @@ class RefreshRecord {
 
 /// Result of [AxiomAuth.handleRedirect].
 class RedirectResult {
-  const RedirectResult({required this.handled, this.returnTo, this.invitation = false});
+  const RedirectResult({
+    required this.handled,
+    this.returnTo,
+    this.invitation = false,
+  });
   final bool handled;
 
   /// Validated same-app path to route to; null when the signed-in route applies.
@@ -301,7 +332,11 @@ class RedirectResult {
 
 /// Result of [AxiomAuth.signUp].
 class SignUpResult {
-  const SignUpResult({required this.status, this.challenge, this.resendAfterSeconds});
+  const SignUpResult({
+    required this.status,
+    this.challenge,
+    this.resendAfterSeconds,
+  });
 
   /// `signed_in` or `verification_sent`.
   final String status;
@@ -310,20 +345,31 @@ class SignUpResult {
 }
 
 class EmailCodeChallenge {
-  const EmailCodeChallenge({required this.challenge, required this.resendAfterSeconds});
+  const EmailCodeChallenge({
+    required this.challenge,
+    required this.resendAfterSeconds,
+  });
   final String challenge;
   final int resendAfterSeconds;
 }
 
 class FactorList {
-  const FactorList({required this.factors, required this.recoveryCodesRemaining, this.maskedPhone});
+  const FactorList({
+    required this.factors,
+    required this.recoveryCodesRemaining,
+    this.maskedPhone,
+  });
   final List<Factor> factors;
   final int recoveryCodesRemaining;
   final String? maskedPhone;
 }
 
 class Consent {
-  const Consent({required this.clientId, required this.name, required this.scopes});
+  const Consent({
+    required this.clientId,
+    required this.name,
+    required this.scopes,
+  });
   final String clientId;
   final String name;
   final List<String> scopes;

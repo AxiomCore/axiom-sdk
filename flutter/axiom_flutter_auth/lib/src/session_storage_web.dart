@@ -23,7 +23,11 @@ String? pageOrigin() => web.window.location.origin;
 
 void replaceUrl(String pathQueryFragment) {
   try {
-    web.window.history.replaceState(web.window.history.state, '', pathQueryFragment);
+    web.window.history.replaceState(
+      web.window.history.state,
+      '',
+      pathQueryFragment,
+    );
   } catch (_) {
     // A history failure must not leave the flow half done; the code is single use.
   }
