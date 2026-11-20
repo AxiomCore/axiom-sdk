@@ -1,8 +1,28 @@
+// Web (wasm) implementation of [AxiomRuntime].
+//
+// The runtime is the same Rust crate as on native, compiled to
+// wasm32-unknown-unknown with wasm-bindgen's `no-modules` glue
+// (`lib/assets/wasm/axiom_runtime.js` + `axiom_runtime_bg.wasm`, built by
+// `axiom-runtime/scripts/build-wasm-flutter.sh`). Dart calls the raw wasm
+// exports (`axiom_wasm_*`, flattened ptr/len arguments) and receives events
+// through the imported global `axiom_web_callback`, drained by a 16 ms timer
+// calling `axiom_process_responses`.
+//
+// Loading is CSP friendly: the glue is added as `<script src>` (no inline
+// script, no eval) and the wasm is compiled with WebAssembly.instantiate,
+// which needs `script-src 'self' 'wasm-unsafe-eval'`. Asset URLs come from
+// the Flutter engine's asset manager, so `--base-href` sub-paths work.
+//
+// Optional exports (added in newer runtime builds) are looked up at run time
+// with a `typeof` check, so an older bundled wasm keeps working with a
+// Dart-side fallback.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
+import 'dart:ui_web' as ui_web;
+
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:web/web.dart' as web;
 
@@ -24,8 +44,14 @@ import 'internal/contract_load_status.dart';
 
 AxiomRuntime getRuntime() => AxiomRuntimeWeb();
 
-@JS('wasm_bindgen')
-external JSPromise _wasmBindgenInit(JSAny moduleOrPath);
+const String _wasmAssetDir = 'packages/axiom_flutter/lib/assets/wasm';
+const String _glueAsset = '$_wasmAssetDir/axiom_runtime.js';
+const String _wasmAsset = '$_wasmAssetDir/axiom_runtime_bg.wasm';
+
+const String _unsupportedExtensions =
+    'Axiom extensions are not supported on web: the extension host is '
+    'wasmtime-based and only exists in the native runtime (Android, iOS, '
+    'macOS). Guard the call with `kIsWeb`.';
 
 @JS()
 @staticInterop
@@ -49,8 +75,24 @@ extension WasmExportsExt on WasmExports {
     int pkLen,
   );
 
+  @JS('axiom_wasm_load_contract_locked')
+  external int axiomLoadContractLocked(
+    int nPtr,
+    int nLen,
+    int bPtr,
+    int bLen,
+    int cPtr,
+    int cLen,
+    int sPtr,
+    int sLen,
+    int pkPtr,
+    int pkLen,
+    int hPtr,
+    int hLen,
+  );
+
   @JS('axiom_wasm_call')
-  external void axiomCall(
+  external int axiomCall(
     JSNumber reqId,
     int nPtr,
     int nLen,
@@ -62,10 +104,16 @@ extension WasmExportsExt on WasmExports {
     int tpPtr,
     int tpLen,
     int hPtr,
-    int hLen, // <-- Headers
+    int hLen,
     int bPtr,
-    int bLen, // <-- Payload
+    int bLen,
   );
+
+  @JS('axiom_wasm_cancel')
+  external int axiomCancel(JSNumber reqId);
+
+  @JS('axiom_wasm_reset_session')
+  external void axiomResetSession();
 
   @JS('axiom_wasm_set_auth_token')
   external void axiomSetAuthToken(
@@ -82,6 +130,22 @@ extension WasmExportsExt on WasmExports {
 
   @JS('axiom_wasm_send_stream_message')
   external void axiomSendMsg(JSNumber reqId, int ptr, int len);
+
+  // Optional exports from unit r (runtime cache control).
+  @JS('axiom_wasm_invalidate_cache')
+  external int axiomInvalidateCache(int nPtr, int nLen, int iPtr, int iLen);
+
+  @JS('axiom_wasm_clear_cache')
+  external int axiomClearCache(int nPtr, int nLen);
+
+  @JS('axiom_abi_version')
+  external int axiomAbiVersion();
+
+  @JS('axiom_data_abi_version')
+  external int axiomDataAbiVersion();
+
+  @JS('axiom_contract_reader_version')
+  external int axiomContractReaderVersion();
 
   @JS('axiom_malloc')
   external int axiomMalloc(int size);
@@ -105,72 +169,358 @@ extension WasmMemoryExt on WasmMemory {
   external JSArrayBuffer get jsBuffer;
 }
 
+/// Book-keeping for one in-flight runtime request.
+class _Request {
+  _Request(this.controller, this.namespace, this.endpointId);
+  final StreamController<AxiomState<Uint8List>> controller;
+  final String namespace;
+  final int endpointId;
+  Timer? timeout;
+  bool timedOut = false;
+}
+
+/// What the SDK knows about a `send` query key (for invalidate/setQueryData).
+class _QueryMeta {
+  _QueryMeta(this.namespace, this.endpointId, this.args);
+  final String namespace;
+  final int endpointId;
+  final Map<String, dynamic> args;
+}
+
+/// Contract facts read from the `.axiom` JSON at load time.
+class _ContractMeta {
+  /// endpoint id -> auth method names the runtime looks tokens up by.
+  final Map<int, List<String>> authMethods = {};
+
+  /// endpoint id -> cache identity (`ui_contract_metadata.operations`).
+  final Map<int, String> cacheIdentity = {};
+
+  /// endpoint name -> id.
+  final Map<String, int> endpointIds = {};
+
+  Set<String> get allAuthMethods => {
+    for (final m in authMethods.values) ...m,
+  };
+
+  static _ContractMeta parse(Uint8List bytes) {
+    final meta = _ContractMeta();
+    try {
+      final root = jsonDecode(utf8.decode(bytes, allowMalformed: true));
+      if (root is! Map) return meta;
+      final endpoints = root['endpoints'];
+      if (endpoints is List) {
+        for (final e in endpoints) {
+          if (e is! Map) continue;
+          final id = (e['id'] as num?)?.toInt();
+          if (id == null) continue;
+          final name = e['name'];
+          if (name is String) meta.endpointIds[name] = id;
+          final auth = e['auth'];
+          if (auth is Map && auth['methods'] is List) {
+            final names = <String>[];
+            for (final m in auth['methods'] as List) {
+              if (m is! Map) continue;
+              final n = (m['name'] ?? m['type']);
+              final location = m['location'];
+              final type = m['type'];
+              // Cookie sessions are handled by the browser, not by tokens.
+              if (type == 'session' && location == 'cookie') continue;
+              if (n is String && n.isNotEmpty) names.add(n);
+            }
+            meta.authMethods[id] = names;
+          }
+        }
+      }
+      final ui = root['ui_contract_metadata'];
+      if (ui is Map && ui['operations'] is List) {
+        for (final op in ui['operations'] as List) {
+          if (op is! Map) continue;
+          final id = ((op['endpoint_id'] ?? op['endpointId']) as num?)?.toInt();
+          final identity = op['cache_identity'] ?? op['cacheIdentity'];
+          if (id != null && identity is String) meta.cacheIdentity[id] = identity;
+        }
+      }
+    } catch (_) {
+      // Non-JSON or unknown contract encoding: no metadata, runtime still
+      // validates the contract itself.
+    }
+    return meta;
+  }
+}
+
 class AxiomRuntimeWeb implements AxiomRuntime {
   static AxiomRuntimeWeb? _instance;
   factory AxiomRuntimeWeb() => _instance ??= AxiomRuntimeWeb._internal();
   AxiomRuntimeWeb._internal();
 
-  final _controllers = <int, StreamController<AxiomState<Uint8List>>>{};
-  final _hadError = <int>{};
+  final _requests = <int, _Request>{};
   int _nextRequestId = 1;
-  late final WasmExports _wasm;
+  WasmExports? _wasmOrNull;
+  Future<void>? _loading;
+  Timer? _pump;
+  bool _started = false;
+
+  Future<AxiomInitResult>? _initializing;
+  AxiomInitResult? _initResult;
+
+  final _errors = StreamController<AxiomErrorEvent>.broadcast();
+
+  // Tokens set from Dart, so resetSession can clear them and namespace /
+  // global tokens can be re-applied when a contract is loaded later.
+  final _methodTokens = <String, Map<String, String>>{};
+  final _namespaceTokens = <String, String>{};
+  String? _globalToken;
+  final _appliedTokens = <String, Map<String, String>>{};
+  AxiomAuthProvider? _authProvider;
+
+  final _contracts = <String, _ContractMeta>{};
+  final _queries = <String, _QueryMeta>{};
+  final _overrides = <String, Object?>{};
+  final _forceRefresh = <String>{};
+  final _lastData = <String, Object?>{};
 
   @override
   bool debug = false;
 
-  @override
-  void setAuthToken({
-    required String namespace,
-    required String methodName,
-    required String token,
-  }) {
-    final n = _alloc(namespace), m = _alloc(methodName), t = _alloc(token);
-    _wasm.axiomSetAuthToken(n.ptr, n.len, m.ptr, m.len, t.ptr, t.len);
-    _free(n);
-    _free(m);
-    _free(t);
+  WasmExports get _wasm {
+    final w = _wasmOrNull;
+    if (w == null) {
+      throw StateError(
+        'Axiom runtime is not initialized: call AxiomRuntime().initialize() '
+        '(or init()) first.',
+      );
+    }
+    return w;
   }
 
-  @override
-  void clearAuthToken({required String namespace, required String methodName}) {
-    final n = _alloc(namespace), m = _alloc(methodName);
-    _wasm.axiomClearAuthToken(n.ptr, n.len, m.ptr, m.len);
-    _free(n);
-    _free(m);
+  bool _hasExport(String name) {
+    final w = _wasmOrNull;
+    if (w == null) return false;
+    return (w as JSObject).has(name) &&
+        (w as JSObject)[name].typeofEquals('function');
   }
 
-  @override
-  void sendStreamMessage({required int requestId, required Uint8List payload}) {
-    final b = _allocBytes(payload);
-    _wasm.axiomSendMsg(requestId.toJS, b.ptr, b.len);
-    _free(b);
+  // ---------------------------------------------------------------------------
+  // Loading
+  // ---------------------------------------------------------------------------
+
+  /// Absolute URL of a package asset, honouring `<base href>` and
+  /// `assetBase` (CDN) configuration.
+  static String _assetUrl(String asset) {
+    final rel = ui_web.assetManager.getAssetUrl(asset);
+    return Uri.parse(web.document.baseURI).resolve(rel).toString();
+  }
+
+  Future<void> _loadGlue() async {
+    if (globalContext.has('wasm_bindgen')) return;
+    final url = _assetUrl(_glueAsset);
+    final script = web.HTMLScriptElement()
+      ..type = 'text/javascript'
+      ..src = url;
+    final done = Completer<void>();
+    script.addEventListener(
+      'load',
+      ((web.Event _) {
+        if (!done.isCompleted) done.complete();
+      }).toJS,
+    );
+    script.addEventListener(
+      'error',
+      ((web.Event _) {
+        if (!done.isCompleted) {
+          done.completeError(
+            StateError('Axiom: failed to load the runtime glue from $url'),
+          );
+        }
+      }).toJS,
+    );
+    web.document.head!.appendChild(script);
+    await done.future;
+    if (!globalContext.has('wasm_bindgen')) {
+      // The no-modules glue declares `let wasm_bindgen` (a global lexical
+      // binding, not a window property). The build script appends an
+      // assignment to globalThis; an older glue without it cannot be used.
+      throw StateError(
+        'Axiom: $url did not define globalThis.wasm_bindgen. Rebuild the '
+        'bundled runtime with axiom-runtime/scripts/build-wasm-flutter.sh.',
+      );
+    }
+  }
+
+  Future<void> _ensureLoaded() {
+    return _loading ??= () async {
+      try {
+        await _loadGlue();
+        final bindgen = globalContext['wasm_bindgen'] as JSFunction;
+        // Returns the already-instantiated exports after a hot restart.
+        final arg = JSObject()
+          ..['module_or_path'] = _assetUrl(_wasmAsset).toJS;
+        final exports =
+            await (bindgen.callAsFunction(null, arg) as JSPromise).toDart;
+        _wasmOrNull = exports as WasmExports;
+      } catch (e) {
+        _loading = null;
+        rethrow;
+      }
+    }();
+  }
+
+  void _start(String? dbPath) {
+    _setupWebCallback();
+    _pump?.cancel();
+    _pump = Timer.periodic(
+      const Duration(milliseconds: 16),
+      (_) => _wasmOrNull?.axiomProcessResponses(),
+    );
+    if (!_started) {
+      final db = _alloc(dbPath ?? '');
+      _wasm.axiomInitialize(db.ptr, db.len);
+      _free(db);
+      _started = true;
+    }
   }
 
   @override
   Future<void> init([String? dbPath]) async {
-    if (globalContext.has('wasm_bindgen')) return;
-    final jsCode = await rootBundle.loadString(
-      'packages/axiom_flutter/lib/assets/wasm/axiom_runtime.js',
-    );
-    final script = web.HTMLScriptElement()
-      ..type = 'application/javascript'
-      ..text = '$jsCode\nwindow.wasm_bindgen = wasm_bindgen;';
-    web.document.head!.appendChild(script);
+    await _ensureLoaded();
+    if (_pump == null) _start(dbPath);
+  }
 
-    final wasmData = await rootBundle.load(
-      'packages/axiom_flutter/lib/assets/wasm/axiom_runtime_bg.wasm',
-    );
-    _wasm =
-        (await _wasmBindgenInit(wasmData.buffer.toJS).toDart) as WasmExports;
-    _setupWebCallback();
-    Timer.periodic(
-      const Duration(milliseconds: 16),
-      (_) => _wasm.axiomProcessResponses(),
-    );
+  @override
+  bool get isInitialized => _pump != null;
 
-    final db = _alloc(dbPath ?? '');
-    _wasm.axiomInitialize(db.ptr, db.len);
-    _free(db);
+  @override
+  AxiomInitResult? get initResult => _initResult;
+
+  @override
+  AxiomRuntimeInfo get runtimeInfo {
+    final w = _wasmOrNull;
+    if (w == null) {
+      // Not loaded yet: the wasm ships inside this package, so it is the
+      // version this package expects.
+      return AxiomRuntimeInfo.expected;
+    }
+    return AxiomRuntimeInfo(
+      abiVersion: w.axiomAbiVersion(),
+      dataAbiVersion: w.axiomDataAbiVersion(),
+      contractReaderVersion: w.axiomContractReaderVersion(),
+    );
+  }
+
+  @override
+  Future<AxiomInitResult> initialize(
+    AxiomConfig config, {
+    AxiomAssetLoader? assetLoader,
+  }) {
+    final done = _initResult;
+    if (done != null && isInitialized) {
+      return Future.value(
+        AxiomInitResult(
+          ok: done.ok,
+          error: done.error,
+          runtimeInfo: done.runtimeInfo,
+          contracts: done.contracts,
+          duration: done.duration,
+          alreadyInitialized: true,
+        ),
+      );
+    }
+    return _initializing ??= _initialize(config, assetLoader).whenComplete(
+      () => _initializing = null,
+    );
+  }
+
+  Future<AxiomInitResult> _initialize(
+    AxiomConfig config,
+    AxiomAssetLoader? assetLoader,
+  ) async {
+    final sw = Stopwatch()..start();
+    debug = config.debug;
+    try {
+      await _ensureLoaded();
+    } catch (e) {
+      return AxiomInitResult(ok: false, error: e, duration: sw.elapsed);
+    }
+    final info = runtimeInfo;
+    if (!info.isCompatible) {
+      final r = AxiomInitResult(
+        ok: false,
+        error: AxiomVersionMismatch(info),
+        runtimeInfo: info,
+        duration: sw.elapsed,
+      );
+      return r;
+    }
+    if (_pump == null) _start(config.dbPath);
+
+    final load =
+        assetLoader ??
+        (String path) async => (await rootBundle.load(path)).buffer.asUint8List();
+    final results = <String, AxiomContractLoadResult>{};
+    Object? firstError;
+    for (final entry in config.contracts.entries) {
+      final ns = entry.key;
+      final c = entry.value;
+      String baseUrl = c.baseUrl;
+      AxiomContractLoadResult r;
+      try {
+        baseUrl = config.resolveBaseUrl(ns);
+        final bytes = await load(c.assetPath);
+        r = tryLoadContract(
+          namespace: ns,
+          baseUrl: baseUrl,
+          contractBytes: bytes,
+          signature: c.signature,
+          publicKey: c.publicKey,
+          sha256: c.isLocked ? c.sha256 : null,
+        );
+        if (r.ok && config.requireSignedContracts && r.status == -1) {
+          r = AxiomContractLoadResult(
+            namespace: ns,
+            baseUrl: baseUrl,
+            status: r.status,
+            trust: r.trust,
+            error: StateError(
+              'contract "$ns" loaded unsigned but requireSignedContracts is set',
+            ),
+          );
+        }
+      } catch (e) {
+        r = AxiomContractLoadResult(
+          namespace: ns,
+          baseUrl: baseUrl,
+          status: FfiError.invalidContract,
+          error: e,
+        );
+      }
+      if (r.error != null) firstError ??= r.error;
+      results[ns] = r;
+    }
+    final ok = results.values.every((r) => r.ok && r.error == null);
+    final result = AxiomInitResult(
+      ok: ok,
+      error: firstError,
+      runtimeInfo: info,
+      contracts: results,
+      duration: sw.elapsed,
+    );
+    _initResult = result;
+    return result;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Event callback
+  // ---------------------------------------------------------------------------
+
+  Uint8List _copyOut(int ptr, int len) {
+    if (ptr == 0 || len == 0) return Uint8List(0);
+    final out = Uint8List.fromList(
+      Uint8List.view(_wasm.memory.jsBuffer.toDart, ptr, len),
+    );
+    // The runtime leaks these buffers to the host (mem::forget); capacity
+    // equals length, so freeing with (ptr, len) is exact.
+    _wasm.axiomFreeMemory(ptr, len);
+    return out;
   }
 
   void _setupWebCallback() {
@@ -184,83 +534,144 @@ class AxiomRuntimeWeb implements AxiomRuntime {
               JSNumber ePtr,
               JSNumber eLen,
             ) {
-              final id = reqId.toDartInt;
-              final controller = _controllers[id];
-              if (controller == null) return;
-
-              if (evtType.toDartInt == EventType.complete) {
-                _hadError.remove(id);
-                if (!controller.isClosed) controller.close();
-                _controllers.remove(id);
-                return;
-              }
-
-              if (evtType.toDartInt == EventType.streamChunk) {
-                Uint8List data = Uint8List.fromList(
-                  Uint8List.view(
-                    _wasm.memory.jsBuffer.toDart,
-                    dPtr.toDartInt,
-                    dLen.toDartInt,
-                  ),
-                );
-                controller.add(
-                  AxiomState.success(
-                    data,
-                    AxiomSource.network,
-                    isStreaming: true,
-                  ),
-                );
-                return;
-              }
-
-              if (evtType.toDartInt == EventType.error) {
-                _hadError.add(id);
-                String errJson = '';
-                if (ePtr.toDartInt != 0) {
-                  errJson = utf8.decode(
-                    Uint8List.view(
-                      _wasm.memory.jsBuffer.toDart,
-                      ePtr.toDartInt,
-                      eLen.toDartInt,
-                    ),
-                  );
-                }
-                final error = errJson.isNotEmpty
-                    ? AxiomError.fromJson(jsonDecode(errJson))
-                    : AxiomError(
-                        stage: ErrorStage.runtime,
-                        category: ErrorCategory.unknown,
-                        code: UnknownCode(FfiError.name(errCode.toDartInt)),
-                        message: 'Internal error',
-                        retryable: false,
-                      );
-                controller.add(AxiomState.error(error));
-                return;
-              }
-
-              if (dPtr.toDartInt != 0) {
-                final data = Uint8List.fromList(
-                  Uint8List.view(
-                    _wasm.memory.jsBuffer.toDart,
-                    dPtr.toDartInt,
-                    dLen.toDartInt,
-                  ),
-                );
-                controller.add(
-                  AxiomState.success(
-                    data,
-                    (evtType.toDartInt == EventType.cacheHit ||
-                            evtType.toDartInt == EventType.cacheHitAndFetching)
-                        ? AxiomSource.cache
-                        : AxiomSource.network,
-                    isFetching:
-                        evtType.toDartInt == EventType.cacheHitAndFetching,
-                  ),
-                );
-              }
+              final data = _copyOut(dPtr.toDartInt, dLen.toDartInt);
+              final err = _copyOut(ePtr.toDartInt, eLen.toDartInt);
+              _onEvent(
+                reqId.toDartInt,
+                evtType.toDartInt,
+                errCode.toDartInt,
+                data,
+                err,
+              );
             })
             .toJS;
   }
+
+  /// Replaces the callback with one that only frees buffers (shutdown).
+  void _setupDrainCallback() {
+    if (_wasmOrNull == null) return;
+    globalContext['axiom_web_callback'] =
+        ((
+              JSNumber reqId,
+              JSNumber evtType,
+              JSNumber errCode,
+              JSNumber dPtr,
+              JSNumber dLen,
+              JSNumber ePtr,
+              JSNumber eLen,
+            ) {
+              _copyOut(dPtr.toDartInt, dLen.toDartInt);
+              _copyOut(ePtr.toDartInt, eLen.toDartInt);
+            })
+            .toJS;
+  }
+
+  void _onEvent(int id, int evt, int errCode, Uint8List data, Uint8List err) {
+    final req = _requests[id];
+    if (req == null) return;
+    final controller = req.controller;
+
+    switch (evt) {
+      case EventType.complete:
+        _finish(id);
+        return;
+      case EventType.streamChunk:
+        if (!controller.isClosed) {
+          controller.add(
+            AxiomState.success(data, AxiomSource.network, isStreaming: true),
+          );
+        }
+        return;
+      case EventType.error:
+        var error = _decodeError(errCode, err);
+        if (req.timedOut && error.isCancelled) {
+          error = AxiomError(
+            stage: ErrorStage.networkSend,
+            category: ErrorCategory.timeout,
+            code: const NetworkTimeout(),
+            message: 'Request timed out (AxiomCallOptions.timeout)',
+            retryable: true,
+          );
+        }
+        if (!error.isCancelled) {
+          _errors.add(
+            AxiomErrorEvent(
+              error,
+              namespace: req.namespace,
+              endpointId: req.endpointId,
+              requestId: id,
+            ),
+          );
+        }
+        if (!controller.isClosed) controller.add(AxiomState.error(error));
+        return;
+      default:
+        if (data.isEmpty && evt != EventType.networkSuccess) return;
+        if (!controller.isClosed) {
+          controller.add(
+            AxiomState.success(
+              data,
+              (evt == EventType.cacheHit || evt == EventType.cacheHitAndFetching)
+                  ? AxiomSource.cache
+                  : AxiomSource.network,
+              isFetching: evt == EventType.cacheHitAndFetching,
+            ),
+          );
+        }
+    }
+  }
+
+  void _finish(int id) {
+    final req = _requests.remove(id);
+    if (req == null) return;
+    req.timeout?.cancel();
+    if (!req.controller.isClosed) req.controller.close();
+  }
+
+  /// Builds an [AxiomError] from an error event. The runtime normally sends
+  /// AxiomError JSON, but cancellation (code 15) sends plain text and older
+  /// paths may send arbitrary bytes, so parsing is tolerant.
+  static AxiomError _decodeError(int errCode, Uint8List bytes) {
+    final text = bytes.isEmpty ? '' : utf8.decode(bytes, allowMalformed: true);
+    if (errCode == FfiError.cancelled) {
+      return AxiomError(
+        stage: ErrorStage.runtime,
+        category: ErrorCategory.runtime,
+        code: const Cancelled(),
+        message: text.isEmpty ? 'Request cancelled by host' : text,
+        retryable: false,
+      );
+    }
+    if (text.isNotEmpty) {
+      try {
+        final json = jsonDecode(text);
+        if (json is Map<String, dynamic> && json['stage'] != null) {
+          return AxiomError.fromJson(json);
+        }
+      } catch (_) {}
+    }
+    return AxiomError(
+      stage: ErrorStage.runtime,
+      category: switch (errCode) {
+        FfiError.networkError => ErrorCategory.network,
+        FfiError.timeout => ErrorCategory.timeout,
+        FfiError.authError => ErrorCategory.auth,
+        FfiError.serverError => ErrorCategory.server,
+        _ => ErrorCategory.unknown,
+      },
+      code: switch (errCode) {
+        FfiError.timeout => const NetworkTimeout(),
+        FfiError.networkError => const NetworkConnectionFailed(),
+        _ => UnknownCode(FfiError.name(errCode)),
+      },
+      message: text.isEmpty ? FfiError.name(errCode) : text,
+      retryable: errCode == FfiError.networkError || errCode == FfiError.timeout,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Contracts
+  // ---------------------------------------------------------------------------
 
   @override
   void loadContract({
@@ -271,35 +682,151 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     String? publicKey,
     String? sha256,
   }) {
-    if (sha256 != null) {
-      throw UnimplementedError('loadContract(sha256:)');
+    final r = tryLoadContract(
+      namespace: namespace,
+      baseUrl: baseUrl,
+      contractBytes: contractBytes,
+      signature: signature,
+      publicKey: publicKey,
+      sha256: sha256,
+    );
+    if (r.error is StateError && r.status != FfiError.invalidContract) {
+      throw r.error!;
+    }
+    requireContractLoadStatus(r.status);
+  }
+
+  @override
+  AxiomContractLoadResult tryLoadContract({
+    required String namespace,
+    required String baseUrl,
+    required Uint8List contractBytes,
+    String? signature,
+    String? publicKey,
+    String? sha256,
+  }) {
+    final locked = sha256 != null && sha256.isNotEmpty;
+    if (locked && !_hasExport('axiom_wasm_load_contract_locked')) {
+      return AxiomContractLoadResult(
+        namespace: namespace,
+        baseUrl: baseUrl,
+        status: FfiError.invalidContract,
+        error: UnsupportedError(
+          'This web runtime build has no axiom_wasm_load_contract_locked; '
+          'rebuild the bundled wasm (runtime >= flutter/f4).',
+        ),
+      );
     }
     final n = _alloc(namespace),
         b = _alloc(baseUrl),
-        c = _allocBytes(contractBytes);
-    final s = _alloc(signature ?? ''), p = _alloc(publicKey ?? '');
-    final int status;
+        c = _allocBytes(contractBytes),
+        s = _alloc(signature ?? ''),
+        p = _alloc(publicKey ?? ''),
+        h = _alloc(sha256 ?? '');
+    int status;
     try {
-      status = _wasm.axiomLoadContract(
-        n.ptr,
-        n.len,
-        b.ptr,
-        b.len,
-        c.ptr,
-        c.len,
-        s.ptr,
-        s.len,
-        p.ptr,
-        p.len,
-      );
+      status = locked
+          ? _wasm.axiomLoadContractLocked(
+              n.ptr,
+              n.len,
+              b.ptr,
+              b.len,
+              c.ptr,
+              c.len,
+              s.ptr,
+              s.len,
+              p.ptr,
+              p.len,
+              h.ptr,
+              h.len,
+            )
+          : _wasm.axiomLoadContract(
+              n.ptr,
+              n.len,
+              b.ptr,
+              b.len,
+              c.ptr,
+              c.len,
+              s.ptr,
+              s.len,
+              p.ptr,
+              p.len,
+            );
+    } catch (e) {
+      status = FfiError.internalError;
     } finally {
-      _free(n);
-      _free(b);
-      _free(c);
-      _free(s);
-      _free(p);
+      for (final a in [n, b, c, s, p, h]) {
+        _free(a);
+      }
     }
-    requireContractLoadStatus(status);
+    final ok = status == 0 || status == -1;
+    if (ok) {
+      _contracts[namespace] = _ContractMeta.parse(contractBytes);
+      _reapplyTokens(namespace);
+    }
+    return AxiomContractLoadResult(
+      namespace: namespace,
+      baseUrl: baseUrl,
+      status: status,
+      trust: !ok
+          ? null
+          : status == -1
+          ? AxiomContractTrust.unsigned
+          : locked
+          ? AxiomContractTrust.locked
+          : AxiomContractTrust.signed,
+      error: ok
+          ? null
+          : StateError(
+              'Axiom contract load failed for "$namespace" '
+              '(status $status ${FfiError.name(status)})',
+            ),
+    );
+  }
+
+  @override
+  Future<void> startup({
+    required String baseUrl,
+    required Uint8List contractBytes,
+    String? dbPath,
+    String? signature,
+    String? publicKey,
+  }) async {
+    await init(dbPath);
+    loadContract(
+      namespace: 'default',
+      baseUrl: baseUrl,
+      contractBytes: contractBytes,
+      signature: signature,
+      publicKey: publicKey,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Calls
+  // ---------------------------------------------------------------------------
+
+  String _buildPath(
+    String path,
+    Map<String, dynamic>? pathParams,
+    Map<String, dynamic>? queryParams,
+  ) {
+    var fPath = path;
+    pathParams?.forEach(
+      (k, v) => fPath = fPath.replaceAll('{$k}', v.toString()),
+    );
+    if (queryParams != null && queryParams.isNotEmpty) {
+      final filtered = <String, String>{
+        for (final e in queryParams.entries)
+          if (e.value != null) e.key: e.value.toString(),
+      };
+      if (filtered.isNotEmpty) {
+        fPath +=
+            (fPath.contains('?') ? '&' : '?') +
+            Uri(queryParameters: filtered).query;
+      }
+    }
+    return fPath;
   }
 
   @override
@@ -316,62 +843,92 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   }) {
     final id = _nextRequestId++;
     final controller = StreamController<AxiomState<Uint8List>>.broadcast();
-    _controllers[id] = controller;
+    final req = _Request(controller, namespace, endpointId);
+    _requests[id] = req;
     controller.add(AxiomState.loading());
 
-    var fPath = path;
-    pathParams?.forEach(
-      (k, v) => fPath = fPath.replaceAll('{$k}', v.toString()),
-    );
+    final fPath = _buildPath(path, pathParams, queryParams);
+    final merged = options?.mergeHeaders(headers) ?? {...?headers};
 
-    if (queryParams != null && queryParams.isNotEmpty) {
-      final filteredParams = <String, String>{};
-      for (final entry in queryParams.entries) {
-        if (entry.value != null)
-          filteredParams[entry.key] = entry.value.toString();
+    void dispatch() {
+      if (!_requests.containsKey(id)) return; // cancelled before dispatch
+      final hStr = merged.isNotEmpty ? jsonEncode(merged) : '';
+      final n = _alloc(namespace),
+          m = _alloc(method),
+          p = _alloc(fPath),
+          t = _alloc(AxiomTracing.generateTraceparent()),
+          h = _alloc(hStr),
+          br = _allocBytes(requestBytes);
+      int status;
+      try {
+        status = _wasm.axiomCall(
+          id.toJS,
+          n.ptr,
+          n.len,
+          endpointId,
+          m.ptr,
+          m.len,
+          p.ptr,
+          p.len,
+          t.ptr,
+          t.len,
+          h.ptr,
+          h.len,
+          br.ptr,
+          br.len,
+        );
+      } catch (e) {
+        status = FfiError.internalError;
+      } finally {
+        for (final a in [n, m, p, t, h, br]) {
+          _free(a);
+        }
       }
-      if (filteredParams.isNotEmpty) {
-        fPath +=
-            (fPath.contains('?') ? '&' : '?') +
-            Uri(queryParameters: filteredParams).query;
+      if (status != 0) {
+        _onEvent(
+          id,
+          EventType.error,
+          status,
+          Uint8List(0),
+          Uint8List.fromList(utf8.encode('axiom_wasm_call failed')),
+        );
+        _finish(id);
+        return;
+      }
+      final timeout = options?.timeout;
+      if (timeout != null) {
+        req.timeout = Timer(timeout, () {
+          if (!_requests.containsKey(id)) return;
+          req.timedOut = true;
+          if (!cancel(id)) {
+            // Not live in the runtime any more: report locally.
+            _onEvent(id, EventType.error, FfiError.cancelled, Uint8List(0),
+                Uint8List(0));
+            _finish(id);
+          }
+        });
       }
     }
 
-    final tp = AxiomTracing.generateTraceparent();
-    final hStr = headers != null && headers.isNotEmpty
-        ? jsonEncode(headers)
-        : '';
-
-    final n = _alloc(namespace),
-        m = _alloc(method),
-        p = _alloc(fPath),
-        t = _alloc(tp),
-        h = _alloc(hStr);
-    final br = _allocBytes(requestBytes);
-
-    _wasm.axiomCall(
-      id.toJS,
-      n.ptr,
-      n.len,
-      endpointId,
-      m.ptr,
-      m.len,
-      p.ptr,
-      p.len,
-      t.ptr,
-      t.len,
-      h.ptr,
-      h.len, // Passed to Wasm Rust successfully
-      br.ptr,
-      br.len,
-    );
-
-    _free(n);
-    _free(m);
-    _free(p);
-    _free(t);
-    _free(h);
-    _free(br);
+    final provider = _authProvider;
+    final methods = _contracts[namespace]?.authMethods[endpointId] ?? const [];
+    if (provider != null && methods.isNotEmpty) {
+      // No runtime auth callback on web: ask the provider before dispatch
+      // and hand its answer to the runtime token store.
+      () async {
+        for (final m in methods) {
+          try {
+            final token = await provider(namespace, m);
+            if (token != null && token.isNotEmpty) {
+              _setToken(namespace, m, token);
+            }
+          } catch (_) {}
+        }
+        dispatch();
+      }();
+    } else {
+      dispatch();
+    }
     return AxiomStreamResponse(id, controller.stream);
   }
 
@@ -393,27 +950,45 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       endpoint: '${namespace}_$endpointId',
       args: args,
     );
+    _queries[key] = _QueryMeta(namespace, endpointId, args);
 
-    // ✨ FIX: Return AxiomActiveStream by calling the QueryManager's new wrapper logic
-    return AxiomQuery(key, (customHeaders) {
-      final mergedHeaders = {...?headers, ...customHeaders};
-
-      // We wrap the rawStream in a new AxiomActiveStream for AxiomQuery
-      return AxiomQueryManager().watchRaw<T>(
-        key,
-        () => _rawStream(
+    return AxiomQuery<T>(key, (customHeaders) {
+      return AxiomQueryManager().watchRaw<T>(key, () {
+        if (_overrides.containsKey(key)) {
+          final value = _overrides.remove(key) as T;
+          _lastData[key] = value;
+          return AxiomActiveStream<T>(
+            0,
+            Stream.value(AxiomState<T>.success(value, AxiomSource.cache)),
+          );
+        }
+        var opts = options;
+        if (_forceRefresh.remove(key)) {
+          opts = (opts ?? const AxiomCallOptions()).copyWith(
+            cacheMode: AxiomCacheMode.refresh,
+          );
+        }
+        final active = _rawStream<T>(
           namespace: namespace,
           endpointId: endpointId,
           method: method,
           path: path,
-          headers: mergedHeaders,
+          headers: {...?headers, ...customHeaders},
           pathParams: pathParams,
           queryParams: queryParams,
           body: body,
           decoder: decoder,
-        ),
-      );
-    });
+          options: opts,
+        );
+        return AxiomActiveStream<T>(
+          active.requestId,
+          active.stream.map((s) {
+            if (s.hasData) _lastData[key] = s.data;
+            return s;
+          }),
+        );
+      });
+    }, runtime: this);
   }
 
   @override
@@ -432,20 +1007,23 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   }) {
     final key =
         '${namespace}_${endpointId}_mut_${DateTime.now().microsecondsSinceEpoch}';
-    return AxiomQuery(key, (customHeaders) {
-      final mergedHeaders = {...?headers, ...customHeaders};
-      return _rawStream(
+    return AxiomQuery<T>(
+      key,
+      (customHeaders) => _rawStream<T>(
         namespace: namespace,
         endpointId: endpointId,
         method: method,
         path: path,
-        headers: mergedHeaders,
+        headers: {...?headers, ...customHeaders},
         pathParams: pathParams,
         queryParams: queryParams,
         body: body,
         decoder: decoder,
-      );
-    }, isMutation: true);
+        options: options,
+      ),
+      isMutation: true,
+      runtime: this,
+    );
   }
 
   AxiomActiveStream<T> _rawStream<T>({
@@ -469,91 +1047,47 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       pathParams: pathParams,
       queryParams: queryParams,
       requestBytes: AxiomCodec.encodeBody(body, headers),
+      options: options,
     );
-
-    final mappedStream = response.stream.map((state) {
-      if (state.hasError) return state.map((_) => null as T);
-      if (state.data != null) {
-        try {
-          return AxiomState<T>.success(
-            AxiomCodec.decode(state.data!, decoder),
-            state.source,
-            isFetching: state.isFetching,
-            isStreaming: state.isStreaming,
-          );
-        } catch (e) {
-          return AxiomState<T>.error(
-            AxiomError(
-              stage: ErrorStage.deserialize,
-              category: ErrorCategory.serialization,
-              code: const CodecError(),
-              message: e.toString(),
-              retryable: false,
-            ),
-          );
-        }
-      }
-      return state.map((_) => null as T);
-    });
-
-    return AxiomActiveStream<T>(response.requestId, mappedStream);
-  }
-
-  _WebAlloc _alloc(String s) => _allocBytes(Uint8List.fromList(utf8.encode(s)));
-  _WebAlloc _allocBytes(Uint8List b) {
-    final ptr = _wasm.axiomMalloc(b.length);
-    Uint8List.view(_wasm.memory.jsBuffer.toDart, ptr, b.length).setAll(0, b);
-    return _WebAlloc(ptr, b.length);
-  }
-
-  void _free(_WebAlloc a) => _wasm.axiomFreeMemory(a.ptr, a.len);
-
-  @override
-  Future<void> startup({
-    required String baseUrl,
-    required Uint8List contractBytes,
-    String? dbPath,
-    String? signature,
-    String? publicKey,
-  }) async {
-    await init(dbPath);
-    loadContract(
-      namespace: 'default',
-      baseUrl: baseUrl,
-      contractBytes: contractBytes,
-      signature: signature,
-      publicKey: publicKey,
+    return AxiomActiveStream<T>(
+      response.requestId,
+      response.stream.map((s) => _decodeState<T>(s, decoder)),
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Parity API (unit f1): signatures frozen, bodies implemented by later units.
-  // ---------------------------------------------------------------------------
-
-  @override
-  Future<AxiomInitResult> initialize(
-    AxiomConfig config, {
-    AxiomAssetLoader? assetLoader,
-  }) => throw UnimplementedError('initialize');
-
-  @override
-  bool get isInitialized => throw UnimplementedError('isInitialized');
-
-  @override
-  AxiomInitResult? get initResult => throw UnimplementedError('initResult');
-
-  @override
-  AxiomRuntimeInfo get runtimeInfo => throw UnimplementedError('runtimeInfo');
-
-  @override
-  AxiomContractLoadResult tryLoadContract({
-    required String namespace,
-    required String baseUrl,
-    required Uint8List contractBytes,
-    String? signature,
-    String? publicKey,
-    String? sha256,
-  }) => throw UnimplementedError('tryLoadContract');
+  static AxiomState<T> _decodeState<T>(
+    AxiomState<Uint8List> state,
+    T Function(dynamic json) decoder,
+  ) {
+    if (state.hasError || state.data == null) {
+      return AxiomState<T>(
+        status: state.status,
+        error: state.error,
+        source: state.source,
+        isFetching: state.isFetching,
+        isMutating: state.isMutating,
+        isStreaming: state.isStreaming,
+      );
+    }
+    try {
+      return AxiomState<T>.success(
+        AxiomCodec.decode(state.data!, decoder),
+        state.source,
+        isFetching: state.isFetching,
+        isStreaming: state.isStreaming,
+      );
+    } catch (e) {
+      return AxiomState<T>.error(
+        AxiomError(
+          stage: ErrorStage.deserialize,
+          category: ErrorCategory.serialization,
+          code: const CodecError(),
+          message: e.toString(),
+          retryable: false,
+        ),
+      );
+    }
+  }
 
   @override
   AxiomChannel<R, S> openChannel<R, S>({
@@ -567,38 +1101,318 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     required R Function(dynamic json) decoder,
     AxiomReconnectPolicy reconnect = AxiomReconnectPolicy.none,
     AxiomCallOptions? options,
-  }) => throw UnimplementedError('openChannel');
+  }) {
+    final out = StreamController<AxiomState<R>>.broadcast();
+    late final AxiomChannel<R, S> channel;
+    StreamSubscription<AxiomState<Uint8List>>? sub;
+    var attempt = 0;
+
+    void connect() {
+      final r = callStream(
+        namespace: namespace,
+        endpointId: endpointId,
+        method: method,
+        path: path,
+        headers: headers,
+        pathParams: pathParams,
+        queryParams: queryParams,
+        requestBytes: Uint8List(0),
+        options: options,
+      );
+      channel.updateRequestId(r.requestId);
+      var failed = false;
+      sub = r.stream.listen(
+        (s) {
+          if (s.hasError) {
+            if (s.error!.isCancelled) return;
+            failed = true;
+          } else if (s.hasData) {
+            attempt = 0;
+          }
+          if (!out.isClosed) out.add(_decodeState<R>(s, decoder));
+        },
+        onDone: () {
+          if (channel.isClosed || out.isClosed) {
+            if (!out.isClosed) out.close();
+            return;
+          }
+          final max = reconnect.maxAttempts;
+          if (reconnect.enabled && (max == null || attempt < max)) {
+            attempt++;
+            Timer(reconnect.delayFor(attempt), () {
+              if (!channel.isClosed) connect();
+            });
+          } else if (!failed || !reconnect.enabled) {
+            out.close();
+          } else {
+            out.close();
+          }
+        },
+      );
+    }
+
+    channel = AxiomChannel<R, S>(0, out.stream, this, reconnect: reconnect);
+    connect();
+    out.onCancel = () {
+      if (!channel.isClosed) {
+        channel.close();
+      }
+      sub?.cancel();
+    };
+    return channel;
+  }
+
+  @override
+  void sendStreamMessage({required int requestId, required Uint8List payload}) {
+    final b = _allocBytes(payload);
+    _wasm.axiomSendMsg(requestId.toJS, b.ptr, b.len);
+    _free(b);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Auth
+  // ---------------------------------------------------------------------------
+
+  void _setToken(String namespace, String methodName, String token) {
+    final n = _alloc(namespace), m = _alloc(methodName), t = _alloc(token);
+    _wasm.axiomSetAuthToken(n.ptr, n.len, m.ptr, m.len, t.ptr, t.len);
+    _free(n);
+    _free(m);
+    _free(t);
+    (_appliedTokens[namespace] ??= {})[methodName] = token;
+  }
+
+  void _clearToken(String namespace, String methodName) {
+    if (_wasmOrNull == null) return;
+    final n = _alloc(namespace), m = _alloc(methodName);
+    _wasm.axiomClearAuthToken(n.ptr, n.len, m.ptr, m.len);
+    _free(n);
+    _free(m);
+    _appliedTokens[namespace]?.remove(methodName);
+  }
+
+  /// Token for ([namespace], [method]) by precedence: method > namespace >
+  /// global.
+  String? _effectiveToken(String namespace, String method) =>
+      _methodTokens[namespace]?[method] ??
+      _namespaceTokens[namespace] ??
+      _globalToken;
+
+  /// Pushes the effective token of every known auth method of [namespace]
+  /// into the runtime (or clears it).
+  void _reapplyTokens(String namespace) {
+    if (_wasmOrNull == null) return;
+    final methods = {
+      ...?_contracts[namespace]?.allAuthMethods,
+      ...?_methodTokens[namespace]?.keys,
+      ...?_appliedTokens[namespace]?.keys,
+    };
+    for (final m in methods) {
+      final t = _effectiveToken(namespace, m);
+      if (t == null) {
+        if (_appliedTokens[namespace]?.containsKey(m) ?? false) {
+          _clearToken(namespace, m);
+        }
+      } else if (_appliedTokens[namespace]?[m] != t) {
+        _setToken(namespace, m, t);
+      }
+    }
+  }
+
+  @override
+  void setAuthToken({
+    required String namespace,
+    required String methodName,
+    required String token,
+  }) {
+    (_methodTokens[namespace] ??= {})[methodName] = token;
+    _setToken(namespace, methodName, token);
+  }
+
+  @override
+  void clearAuthToken({required String namespace, required String methodName}) {
+    _methodTokens[namespace]?.remove(methodName);
+    final fallback = _namespaceTokens[namespace] ?? _globalToken;
+    if (fallback != null &&
+        (_contracts[namespace]?.allAuthMethods.contains(methodName) ?? false)) {
+      _setToken(namespace, methodName, fallback);
+    } else {
+      _clearToken(namespace, methodName);
+    }
+  }
 
   @override
   void setNamespaceAuthToken({
     required String namespace,
     required String token,
-  }) => throw UnimplementedError('setNamespaceAuthToken');
+  }) {
+    _namespaceTokens[namespace] = token;
+    _reapplyTokens(namespace);
+  }
 
   @override
-  void clearNamespaceAuthToken({required String namespace}) =>
-      throw UnimplementedError('clearNamespaceAuthToken');
+  void clearNamespaceAuthToken({required String namespace}) {
+    _namespaceTokens.remove(namespace);
+    _reapplyTokens(namespace);
+  }
 
   @override
-  void setGlobalAuthToken(String token) =>
-      throw UnimplementedError('setGlobalAuthToken');
+  void setGlobalAuthToken(String token) {
+    _globalToken = token;
+    for (final ns in _contracts.keys) {
+      _reapplyTokens(ns);
+    }
+  }
 
   @override
-  void clearGlobalAuthToken() =>
-      throw UnimplementedError('clearGlobalAuthToken');
+  void clearGlobalAuthToken() {
+    _globalToken = null;
+    for (final ns in _contracts.keys) {
+      _reapplyTokens(ns);
+    }
+  }
 
   @override
-  void setAuthProvider(AxiomAuthProvider? provider) =>
-      throw UnimplementedError('setAuthProvider');
+  void setAuthProvider(AxiomAuthProvider? provider) {
+    _authProvider = provider;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cancellation, session, shutdown
+  // ---------------------------------------------------------------------------
 
   @override
-  bool cancel(int requestId) => throw UnimplementedError('cancel');
+  bool cancel(int requestId) {
+    final w = _wasmOrNull;
+    if (w == null || requestId <= 0) return false;
+    try {
+      return w.axiomCancel(requestId.toJS) == 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void _closeAllRequests(AxiomError? withError) {
+    for (final id in _requests.keys.toList()) {
+      final req = _requests[id]!;
+      if (withError != null && !req.controller.isClosed) {
+        req.controller.add(AxiomState.error(withError));
+      }
+      _finish(id);
+    }
+  }
+
+  static AxiomError _cancelledError(String why) => AxiomError(
+    stage: ErrorStage.runtime,
+    category: ErrorCategory.runtime,
+    code: const Cancelled(),
+    message: why,
+    retryable: false,
+  );
 
   @override
-  Future<void> resetSession() => throw UnimplementedError('resetSession');
+  Future<void> resetSession() async {
+    final w = _wasmOrNull;
+    if (w != null) {
+      w.axiomResetSession();
+      // Deliver anything the reset queued, then close what is left.
+      try {
+        w.axiomProcessResponses();
+      } catch (_) {}
+    }
+    _closeAllRequests(_cancelledError('Session reset'));
+    AxiomQueryManager().clear();
+    _queries.clear();
+    _overrides.clear();
+    _forceRefresh.clear();
+    _lastData.clear();
+    for (final ns in _appliedTokens.keys.toList()) {
+      for (final m in _appliedTokens[ns]!.keys.toList()) {
+        _clearToken(ns, m);
+      }
+    }
+    _appliedTokens.clear();
+    _methodTokens.clear();
+    _namespaceTokens.clear();
+    _globalToken = null;
+    _authProvider = null;
+  }
 
   @override
-  Future<void> shutdown() => throw UnimplementedError('shutdown');
+  Future<void> shutdown() async {
+    final w = _wasmOrNull;
+    if (w != null) {
+      for (final id in _requests.keys.toList()) {
+        cancel(id);
+      }
+      try {
+        w.axiomProcessResponses();
+      } catch (_) {}
+    }
+    _closeAllRequests(_cancelledError('Runtime shut down'));
+    _pump?.cancel();
+    _pump = null;
+    _setupDrainCallback();
+    AxiomQueryManager().clear();
+    _queries.clear();
+    _overrides.clear();
+    _forceRefresh.clear();
+    _lastData.clear();
+    _initResult = null;
+    _initializing = null;
+    // The wasm instance, its engine and loaded contracts stay in the page
+    // (a wasm module cannot be unloaded); initialize() re-attaches.
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cache control
+  // ---------------------------------------------------------------------------
+
+  Iterable<String> _matchingKeys({
+    String? namespace,
+    int? endpointId,
+    Set<int>? endpointIds,
+    Map<String, dynamic>? args,
+  }) {
+    final argsKey = args == null ? null : jsonEncode(args);
+    return _queries.entries
+        .where((e) {
+          final m = e.value;
+          if (namespace != null && m.namespace != namespace) return false;
+          if (endpointId != null && m.endpointId != endpointId) return false;
+          if (endpointIds != null && !endpointIds.contains(m.endpointId)) {
+            return false;
+          }
+          if (argsKey != null) {
+            final k = AxiomQueryKey.build(
+              endpoint: '${m.namespace}_${m.endpointId}',
+              args: args!,
+            );
+            if (k != e.key) return false;
+          }
+          return true;
+        })
+        .map((e) => e.key)
+        .toList();
+  }
+
+  void _refetch(Iterable<String> keys, {required bool force}) {
+    for (final k in keys) {
+      if (force) _forceRefresh.add(k);
+      AxiomQueryManager().invalidate(k);
+    }
+  }
+
+  bool _runtimeInvalidate(String namespace, String identity) {
+    if (!_hasExport('axiom_wasm_invalidate_cache')) return false;
+    final n = _alloc(namespace), i = _alloc(identity);
+    try {
+      return _wasm.axiomInvalidateCache(n.ptr, n.len, i.ptr, i.len) == 0;
+    } finally {
+      _free(n);
+      _free(i);
+    }
+  }
 
   @override
   void invalidate({
@@ -606,7 +1420,38 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     String? cacheIdentity,
     int? endpointId,
     Map<String, dynamic>? args,
-  }) => throw UnimplementedError('invalidate');
+  }) {
+    final meta = _contracts[namespace];
+    if (cacheIdentity != null) {
+      _runtimeInvalidate(namespace, cacheIdentity);
+      final ids = <int>{
+        for (final e in (meta?.cacheIdentity ?? const <int, String>{}).entries)
+          if (e.value == cacheIdentity) e.key,
+        // Without UI metadata the runtime uses the endpoint name.
+        if (meta?.endpointIds[cacheIdentity] case final int id) id,
+      };
+      _refetch(
+        _matchingKeys(namespace: namespace, endpointIds: ids),
+        force: true,
+      );
+      return;
+    }
+    if (endpointId != null && meta != null) {
+      final identity =
+          meta.cacheIdentity[endpointId] ??
+          meta.endpointIds.entries
+              .where((e) => e.value == endpointId)
+              .map((e) => e.key)
+              .firstOrNull;
+      if (identity != null && args == null) {
+        _runtimeInvalidate(namespace, identity);
+      }
+    }
+    _refetch(
+      _matchingKeys(namespace: namespace, endpointId: endpointId, args: args),
+      force: true,
+    );
+  }
 
   @override
   void setQueryData<T>({
@@ -614,44 +1459,136 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     required int endpointId,
     Map<String, dynamic> args = const {},
     required T data,
-  }) => throw UnimplementedError('setQueryData');
+  }) {
+    final key = AxiomQueryKey.build(
+      endpoint: '${namespace}_$endpointId',
+      args: args,
+    );
+    _lastData[key] = data;
+    _overrides[key] = data;
+    // Refetch of an active query goes through the factory in [send], which
+    // serves the override instead of calling the runtime. An inactive key
+    // serves it to its next subscriber.
+    if (_queries.containsKey(key)) AxiomQueryManager().invalidate(key);
+  }
 
   @override
   T? getCachedQueryData<T>({
     required String namespace,
     required int endpointId,
     Map<String, dynamic> args = const {},
-  }) => throw UnimplementedError('getCachedQueryData');
+  }) {
+    final key = AxiomQueryKey.build(
+      endpoint: '${namespace}_$endpointId',
+      args: args,
+    );
+    final v = _lastData[key];
+    return v is T ? v : null;
+  }
+
+  /// Removes runtime response-cache entries. With the r export this is per
+  /// namespace; otherwise only the whole web cache (localStorage keys
+  /// `axiom_cache_acore-cache/v1:*`, revisions kept) can be dropped from Dart.
+  bool _clearRuntimeCache(String? namespace) {
+    if (_hasExport('axiom_wasm_clear_cache')) {
+      final n = _alloc(namespace ?? '');
+      try {
+        return _wasm.axiomClearCache(n.ptr, n.len) == 0;
+      } finally {
+        _free(n);
+      }
+    }
+    if (namespace != null) return false;
+    try {
+      final storage = web.window.localStorage;
+      final doomed = <String>[];
+      for (var i = 0; i < storage.length; i++) {
+        final k = storage.key(i);
+        if (k != null &&
+            k.startsWith('axiom_cache_acore-cache/v1:') &&
+            !k.endsWith(':revision')) {
+          doomed.add(k);
+        }
+      }
+      for (final k in doomed) {
+        storage.removeItem(k);
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void _dropDartState(String? namespace) {
+    final keys = _matchingKeys(namespace: namespace);
+    for (final k in keys) {
+      _lastData.remove(k);
+      _overrides.remove(k);
+    }
+  }
 
   @override
-  Future<void> clearCache([String? namespace]) =>
-      throw UnimplementedError('clearCache');
+  Future<void> clearCache([String? namespace]) async {
+    _clearRuntimeCache(namespace);
+    _dropDartState(namespace);
+    // Refetch with refresh mode so entries the runtime could not drop (e.g.
+    // a single namespace without the clear export) are overwritten.
+    _refetch(_matchingKeys(namespace: namespace), force: true);
+  }
 
   @override
-  Future<void> purgeCache([String? namespace]) =>
-      throw UnimplementedError('purgeCache');
+  Future<void> purgeCache([String? namespace]) async {
+    _clearRuntimeCache(namespace);
+    _dropDartState(namespace);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Errors
+  // ---------------------------------------------------------------------------
 
   @override
-  Stream<AxiomErrorEvent> get onError => throw UnimplementedError('onError');
+  Stream<AxiomErrorEvent> get onError => _errors.stream;
+
+  // ---------------------------------------------------------------------------
+  // Extensions (native only)
+  // ---------------------------------------------------------------------------
 
   @override
   Future<void> loadExtension(AxiomExtensionPackage package) =>
-      throw UnsupportedError('Axiom extensions are not supported on web');
+      Future.error(UnsupportedError(_unsupportedExtensions));
 
   @override
   Future<Object?> invokeExtension(AxiomExtensionCall call) =>
-      throw UnsupportedError('Axiom extensions are not supported on web');
+      Future.error(UnsupportedError(_unsupportedExtensions));
 
   @override
   void extensionLifecycle(AxiomLifecycleEvent event) =>
-      throw UnsupportedError('Axiom extensions are not supported on web');
+      throw UnsupportedError(_unsupportedExtensions);
 
   @override
   Future<Object?> extensionAudit() =>
-      throw UnsupportedError('Axiom extensions are not supported on web');
+      Future.error(UnsupportedError(_unsupportedExtensions));
+
+  // ---------------------------------------------------------------------------
+  // Memory helpers
+  // ---------------------------------------------------------------------------
+
+  _WebAlloc _alloc(String s) => _allocBytes(Uint8List.fromList(utf8.encode(s)));
+
+  _WebAlloc _allocBytes(Uint8List b) {
+    if (b.isEmpty) return const _WebAlloc(0, 0);
+    final ptr = _wasm.axiomMalloc(b.length);
+    // Re-read memory.buffer after malloc: growth detaches the old buffer.
+    Uint8List.view(_wasm.memory.jsBuffer.toDart, ptr, b.length).setAll(0, b);
+    return _WebAlloc(ptr, b.length);
+  }
+
+  void _free(_WebAlloc a) {
+    if (a.ptr != 0) _wasm.axiomFreeMemory(a.ptr, a.len);
+  }
 }
 
 class _WebAlloc {
   final int ptr, len;
-  _WebAlloc(this.ptr, this.len);
+  const _WebAlloc(this.ptr, this.len);
 }

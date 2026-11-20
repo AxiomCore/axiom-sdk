@@ -868,3 +868,5 @@ let wasm_bindgen = (function(exports) {
 
     return Object.assign(__wbg_init, { initSync }, exports);
 })({ __proto__: null });
+
+globalThis.wasm_bindgen = wasm_bindgen;
