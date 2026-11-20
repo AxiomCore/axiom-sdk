@@ -5,7 +5,8 @@ import 'client.dart';
 import 'types.dart';
 
 /// The session of an [AxiomAuth] as a [ValueListenable].
-class AxiomSessionListenable extends ChangeNotifier implements ValueListenable<PublicSession> {
+class AxiomSessionListenable extends ChangeNotifier
+    implements ValueListenable<PublicSession> {
   AxiomSessionListenable(this.auth) {
     _value = auth.session();
     _unsubscribe = auth.subscribe((s) {
@@ -60,7 +61,9 @@ class AxiomAuthBuilder extends StatelessWidget {
       valueListenable: auth.sessionListenable,
       builder: (context, s, _) {
         if (s.principal != null &&
-            (s.status == AuthStatus.authenticated || s.status == AuthStatus.refreshing || s.status == AuthStatus.error)) {
+            (s.status == AuthStatus.authenticated ||
+                s.status == AuthStatus.refreshing ||
+                s.status == AuthStatus.error)) {
           return signedIn(context, s);
         }
         switch (s.status) {
@@ -79,14 +82,19 @@ class AxiomAuthBuilder extends StatelessWidget {
 /// Forwards app lifecycle to [AxiomAuth.setForeground] (auth-web's
 /// `visibilitychange`): no refresh timer while paused, a due refresh at resume.
 class AxiomAuthLifecycle extends StatefulWidget {
-  const AxiomAuthLifecycle({super.key, required this.auth, required this.child});
+  const AxiomAuthLifecycle({
+    super.key,
+    required this.auth,
+    required this.child,
+  });
   final AxiomAuth auth;
   final Widget child;
   @override
   State<AxiomAuthLifecycle> createState() => _AxiomAuthLifecycleState();
 }
 
-class _AxiomAuthLifecycleState extends State<AxiomAuthLifecycle> with WidgetsBindingObserver {
+class _AxiomAuthLifecycleState extends State<AxiomAuthLifecycle>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
@@ -97,7 +105,8 @@ class _AxiomAuthLifecycleState extends State<AxiomAuthLifecycle> with WidgetsBin
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       widget.auth.setForeground(true);
-    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
       widget.auth.setForeground(false);
     }
   }

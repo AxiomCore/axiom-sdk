@@ -1,12 +1,17 @@
 name: axiom_flutter_auth
-description: "Managed Axiom project authentication for Flutter (auth-surfaces/v1 client): sign-in, refresh with rotation, secure session storage, PKCE redirects, MFA and step-up, wired into axiom_flutter."
+description: "Managed Axiom project authentication for Flutter: sign-in, token refresh with rotation, secure session storage, PKCE redirects and MFA, wired into axiom_flutter."
 version: 0.150.0
 homepage: https://github.com/AxiomCore/axiom-sdk
 repository: https://github.com/AxiomCore/axiom-sdk
 issue_tracker: https://github.com/AxiomCore/axiom-sdk/issues
+documentation: https://docs.axiomcore.dev/docs/sdks/flutter-auth
+topics:
+  - authentication
+  - oauth
+  - security
+  - api
 
-# Platforms listed on pub.dev. Web runs the bundled wasm runtime through a
-# conditional import, so it needs no plugin registration.
+# Platforms listed on pub.dev (the platforms axiom_flutter supports).
 platforms:
   android:
   ios:

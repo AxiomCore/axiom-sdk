@@ -9,12 +9,17 @@ import 'client.dart';
 /// Android: add the `CallbackActivity` intent filter for the redirect scheme
 /// to `AndroidManifest.xml`. iOS/macOS: nothing to add for a custom scheme.
 class FlutterWebAuth2Launcher implements AuthRedirectLauncher {
-  const FlutterWebAuth2Launcher({this.options = const FlutterWebAuth2Options()});
+  const FlutterWebAuth2Launcher({
+    this.options = const FlutterWebAuth2Options(),
+  });
 
   final FlutterWebAuth2Options options;
 
   @override
-  Future<Uri?> authenticate(Uri url, {required String callbackUrlScheme}) async {
+  Future<Uri?> authenticate(
+    Uri url, {
+    required String callbackUrlScheme,
+  }) async {
     final result = await FlutterWebAuth2.authenticate(
       url: url.toString(),
       callbackUrlScheme: callbackUrlScheme,
