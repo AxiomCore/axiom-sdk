@@ -186,6 +186,43 @@ typedef _AxiomExtInvoke =
 typedef _AxiomExtAuditNative = Int32 Function(Pointer<AxiomBuffer>);
 typedef _AxiomExtAudit = int Function(Pointer<AxiomBuffer>);
 
+// Optional functions added by axiom-runtime branch flutter/r (looked up with
+// providesSymbol; the published 0.148.6 runtime does not have them).
+typedef _AxiomStrStatusNative = Int32 Function(AxiomString);
+typedef _AxiomStrStatus = int Function(AxiomString);
+typedef _AxiomStr2StatusNative = Int32 Function(AxiomString, AxiomString);
+typedef _AxiomStr2Status = int Function(AxiomString, AxiomString);
+typedef _AxiomCallWithOptionsNative =
+    Int32 Function(
+      Uint64,
+      AxiomString,
+      Uint32,
+      AxiomString,
+      AxiomString,
+      AxiomString,
+      AxiomString,
+      AxiomBuffer,
+      AxiomString,
+    );
+typedef _AxiomCallWithOptions =
+    int Function(
+      int,
+      AxiomString,
+      int,
+      AxiomString,
+      AxiomString,
+      AxiomString,
+      AxiomString,
+      AxiomBuffer,
+      AxiomString,
+    );
+typedef AxiomAuthCallbackV2Native =
+    Void Function(Uint64 requestId, Pointer<Utf8> namespace, Pointer<Utf8> method);
+typedef _AxiomRegisterAuthV2Native =
+    Void Function(Pointer<NativeFunction<AxiomAuthCallbackV2Native>>);
+typedef _AxiomRegisterAuthV2 =
+    void Function(Pointer<NativeFunction<AxiomAuthCallbackV2Native>>);
+
 /// Book-keeping for one in-flight runtime request.
 class _Call {
   final StreamController<AxiomState<Uint8List>> controller;
@@ -311,6 +348,15 @@ class AxiomRuntimeIo implements AxiomRuntime {
   late final _AxiomCancel? _cancelFfi;
   late final _AxiomVoid? _resetSessionFfi;
   late final _AxiomVoid? _clearCallbackFfi;
+  late final _AxiomCallWithOptions? _callWithOptionsFfi;
+  late final _AxiomStr2Status? _cacheInvalidateIdentityFfi;
+  late final _AxiomStrStatus? _cacheClearNamespaceFfi;
+  late final _AxiomStr2Status? _setNamespaceTokenFfi;
+  late final _AxiomStrStatus? _clearNamespaceTokensFfi;
+  late final _AxiomVoid? _clearAuthProviderFfi;
+
+  /// Namespaces with a successfully loaded contract.
+  final Set<String> _loadedNamespaces = {};
 
   AxiomRuntimeIo._internal() {
     _lib = _openLibrary();
@@ -351,6 +397,36 @@ class AxiomRuntimeIo implements AxiomRuntime {
     _clearCallbackFfi = _has('axiom_clear_callback')
         ? _lib.lookupFunction<_AxiomVoidNative, _AxiomVoid>(
             'axiom_clear_callback',
+          )
+        : null;
+    _callWithOptionsFfi = _has('axiom_call_with_options')
+        ? _lib.lookupFunction<_AxiomCallWithOptionsNative, _AxiomCallWithOptions>(
+            'axiom_call_with_options',
+          )
+        : null;
+    _cacheInvalidateIdentityFfi = _has('axiom_cache_invalidate_identity')
+        ? _lib.lookupFunction<_AxiomStr2StatusNative, _AxiomStr2Status>(
+            'axiom_cache_invalidate_identity',
+          )
+        : null;
+    _cacheClearNamespaceFfi = _has('axiom_cache_clear_namespace')
+        ? _lib.lookupFunction<_AxiomStrStatusNative, _AxiomStrStatus>(
+            'axiom_cache_clear_namespace',
+          )
+        : null;
+    _setNamespaceTokenFfi = _has('axiom_set_namespace_auth_token')
+        ? _lib.lookupFunction<_AxiomStr2StatusNative, _AxiomStr2Status>(
+            'axiom_set_namespace_auth_token',
+          )
+        : null;
+    _clearNamespaceTokensFfi = _has('axiom_clear_namespace_auth_tokens')
+        ? _lib.lookupFunction<_AxiomStrStatusNative, _AxiomStrStatus>(
+            'axiom_clear_namespace_auth_tokens',
+          )
+        : null;
+    _clearAuthProviderFfi = _has('axiom_clear_auth_provider')
+        ? _lib.lookupFunction<_AxiomVoidNative, _AxiomVoid>(
+            'axiom_clear_auth_provider',
           )
         : null;
     AxiomContractMetadata.addListener(_applyTokensFor);
@@ -421,10 +497,29 @@ class AxiomRuntimeIo implements AxiomRuntime {
     });
   }
 
-  /// Pushes namespace/global tokens to every registered auth method of
-  /// [namespace] that has no explicit per-method token.
+  /// Pushes namespace/global tokens to the runtime for [namespace]: through
+  /// `axiom_set_namespace_auth_token` when the runtime has it, otherwise to
+  /// every registered auth method without an explicit per-method token.
   void _applyTokensFor(String namespace) {
     final token = _namespaceTokens[namespace] ?? _globalToken;
+    final setNs = _setNamespaceTokenFfi;
+    final clearNs = _clearNamespaceTokensFfi;
+    if (setNs != null && clearNs != null) {
+      using((Arena arena) {
+        if (token != null) {
+          setNs(_toAxiomString(namespace, arena), _toAxiomString(token, arena));
+        } else {
+          // Also clears per-method tokens: restore the explicit ones below.
+          clearNs(_toAxiomString(namespace, arena));
+        }
+      });
+      if (token == null) {
+        _methodTokens[namespace]?.forEach(
+          (method, t) => _setNativeToken(namespace, method, t),
+        );
+      }
+      return;
+    }
     final explicit = _methodTokens[namespace] ?? const {};
     for (final method in AxiomContractMetadata.authMethodsFor(namespace)) {
       if (explicit.containsKey(method)) continue;
@@ -451,10 +546,16 @@ class AxiomRuntimeIo implements AxiomRuntime {
     _applyTokensFor(namespace);
   }
 
+  /// Namespaces a global token must be pushed to.
+  Iterable<String> get _tokenNamespaces => {
+    ...AxiomContractMetadata.namespacesWithAuth,
+    if (_setNamespaceTokenFfi != null) ..._loadedNamespaces,
+  };
+
   @override
   void setGlobalAuthToken(String token) {
     _globalToken = token;
-    for (final ns in AxiomContractMetadata.namespacesWithAuth.toList()) {
+    for (final ns in _tokenNamespaces.toList()) {
       _applyTokensFor(ns);
     }
   }
@@ -462,15 +563,43 @@ class AxiomRuntimeIo implements AxiomRuntime {
   @override
   void clearGlobalAuthToken() {
     _globalToken = null;
-    for (final ns in AxiomContractMetadata.namespacesWithAuth.toList()) {
+    for (final ns in _tokenNamespaces.toList()) {
+      if (_namespaceTokens.containsKey(ns)) continue;
       _applyTokensFor(ns);
     }
   }
 
+  NativeCallable<AxiomAuthCallbackV2Native>? _authCallableV2;
+
   @override
   void setAuthProvider(AxiomAuthProvider? provider) {
     _authProvider = provider;
-    if (provider == null || _authCallable != null) return;
+    if (provider == null) {
+      if (_clearAuthProviderFfi != null &&
+          (_authCallable != null || _authCallableV2 != null)) {
+        _clearAuthProviderFfi();
+        // The native side forgot the callables; keep them alive (a callback
+        // may already be queued) but register again on the next provider.
+        _authRegistered = false;
+      }
+      return;
+    }
+    if (_authRegistered) return;
+    if (_has('axiom_register_auth_provider_v2') &&
+        _has('axiom_provide_auth_token')) {
+      _authCallableV2 ??= NativeCallable<AxiomAuthCallbackV2Native>.listener(
+        _onAuthRequestedV2,
+      );
+      _lib.lookupFunction<_AxiomRegisterAuthV2Native, _AxiomRegisterAuthV2>(
+        'axiom_register_auth_provider_v2',
+      )(_authCallableV2!.nativeFunction);
+      _authRegistered = true;
+      return;
+    }
+    if (_authCallable != null) {
+      _authRegistered = true;
+      return;
+    }
     if (!_has('axiom_register_auth_provider') ||
         !_has('axiom_provide_auth_token')) {
       return;
@@ -485,6 +614,29 @@ class AxiomRuntimeIo implements AxiomRuntime {
     _lib.lookupFunction<_AxiomRegisterAuthNative, _AxiomRegisterAuth>(
       'axiom_register_auth_provider',
     )(_authCallable!.nativeFunction);
+    _authRegistered = true;
+  }
+
+  bool _authRegistered = false;
+
+  /// v2 callback: namespace and method come from the runtime (strings stay
+  /// valid until axiom_provide_auth_token is called).
+  void _onAuthRequestedV2(
+    int requestId,
+    Pointer<Utf8> namespace,
+    Pointer<Utf8> method,
+  ) {
+    String ns = '';
+    String m = '';
+    try {
+      ns = namespace == nullptr ? '' : namespace.toDartString();
+      m = method == nullptr ? '' : method.toDartString();
+    } catch (_) {}
+    if (ns.isEmpty) ns = _calls[requestId]?.namespace ?? '';
+    resolveAuthToken(ns, m).then(
+      (token) => _provideToken(requestId, token ?? ''),
+      onError: (Object _) => _provideToken(requestId, ''),
+    );
   }
 
   /// Answers one runtime token request (`AxiomAuthCallback`).
@@ -977,6 +1129,13 @@ class AxiomRuntimeIo implements AxiomRuntime {
       );
     });
     final ok = status == FfiError.success || status == FfiError.successUnverified;
+    if (ok) {
+      _loadedNamespaces.add(namespace);
+      if (_setNamespaceTokenFfi != null &&
+          (_namespaceTokens[namespace] ?? _globalToken) != null) {
+        _applyTokensFor(namespace);
+      }
+    }
     return AxiomContractLoadResult(
       namespace: namespace,
       baseUrl: baseUrl,
@@ -1054,6 +1213,9 @@ class AxiomRuntimeIo implements AxiomRuntime {
       'p': finalPath,
     });
 
+    final withOptions = _callWithOptionsFfi;
+    final timeout = options?.timeout;
+    final nativeTimeout = withOptions != null && timeout != null;
     final callStatus = using((Arena arena) {
       final bPtr = arena<Uint8>(requestBytes.length);
       bPtr.asTypedList(requestBytes.length).setAll(0, requestBytes);
@@ -1061,6 +1223,26 @@ class AxiomRuntimeIo implements AxiomRuntime {
         ..ref.ptr = bPtr
         ..ref.len = requestBytes.length;
       // axiom_call copies every argument before returning.
+      if (nativeTimeout) {
+        return withOptions(
+          requestId,
+          _toAxiomString(namespace, arena),
+          endpointId,
+          _toAxiomString(method, arena),
+          _toAxiomString(finalPath, arena),
+          _toAxiomString(traceparent, arena),
+          _toAxiomString(headersJson, arena),
+          b.ref,
+          _toAxiomString(
+            jsonEncode({
+              'timeoutMs': timeout.inMilliseconds,
+              if (options!.cacheMode == AxiomCacheMode.refresh)
+                'cacheMode': 'refresh',
+            }),
+            arena,
+          ),
+        );
+      }
       return _callFfi(
         requestId,
         _toAxiomString(namespace, arena),
@@ -1091,8 +1273,9 @@ class AxiomRuntimeIo implements AxiomRuntime {
         controller.add(AxiomState.error(err));
         controller.close();
       });
-    } else if (options?.timeout != null) {
-      call.timeout = Timer(options!.timeout!, () {
+    } else if (timeout != null && !nativeTimeout) {
+      // Runtime without axiom_call_with_options: timer + cancel.
+      call.timeout = Timer(timeout, () {
         if (!_calls.containsKey(requestId)) return;
         call.timedOut = true;
         if (!cancel(requestId)) call.timedOut = false;
@@ -1447,8 +1630,17 @@ class AxiomRuntimeIo implements AxiomRuntime {
       return;
     }
     if (cacheIdentity != null) {
-      // No runtime export invalidates by identity; refetch the endpoints the
-      // generator registered for it (all of the namespace when unknown).
+      final native = _cacheInvalidateIdentityFfi;
+      if (native != null) {
+        using(
+          (Arena arena) => native(
+            _toAxiomString(namespace, arena),
+            _toAxiomString(cacheIdentity, arena),
+          ),
+        );
+      }
+      // Refetch the endpoints the generator registered for the identity
+      // (all of the namespace when unknown).
       final ids = AxiomContractMetadata.endpointsForIdentity(
         namespace,
         cacheIdentity,
@@ -1484,13 +1676,27 @@ class AxiomRuntimeIo implements AxiomRuntime {
     return value is T ? value : null;
   }
 
+  /// Clears the runtime cache of [namespace] (all loaded when null) when the
+  /// runtime has `axiom_cache_clear_namespace`; returns false otherwise.
+  bool _clearNativeCache(String? namespace) {
+    final native = _cacheClearNamespaceFfi;
+    if (native == null) return false;
+    final targets = namespace == null ? _loadedNamespaces.toList() : [namespace];
+    for (final ns in targets) {
+      using((Arena arena) => native(_toAxiomString(ns, arena)));
+    }
+    return true;
+  }
+
   @override
   Future<void> clearCache([String? namespace]) async {
+    _clearNativeCache(namespace);
     AxiomQueryManager().clearNamespace(namespace, refetch: true);
   }
 
   @override
   Future<void> purgeCache([String? namespace]) async {
+    _clearNativeCache(namespace);
     AxiomQueryManager().clearNamespace(namespace, refetch: false);
   }
 
