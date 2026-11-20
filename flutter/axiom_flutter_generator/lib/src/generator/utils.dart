@@ -1,135 +1,85 @@
-/// Utilities for string manipulation and type mapping.
+/// Naming and literal helpers shared by the writers.
 class GeneratorUtils {
-  static String pascalCase(String name) {
-    if (name.isEmpty) return name;
-    final parts = name
-        .split(RegExp(r'[_\-\s]+'))
-        .where((p) => p.isNotEmpty)
-        .toList();
-    if (parts.isEmpty) return name[0].toUpperCase() + name.substring(1);
+  static const _reserved = {
+    'abstract', 'as', 'assert', 'async', 'await', 'base', 'break', 'case',
+    'catch', 'class', 'const', 'continue', 'covariant', 'default', 'deferred',
+    'do', 'dynamic', 'else', 'enum', 'export', 'extends', 'extension',
+    'external', 'factory', 'false', 'final', 'finally', 'for', 'Function',
+    'get', 'hide', 'if', 'implements', 'import', 'in', 'interface', 'is',
+    'late', 'library', 'mixin', 'new', 'null', 'of', 'on', 'operator', 'part',
+    'required', 'rethrow', 'return', 'sealed', 'set', 'show', 'static',
+    'super', 'switch', 'sync', 'this', 'throw', 'true', 'try', 'type',
+    'typedef', 'var', 'void', 'when', 'while', 'with', 'yield',
+  };
 
+  /// Splits `snake_case`, `kebab-case`, `camelCase` and spaced words.
+  static List<String> _words(String name) {
+    final spaced = name
+        .replaceAllMapped(
+          RegExp(r'([a-z0-9])([A-Z])'),
+          (m) => '${m[1]} ${m[2]}',
+        )
+        .replaceAll(RegExp(r'[^A-Za-z0-9]+'), ' ');
+    return spaced.split(' ').where((w) => w.isNotEmpty).toList();
+  }
+
+  static String pascalCase(String name) {
+    final words = _words(name);
+    if (words.isEmpty) return 'Unnamed';
     final buf = StringBuffer();
-    for (final part in parts) {
-      if (part.isEmpty) continue;
-      buf.write(part[0].toUpperCase());
-      if (part.length > 1) {
-        buf.write(part.substring(1));
-      }
+    for (final w in words) {
+      buf.write(w[0].toUpperCase());
+      buf.write(w.substring(1));
     }
-    return buf.toString();
+    var out = buf.toString();
+    if (RegExp(r'^[0-9]').hasMatch(out)) out = 'T$out';
+    return out;
   }
 
   static String camelCase(String name) {
-    if (name.isEmpty) return name;
-    final pascal = pascalCase(name);
-    return pascal[0].toLowerCase() + pascal.substring(1);
-  }
-
-  /// Maps IR type definitions to Dart types.
-  ///
-  /// [scoped]: If true, prefixes named types with `models.` (used in SDK).
-  static String dartTypeFromIr(
-    Map<String, dynamic> typeRef, {
-    required bool scoped,
-  }) {
-    final kind = typeRef['kind'] as String;
-    switch (kind) {
-      case 'int32':
-      case 'int64':
-        return 'int';
-      case 'float32':
-      case 'float64':
-        return 'double';
-      case 'bool':
-        return 'bool';
-      case 'string':
-        return 'String';
-      case 'dateTime':
-        return 'DateTime';
-      case 'bytes':
-        return 'Uint8List';
-      case 'void':
-        return 'void';
-      case 'named':
-        final name = pascalCase(typeRef['value'] as String);
-        return scoped ? 'models.$name' : name;
-      case 'list':
-        final innerType = (typeRef['value'] as Map).cast<String, dynamic>();
-        return 'List<${dartTypeFromIr(innerType, scoped: scoped)}>';
-      case 'map':
-        // 1. Cast the value to a List (as defined in your Python IR)
-        final mapArgs = typeRef['value'] as List;
-
-        // 2. Extract the Key and Value type references
-        final keyTypeRef = mapArgs[0] as Map<String, dynamic>;
-        final valueTypeRef = mapArgs[1] as Map<String, dynamic>;
-
-        // 3. Recursively resolve the Dart types for both
-        final keyType = dartTypeFromIr(keyTypeRef, scoped: scoped);
-        final valueType = dartTypeFromIr(valueTypeRef, scoped: scoped);
-
-        return 'Map<$keyType, $valueType>';
-      case 'json':
-        return 'dynamic'; // or Map<String, dynamic>
-      default:
-        return 'dynamic';
+    final words = _words(name);
+    if (words.isEmpty) return 'unnamed';
+    final buf = StringBuffer(words.first[0].toLowerCase());
+    buf.write(words.first.substring(1));
+    for (final w in words.skip(1)) {
+      buf.write(w[0].toUpperCase());
+      buf.write(w.substring(1));
     }
+    var out = buf.toString();
+    if (RegExp(r'^[0-9]').hasMatch(out)) out = 'v$out';
+    return out;
   }
 
-  /// Classifies the response shape to help generate the decoder lambda.
-  static ResponseShape classifyResponse(Map<String, dynamic> typeRef) {
-    final kind = typeRef['kind'] as String;
-    final value = typeRef['value'];
-
-    switch (kind) {
-      case 'named':
-        return ResponseShape(ResponseKind.model, modelName: value as String);
-      case 'list':
-        if (value is Map<String, dynamic>) {
-          final innerKind = value['kind'] as String?;
-          final innerVal = value['value'];
-          if (innerKind == 'named' && innerVal is String) {
-            return ResponseShape(ResponseKind.modelVec, modelName: innerVal);
-          }
-        }
-        return ResponseShape(ResponseKind.json); // List of primitives
-      case 'string':
-        return ResponseShape(ResponseKind.primitiveString);
-      case 'int32':
-      case 'int64':
-        return ResponseShape(ResponseKind.primitiveInt);
-      case 'float32':
-      case 'float64':
-        return ResponseShape(ResponseKind.primitiveFloat);
-      case 'bool':
-        return ResponseShape(ResponseKind.primitiveBool);
-      case 'bytes':
-        return ResponseShape(ResponseKind.primitiveBytes);
-      case 'dateTime':
-        return ResponseShape(ResponseKind.dateTime);
-      case 'void':
-        return ResponseShape(ResponseKind.voidType);
-      default:
-        return ResponseShape(ResponseKind.json);
-    }
+  /// A lowerCamel identifier that is safe as a parameter or field name.
+  static String identifier(String name, {Set<String> avoid = const {}}) {
+    final c = camelCase(name);
+    if (_reserved.contains(c) || avoid.contains(c)) return '\$$c';
+    return c;
   }
-}
 
-enum ResponseKind {
-  model,
-  modelVec,
-  primitiveString,
-  primitiveInt,
-  primitiveFloat,
-  primitiveBool,
-  primitiveBytes,
-  dateTime,
-  voidType,
-  json,
-}
+  /// `$name` or `${name}` inside a single-quoted string.
+  static String interp(String identifier) =>
+      identifier.startsWith('\$') ? '\${$identifier}' : '\$$identifier';
 
-class ResponseShape {
-  final ResponseKind kind;
-  final String? modelName;
-  const ResponseShape(this.kind, {this.modelName});
+  /// Dart single-quoted string literal for [s].
+  static String str(String s) {
+    final escaped = s
+        .replaceAll(r'\', r'\\')
+        .replaceAll("'", r"\'")
+        .replaceAll(r'$', r'\$')
+        .replaceAll('\n', r'\n')
+        .replaceAll('\r', r'\r')
+        .replaceAll('\t', r'\t');
+    return "'$escaped'";
+  }
+
+  /// Dart doc comment lines for [doc] at [indent].
+  static String docComment(String? doc, String indent) {
+    if (doc == null || doc.trim().isEmpty) return '';
+    final lines = doc
+        .trim()
+        .split('\n')
+        .map((l) => '$indent/// ${l.trimRight()}'.trimRight());
+    return '${lines.join('\n')}\n';
+  }
 }
