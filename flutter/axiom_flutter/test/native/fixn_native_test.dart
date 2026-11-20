@@ -203,4 +203,37 @@ void main() {
       rt.setAuthProvider(null);
     }
   });
+
+  test('F7 same args, different headers: separate requests', () async {
+    handler = (r) async {
+      final t = r.headers.value('x-tenant') ?? '-';
+      // Small delay so both calls are in flight together.
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      r.response
+        ..headers.contentType = ContentType.json
+        ..write('{"tenant":"$t"}');
+      await r.response.close();
+    };
+    AxiomQuery<Object?> q(String? tenant) => rt.send<Object?>(
+          namespace: 'fxnv',
+          endpointId: epEverything,
+          method: 'GET',
+          path: '/types/everything',
+          args: const {'id': 1},
+          decoder: (j) => j,
+          options: tenant == null
+              ? null
+              : AxiomCallOptions(headers: {'X-Tenant': tenant}),
+        );
+    final a = q('a'), b = q('b');
+    expect(a.key, isNot(b.key));
+    final ra = settle(a.stream), rb = settle(b.stream);
+    expect(((await ra).data as Map)['tenant'], 'a');
+    expect(((await rb).data as Map)['tenant'], 'b');
+    final plain = q(null);
+    expect(((await settle(plain.stream)).data as Map)['tenant'], '-');
+    final c = q(null)..setHeader('X-Tenant', 'z');
+    expect(c.key, isNot(plain.key));
+    expect(((await settle(c.stream)).data as Map)['tenant'], 'z');
+  });
 }

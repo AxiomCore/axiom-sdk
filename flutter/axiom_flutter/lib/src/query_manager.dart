@@ -411,7 +411,8 @@ class AxiomQueryManager {
   }) {
     for (final q in _activeQueries.values.toList()) {
       if (key != null) {
-        if (q.key != key) continue;
+        // Keys of calls with headers/timeout extend the args key (`|h=`).
+        if (q.key != key && !q.key.startsWith('$key|')) continue;
       } else {
         if (q.namespace != namespace) continue;
         if (endpointIds != null && !endpointIds.contains(q.endpointId)) {

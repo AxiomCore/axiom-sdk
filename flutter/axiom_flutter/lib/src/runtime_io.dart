@@ -1589,15 +1589,19 @@ class AxiomRuntimeIo implements AxiomRuntime {
     required T Function(dynamic json) decoder,
     AxiomCallOptions? options,
   }) {
-    final key = AxiomQueryKey.build(
+    // Headers and timeout are part of the key (F7): a call that differs
+    // only there must not join another call's request.
+    String keyFor(Map<String, String> customHeaders) => AxiomQueryKey.build(
       endpoint: '${namespace}_$endpointId',
       args: args,
+      headers: {...?headers, ...?options?.headers, ...customHeaders},
+      timeout: options?.timeout,
     );
 
-    return AxiomQuery(key, (customHeaders) {
+    return AxiomQuery(keyFor(const {}), (customHeaders) {
       final mergedHeaders = {...?headers, ...customHeaders};
       return AxiomQueryManager().watchRaw<T>(
-        key,
+        keyFor(customHeaders),
         null,
         namespace: namespace,
         endpointId: endpointId,
@@ -1618,7 +1622,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
           options: options,
         ),
       );
-    }, runtime: this);
+    }, runtime: this, keyForHeaders: keyFor);
   }
 
   @override
