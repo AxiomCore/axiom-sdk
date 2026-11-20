@@ -330,13 +330,13 @@ def summary(web, vm=None, size_table=None, size_legacy=None):
     m = web.get("machine", {})
     md = [f"Measured {web.get('date')} on a {m.get('cores')} vCPU Linux container: release web build in headless "
           f"{(m.get('chrome') or 'Chrome').replace('Google ', '')}, {(web.get('flutter') or '').split(' •')[0]}, "
-          f"local loopback server, {len(web.get('web_runs', [])) or 3} full runs. Each value is the median of the run "
+          f"local loopback server, {len(web.get('web_runs', [])) or 3} full run(s). Each value is the median of the run "
           "medians; a value whose runs differ by more than 10% is shown as not stable. These are not "
           "physical-device numbers. All clients call the same server.", ""]
     md += [_timing_table(web), ""]
     if vm:
         md += [f"Native Dart VM on the same machine (Linux x86_64, `flutter_tester` JIT, host runtime library; "
-               f"a server CPU, not a phone), {len(vm.get('web_runs', [])) or 3} runs:", "", _timing_table(vm), ""]
+               f"a server CPU, not a phone), {len(vm.get('web_runs', [])) or 3} run(s):", "", _timing_table(vm), ""]
     if size_table:
         md += ["Size added to an app:", "", _size_table(size_table), ""]
     elif web.get("size", {}).get("apk_delta"):

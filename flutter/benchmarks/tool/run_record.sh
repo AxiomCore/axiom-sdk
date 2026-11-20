@@ -46,6 +46,7 @@ fi
 if [ "${SKIP_VM:-0}" != "1" ]; then
   : "${AXIOM_RUNTIME_LIB:?set AXIOM_RUNTIME_LIB for the VM runs}"
   dart run tool/vm_bench.dart --lib "$AXIOM_RUNTIME_LIB" --runs "$RUNS" --base "$BASE" \
+    --bench "${VM_SET:-latency,cache,decode,extra}" --h2 "${VM_H2:-clients,parallel}" --cold "${COLD_RUNS:-5}" \
     --out "results/raw-vm-$DATE" | grep -E '^(==|wrote)' || true
   python3 tool/collect_results.py --label "$VM_LABEL" \
     --web-runs $(for i in $(seq "$RUNS"); do echo "results/raw-vm-$DATE-run$i.jsonl"; done) \
