@@ -42,6 +42,20 @@ Added
   `--sha256`, `--contract`, `--out-dir`, `--[no-]format`.
 - Golden tests.
 
+Breaking changes
+- Generated code needs `axiom_flutter` 0.150.0.
+- Enums have an `unknown` value and camelCase Dart names (the wire value is
+  kept), so an exhaustive `switch` must handle `unknown`. Decoding an unknown
+  value no longer throws.
+- Names that collided before now get a numeric suffix (`user_id` next to
+  `userId` becomes `userId2`), and colliding contract type names stop
+  generation with an error.
+
+Known limits
+- Web (dart2js): 64-bit integers above 2^53 lose precision.
+- `--variant` is passed to the runtime; generation for a managed variant that
+  leaves out endpoints is not covered by a run (CLI 0.156.0 cannot build one).
+
 ## 0.146.6
 
 - Feature: Add sdk-flutter-generator improvements in 0.146.6.

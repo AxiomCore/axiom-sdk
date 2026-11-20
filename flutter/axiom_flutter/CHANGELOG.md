@@ -54,6 +54,53 @@ Fixed
   `runtime-pin.json`; a failed check keeps the previous framework and stops
   the build.
 - Cancel errors (plain text from the runtime) no longer fail JSON parsing.
+- iOS and macOS: the podspecs carried a wrong digest for the published
+  AxiomRuntime 0.148.6 archive, so `pod install` failed; both now read the
+  correct pin.
+- Native cache: a default database path (app support directory) is passed to
+  the runtime, so `cache_first` and `stale_while_revalidate` work on Android,
+  iOS and macOS without configuration.
+- Native call latency: the response pump runs only while requests are in
+  flight and wakes per response (p50 of a local call 95.8 ms -> 2.6 ms on a
+  Linux host). It tracks in-flight request ids instead of a counter, so a
+  late response cannot stop it early.
+- SSE on native and web: one shared parser that decodes UTF-8 incrementally
+  and joins CRLF pairs split across chunks.
+- Android 32-bit (armeabi-v7a): `size_t` fields of FFI structs use `@Size()`,
+  fixing the struct layout that corrupted calls on 32-bit ARM.
+- An empty 2xx response body completes the call with success instead of
+  hanging or failing to parse.
+- The query key includes request headers and the timeout, so two calls that
+  differ only in headers no longer share a cached result.
+- Explicit tokens are sent as `Authorization: Bearer`, and a namespace token
+  is sent only to its namespace (global token as fallback).
+- Cancelling a request that has just been issued is reliable on Android.
+- A failed `initialize` can be retried; the status of `axiom_initialize` is
+  checked.
+- Web: responses are delivered on a runtime notification instead of a 16 ms
+  polling floor; WebSocket send works.
+
+Breaking changes
+- Android is a new platform and needs `minSdk 24`. iOS 13.0 and macOS 11.0
+  remain the minimum deployment targets; `axiom pull --fix` sets them.
+- Generated enums gain an `unknown` value (from generator 0.150.0), so an
+  exhaustive `switch` over a generated enum must handle it. Unknown wire
+  values no longer throw on decode.
+- `AxiomAuthBinding.attach` in `axiom_flutter_auth` 0.150.0 takes a required
+  `namespaces` list.
+
+Known limits
+- WebSocket channels on iOS and macOS need the next AxiomRuntime release; with
+  the pinned 0.148.6 runtime the three WebSocket checks fail (81 of 84 run
+  checks pass on the macOS host and the iOS simulator). The error names the
+  cause. Android and web are not affected.
+- Web (dart2js): `int` above 2^53 loses precision; use string fields for
+  64-bit identifiers. dart2wasm is not affected.
+- The web runtime (wasm, about 0.96 MB) is also bundled in Android, iOS and
+  macOS builds, because Flutter 3.32 has no per-platform assets. See
+  `doc/wasm-size.md` for the app-side opt-out.
+- Contract variants: CLI 0.156.0 cannot build a managed backend variant that
+  leaves out endpoints; `--variant` is passed through but not covered by a run.
 
 ## 0.147.5
 
