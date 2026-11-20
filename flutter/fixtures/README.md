@@ -1,0 +1,79 @@
+# Flutter SDK fixture backend
+
+One self-contained Acore backend (`backend/`) that the released CLI 0.156.0 checks, builds and
+serves with managed actions only: no database, no external services. The integration app in
+`../integration_app` runs its smoke checks against it.
+
+## Run
+
+```bash
+./backend/run.sh            # 127.0.0.1:8791
+./backend/run.sh 9000       # another port
+AXIOM=~/bin/axiom ./backend/run.sh
+```
+
+`run.sh` runs `axiom check`, `axiom build`, `axiom server deployment --static-key`, patches the
+deployment to a fixture-only HS256 JWT provider (`backend/tool/jwt.py`), and runs
+`axiom run main.acore --deployment .out/deployment.json --host 127.0.0.1 --port PORT`. Build output
+goes to `backend/.out/` (git-ignored). Readiness: `curl http://127.0.0.1:8791/_axiom/ready`.
+
+Test credentials (fixture only, never use elsewhere):
+
+- Bearer token: `python3 backend/tool/jwt.py token` (fixed value, expires 2100; also in
+  `integration_app/lib/checks/ctx.dart`).
+- API key: `fixture-api-key`.
+
+CORS allows `http://127.0.0.1:8792` and `http://localhost:8792` (the web runner's origin).
+
+## Endpoints
+
+| Name | Method and path | Feature | Notes |
+| --- | --- | --- | --- |
+| `echo` | GET `/echo/{path}?q=&limit=&flag=` | path + query, optional query | echoes inputs; `flag` omitted when absent |
+| `everything` | GET `/types/everything` | String, Bool, Int32, Int64 (2^53+1), Float32, Float64, Bytes (base64 `AQID`), DateTime, Json, List, nested model, List of model, Optional (omitted), Optional Map (omitted), enum rule | |
+| `createItem` | POST `/items` body `{"name","qty"}` | POST JSON, status 201 | |
+| `updateItem` | PUT `/items/{id}` body `{"name","qty"}` | PUT JSON | |
+| `deleteItem` | DELETE `/items/{id}` | DELETE | |
+| `uploadBytes` | POST `/bytes` body `"AQID"` | Bytes body | single body param: the JSON body is the value itself |
+| `claim` | POST `/claims` body `"name"` | typed failure | `"taken"` → 409 `{"error":{"code":"conflict","payload":{"message","existingId"}}}` |
+| `cacheNetworkOnly` | GET `/cache/network-only?nonce=` | cache networkOnly, ttl 1m | |
+| `cacheCacheFirst` | GET `/cache/cache-first?nonce=` | cache cacheFirst | |
+| `cacheNetworkFirst` | GET `/cache/network-first?nonce=` | cache networkFirst | |
+| `cacheStale` | GET `/cache/stale-while-revalidate?nonce=` | cache staleWhileRevalidate | |
+| `cachedItem` | GET `/cache/items/{id}?nonce=` | `cacheIdentity("fixture.item")`, cacheFirst 5m | |
+| `touchItem` | POST `/cache/items/{id}/touch?nonce=` | `invalidates("fixture.item")` | |
+| `retried` | GET `/retry?attempt=` | `retry(attempts: 3, onStatus: [502,503,504], Exponential)` | always succeeds |
+| `authBearer` | GET `/auth/bearer` | bearer JWT, `guard authenticated` | 401 without a valid token |
+| `authApiKeyHeader` | GET `/auth/api-key-header`, header `x-api-key` | API key in header | checked in managed code; wrong key → typed 401 `unauthorized` |
+| `authApiKeyQuery` | GET `/auth/api-key-query?api_key=` | API key in query | same check |
+| `sse` | GET `/stream/sse` | SSE (`text/event-stream`) | one frame `{"id":"t1","seq":1}`; public |
+| `chunked` | GET `/stream/chunked` | HTTP stream (NDJSON) | one frame |
+| `wsEcho` | WS `/stream/ws` | bidirectional WebSocket echo of `Ping{text,seq}` | requires the bearer token (WebSockets need per-message authorization); origins limited to the web runner |
+
+## What could not be expressed (CLI 0.156.0, backend profile)
+
+- **Changing response per call.** Managed code has no mutable state and no clock (pure code
+  cannot read time; resources need a provider, and there is no built-in stateless counter provider
+  without storage). Cache behaviour is observed through `AxiomState.source` on a second identical
+  call; every cache endpoint echoes the `nonce` query value so different nonces are different keys.
+- **Transient failures for retry.** Same reason: the retry endpoint always succeeds. Proving
+  retries needs a fault-injecting proxy (not built).
+- **Unions.** The backend type list (`axiom explain --schema`) has no union type.
+- **Enums.** There is no `enum` declaration in the backend profile; `color` uses
+  `Field(validate: {type: "enum", values: [...]}, type: String)`.
+- **Map literals in managed output.** `return {counts: {x: 1}}` fails to type-check against
+  `Map<String, Int64>`, so `counts` is `Optional` and omitted. Mixed-type list literals inside
+  `Json` are also rejected.
+- **API key and bearer at the same time.** A deployment has exactly one `authentication`
+  provider. The fixture uses JWT (HS256) for bearer; API keys are verified in managed code by
+  comparing the value, not by the `apiKey` provider. Cookie sessions are not covered.
+- **Streams.** Managed stream actions emit exactly one frame per call (per message for
+  WebSockets), so streams are single-frame. Multi-frame streams need a native producer,
+  which the generic CLI cannot load. No Python/Node sidecar was needed.
+- **WebSocket with CORS.** With a global `cors(...)` policy the upgrade is refused
+  (`403 cors_denied: method is not allowed by CORS`; `cors` methods cannot list `WS`), and
+  without an `Origin` header it is refused too (`403 origin_denied`). Run
+  `FIXTURE_CORS=0 ./backend/run.sh` to serve a copy without `cors()`: the WebSocket echo then
+  works (verified with a raw Node client sending `Origin: http://127.0.0.1:8792` and the bearer
+  token), but browser HTTP calls fail CORS. Report to the CLI owners.
+- **Literals in `handle(input:)`.** Input mappings accept only `Input.path/query/header/body` values.
