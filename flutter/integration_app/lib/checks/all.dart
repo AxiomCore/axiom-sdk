@@ -5,6 +5,7 @@ import 'checks_b.dart';
 import 'checks_c.dart';
 import 'checks_d.dart';
 import 'checks_f.dart';
+import 'checks_fixn.dart';
 import 'checks_g.dart';
 import 'checks_h.dart';
 import 'ctx.dart';
@@ -27,5 +28,6 @@ final List<CheckDef> allChecks = [
   ...checksF,
   ...checksG,
   ...checksH,
+  ...checksFixn,
   ...checksB, // keep last: ends with b.shutdown_restart
 ];

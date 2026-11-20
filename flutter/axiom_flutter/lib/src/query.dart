@@ -13,8 +13,16 @@ import 'query_manager.dart';
 /// a mutation (mutations always run to completion unless [cancel] is called
 /// explicitly). The cached value stays available for the next listener.
 class AxiomQuery<T> {
-  final String key;
+  final String _baseKey;
+  final String Function(Map<String, String> customHeaders)? _keyForHeaders;
   final bool isMutation;
+
+  /// Query key. Custom headers set with [setHeader] are part of it when the
+  /// runtime supplied a key function (native), so calls that differ only in
+  /// headers do not share a request.
+  String get key => _keyForHeaders == null || _customHeaders.isEmpty
+      ? _baseKey
+      : _keyForHeaders(_customHeaders);
 
   final AxiomRuntime? _runtime;
   int? _requestId;
@@ -27,11 +35,14 @@ class AxiomQuery<T> {
   _streamFactory;
 
   AxiomQuery(
-    this.key,
+    String key,
     this._streamFactory, {
     this.isMutation = false,
     AxiomRuntime? runtime,
-  }) : _runtime = runtime;
+    String Function(Map<String, String> customHeaders)? keyForHeaders,
+  }) : _baseKey = key,
+       _keyForHeaders = keyForHeaders,
+       _runtime = runtime;
 
   /// Runtime request id of the current fetch, once [stream] was read.
   int? get requestId {

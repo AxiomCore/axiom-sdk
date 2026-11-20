@@ -20,6 +20,7 @@ import 'init_result.dart';
 import 'runtime_info.dart';
 import 'runtime_interface.dart';
 import 'state.dart';
+import 'state.dart' as st show HttpStatus;
 import 'query.dart';
 import 'query_manager.dart';
 import 'internal/auth_headers.dart';
@@ -34,13 +35,15 @@ AxiomRuntime getRuntime() => AxiomRuntimeIo();
 
 base class AxiomString extends Struct {
   external Pointer<Uint8> ptr;
-  @Uint64()
+  // size_t in axiom.h: 4 bytes on armeabi-v7a, 8 on 64-bit ABIs.
+  @Size()
   external int len;
 }
 
 base class AxiomBuffer extends Struct {
   external Pointer<Uint8> ptr;
-  @Uint64()
+  // size_t in axiom.h: 4 bytes on armeabi-v7a, 8 on 64-bit ABIs.
+  @Size()
   external int len;
 }
 
@@ -247,10 +250,32 @@ class _Call {
 
   /// Set when the app cancelled the call: later errors are not reported.
   bool abandoned = false;
-  _Call(this.controller, this.namespace, this.endpointId);
+
+  /// Id returned to the app (stable across an auth retry).
+  final int publicId;
+
+  /// Id of the runtime request currently carrying this call.
+  int nativeId;
+
+  /// Published-runtime auth fallback: re-asks the provider and re-issues the
+  /// call once after an auth failure (null when not applicable or used).
+  void Function()? retryAuth;
+
+  /// An auth error arrived and [retryAuth] runs when its Complete arrives.
+  bool authRetryPending = false;
+
+  /// WebSocket call (method `WS`).
+  bool isWebSocket = false;
+
+  _Call(this.controller, this.namespace, this.endpointId, this.publicId)
+    : nativeId = publicId;
 }
 
+/// Calls by runtime request id ([_Call.nativeId]).
 final _calls = HashMap<int, _Call>();
+
+/// Calls re-issued under a new runtime id, by their public id.
+final _retriedCalls = HashMap<int, _Call>();
 
 /// Request ids are unique per process generation (time based) so responses
 /// of a previous generation (Flutter hot restart) can never be routed to a
@@ -269,9 +294,16 @@ AxiomInitResult? _initResult;
 SendPort? _dataPort;
 _AxiomFreeResponseBuffer? _freeResponseFfiBackground;
 
-/// Requests dispatched but not yet completed, as seen by the event isolate
-/// ('start' messages from the main isolate, Complete events here).
-int _pumpInFlight = 0;
+/// Request ids dispatched but not yet completed, as seen by the event
+/// isolate (`['start', id]` from the main isolate, Complete events here).
+/// A set, not a counter: a Complete for an unknown or stale id (an earlier
+/// generation, a request dropped by a reset) must not stop the pump while
+/// other requests are still in flight.
+final Set<int> _pumpInFlight = <int>{};
+
+/// Completes pumped before their `start` message arrived (another request
+/// kept the pump running). Bounded: stale ids of old generations age out.
+final LinkedHashSet<int> _completedBeforeStart = LinkedHashSet<int>();
 
 /// Opens the runtime library. `AXIOM_RUNTIME_LIB` (only when set) points at
 /// an explicit library path, used by host tests on Linux/macOS.
@@ -288,8 +320,13 @@ void _axiomCallbackHandler(Pointer<AxiomResponseBuffer> responsePtr) {
   if (responsePtr == nullptr) return;
   try {
     final response = responsePtr.ref;
-    if (response.eventType == EventType.complete && _pumpInFlight > 0) {
-      _pumpInFlight--;
+    if (response.eventType == EventType.complete) {
+      if (!_pumpInFlight.remove(response.requestId)) {
+        _completedBeforeStart.add(response.requestId);
+        if (_completedBeforeStart.length > 256) {
+          _completedBeforeStart.remove(_completedBeforeStart.first);
+        }
+      }
     }
     // Native ownership ends in this callback. Send owned Dart bytes, never addresses.
     final data = response.data.ptr == nullptr || response.data.len == 0
@@ -325,10 +362,12 @@ Future<void> _runRustEventLoop(List<Object> args) async {
   var running = true;
   Completer<void>? wake;
   control.listen((msg) {
-    if (msg == 'start') {
-      _pumpInFlight++;
+    if (msg is List && msg.length == 2 && msg[0] == 'start') {
+      final id = msg[1] as int;
+      if (!_completedBeforeStart.remove(id)) _pumpInFlight.add(id);
     } else if (msg == 'reset') {
-      _pumpInFlight = 0;
+      // axiom_reset_session dropped every request without a Complete.
+      _pumpInFlight.clear();
     } else if (msg == 'shutdown') {
       running = false;
       control.close();
@@ -359,7 +398,7 @@ Future<void> _runRustEventLoop(List<Object> args) async {
   // the runtime session lock that axiom_call also takes, so polling while
   // idle delays every new call. Pump only while requests are in flight.
   while (running) {
-    if (_pumpInFlight > 0) {
+    if (_pumpInFlight.isNotEmpty) {
       processResponses();
       // Yield so control messages ('start', 'shutdown') are delivered.
       await Future<void>.delayed(Duration.zero);
@@ -472,7 +511,29 @@ class AxiomRuntimeIo implements AxiomRuntime {
     AxiomContractMetadata.addListener(_applyTokensFor);
   }
 
+  /// Exports added after the published 0.148.6 runtime (Apple pin).
+  static const _optionalSymbols = {
+    'axiom_cache_clear_namespace',
+    'axiom_cache_invalidate_identity',
+    'axiom_call_with_options',
+    'axiom_clear_auth_provider',
+    'axiom_clear_namespace_auth_tokens',
+    'axiom_register_auth_provider_v2',
+    'axiom_set_namespace_auth_token',
+  };
+
+  /// Host tests only: `AXIOM_RUNTIME_ABI=published` (only when set) hides the
+  /// optional exports so a new host library behaves like the published one.
+  static final bool _publishedAbiOnly =
+      Platform.environment['AXIOM_RUNTIME_ABI'] == 'published';
+
+  /// Host tests only: symbols to treat as missing. Set before the first
+  /// `AxiomRuntime()` (lookups happen once, in the constructor).
+  static Set<String> debugHiddenSymbols = {};
+
   static bool _has(String symbol) {
+    if (_publishedAbiOnly && _optionalSymbols.contains(symbol)) return false;
+    if (debugHiddenSymbols.contains(symbol)) return false;
     try {
       return _lib.providesSymbol(symbol);
     } catch (_) {
@@ -535,6 +596,67 @@ class AxiomRuntimeIo implements AxiomRuntime {
         _toAxiomString(methodName, arena),
       );
     });
+  }
+
+  /// Auth method names per endpoint, read from JSON contracts on load
+  /// (`endpoints[].auth.methods[].name ?? type`, as the runtime names them).
+  final Map<String, Map<int, List<String>>> _endpointAuth = {};
+
+  /// (namespace, method) tokens stored natively by the provider fallback.
+  final Set<(String, String)> _providerStoredTokens = {};
+
+  late final bool _hasAuthV2 = _has('axiom_register_auth_provider_v2');
+
+  /// Runtime older than the WebSocket header/text-frame fixes (detected by
+  /// the absence of the exports added with them).
+  late final bool _wsRuntimeTooOld = !_has('axiom_call_with_options');
+
+  void _readEndpointAuth(String namespace, Uint8List bytes) {
+    _endpointAuth.remove(namespace);
+    if (bytes.isEmpty || bytes.first != 0x7B /* { */ ) return;
+    try {
+      final j = jsonDecode(utf8.decode(bytes));
+      if (j is! Map || j['endpoints'] is! List) return;
+      final map = <int, List<String>>{};
+      for (final e in j['endpoints'] as List) {
+        if (e is! Map || e['id'] is! int) continue;
+        final auth = e['auth'];
+        if (auth is! Map || auth['methods'] is! List) continue;
+        final names = <String>[
+          for (final m in auth['methods'] as List)
+            if (m is Map && (m['name'] ?? m['type']) is String)
+              (m['name'] ?? m['type']) as String,
+        ];
+        if (names.isNotEmpty) map[e['id'] as int] = names;
+      }
+      if (map.isNotEmpty) _endpointAuth[namespace] = map;
+    } catch (_) {}
+  }
+
+  /// Methods the published-runtime fallback must ask the provider for
+  /// (empty when the runtime asks the provider itself, or none apply).
+  List<String> _providerFallbackMethods(String namespace, int endpointId) {
+    if (_authProvider == null || _hasAuthV2) return const [];
+    final methods = _endpointAuth[namespace]?[endpointId];
+    if (methods == null || methods.isEmpty) return const [];
+    final explicit = _methodTokens[namespace];
+    return [
+      for (final m in methods)
+        if (explicit?[m] == null) m,
+    ];
+  }
+
+  void _clearProviderStoredTokens() {
+    for (final (ns, m) in _providerStoredTokens.toList()) {
+      final explicit = _methodTokens[ns]?[m];
+      final fallback = explicit ?? _namespaceTokens[ns] ?? _globalToken;
+      if (fallback != null) {
+        _setNativeToken(ns, m, fallback);
+      } else {
+        _clearNativeToken(ns, m);
+      }
+    }
+    _providerStoredTokens.clear();
   }
 
   /// Pushes namespace/global tokens to the runtime for [namespace]: through
@@ -615,6 +737,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
   void setAuthProvider(AxiomAuthProvider? provider) {
     _authProvider = provider;
     if (provider == null) {
+      _clearProviderStoredTokens();
       if (_clearAuthProviderFfi != null &&
           (_authCallable != null || _authCallableV2 != null)) {
         _clearAuthProviderFfi();
@@ -644,6 +767,19 @@ class AxiomRuntimeIo implements AxiomRuntime {
         !_has('axiom_provide_auth_token')) {
       return;
     }
+    _registerV1AuthCallable();
+  }
+
+  /// Registers this generation's v1 auth callable (once).
+  void _registerV1AuthCallable() {
+    if (_authCallable != null) {
+      _authRegistered = true;
+      return;
+    }
+    if (!_has('axiom_register_auth_provider') ||
+        !_has('axiom_provide_auth_token')) {
+      return;
+    }
     // The runtime calls back from a worker thread; a listener callable posts
     // the request to this isolate. It stays registered for the process
     // lifetime (there is no C function to unregister); with no provider the
@@ -657,10 +793,14 @@ class AxiomRuntimeIo implements AxiomRuntime {
     _authRegistered = true;
   }
 
+  /// Host tests only: whether this generation registered a v1 auth callable.
+  bool get debugV1AuthCallableRegistered => _authCallable != null;
+
   bool _authRegistered = false;
 
-  /// v2 callback: namespace and method come from the runtime (strings stay
-  /// valid until axiom_provide_auth_token is called).
+  /// v2 callback: namespace and method come from the runtime. They are
+  /// copied first thing, before any await (F12: the runtime may free them
+  /// after a provider timeout, and a listener runs later than the call).
   void _onAuthRequestedV2(
     int requestId,
     Pointer<Utf8> namespace,
@@ -736,7 +876,15 @@ class AxiomRuntimeIo implements AxiomRuntime {
 
   @override
   Future<void> init([String? dbPath]) {
-    return _initFuture ??= _start(dbPath);
+    final pending = _initFuture;
+    if (pending != null) return pending;
+    final started = _start(dbPath);
+    _initFuture = started;
+    // A failed start is not cached: the next init()/initialize() retries.
+    started.catchError((Object _) {
+      if (identical(_initFuture, started)) _initFuture = null;
+    });
+    return started;
   }
 
   Future<void> _start(String? dbPath) async {
@@ -748,6 +896,11 @@ class AxiomRuntimeIo implements AxiomRuntime {
       _clearAuthProviderFfi();
       _authRegistered = false;
       if (_authProvider != null) setAuthProvider(_authProvider);
+    } else {
+      // No way to unregister (published runtime): replace a v1 callable of
+      // a dead generation right away (F13), instead of waiting for the next
+      // setAuthProvider. With no provider the fallback tokens answer.
+      _registerV1AuthCallable();
     }
 
     final ready = Completer<void>();
@@ -775,7 +928,30 @@ class AxiomRuntimeIo implements AxiomRuntime {
       Isolate.current,
     ], debugName: 'axiom-runtime-events');
     final resolvedDb = await _resolveDbPath(dbPath);
-    using((Arena arena) => _initFfi(_toAxiomString(resolvedDb, arena)));
+    // Re-initialisation (after shutdown(), or a hot restart): abort tasks of
+    // the previous engine first so they drop its cache handles before the
+    // new engine opens the same database directory.
+    _resetSessionFfi?.call();
+    final status = using(
+      (Arena arena) => _initFfi(_toAxiomString(resolvedDb, arena)),
+    );
+    if (status != FfiError.success) {
+      _eventControl?.send('shutdown');
+      try {
+        await ready.future.timeout(const Duration(seconds: 2));
+        _eventControl?.send('shutdown');
+      } catch (_) {
+        _eventIsolate?.kill(priority: Isolate.immediate);
+      }
+      mainIsolatePort.close();
+      _eventIsolate = null;
+      _eventControl = null;
+      _mainPort = null;
+      throw StateError(
+        'axiom_initialize failed (status $status, ${FfiError.name(status)}, '
+        'db path "$resolvedDb")',
+      );
+    }
     await ready.future;
     _initialized = true;
   }
@@ -813,6 +989,14 @@ class AxiomRuntimeIo implements AxiomRuntime {
     }
 
     if (eventTypeValue == EventType.complete) {
+      if (call.authRetryPending) {
+        call.authRetryPending = false;
+        final retry = call.retryAuth!;
+        call.retryAuth = null;
+        _calls.remove(requestId);
+        retry();
+        return;
+      }
       final parser = call.sseParser;
       if (parser != null) {
         for (final e in parser.feed(Uint8List(0), flush: true)) {
@@ -854,7 +1038,34 @@ class AxiomRuntimeIo implements AxiomRuntime {
           retryable: true,
         );
       }
+      if (call.isWebSocket && !richError.isCancelled && _wsRuntimeTooOld) {
+        richError = AxiomError(
+          stage: richError.stage,
+          category: richError.category,
+          code: richError.code,
+          message:
+              'WebSocket failed on a runtime without the WebSocket fixes '
+              '(published 0.148.6 ABI: the upgrade carries no request '
+              'headers, auth or Origin, and messages go as binary frames; '
+              'needs axiom-runtime with axiom_call_with_options, flutter/r2 '
+              'or later): ${richError.message}',
+          retryable: richError.retryable,
+          details: richError.details,
+          failureCode: richError.failureCode,
+          failurePayload: richError.failurePayload,
+        );
+      }
       _logTransaction('IN', requestId, 'error ${richError.message}');
+      if (call.retryAuth != null &&
+          !call.abandoned &&
+          (richError.category == ErrorCategory.auth ||
+              richError.code is st.HttpStatus &&
+                  (richError.code as st.HttpStatus).code == 401)) {
+        // Published-runtime fallback: ask the provider again and re-issue
+        // the call when this request's Complete arrives.
+        call.authRetryPending = true;
+        return;
+      }
       if (!richError.isCancelled && (!call.abandoned || call.timedOut)) {
         _reportError(richError, call.namespace, call.endpointId, requestId);
       }
@@ -862,7 +1073,9 @@ class AxiomRuntimeIo implements AxiomRuntime {
       return;
     }
 
-    if (data.isNotEmpty) {
+    // A successful empty body (204, void endpoints) is still a success:
+    // emit it (null data downstream) as web does, or mutations never settle.
+    if (data.isNotEmpty || eventTypeValue == EventType.networkSuccess) {
       controller.add(
         AxiomState.success(
           data,
@@ -879,6 +1092,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
   void _finishCall(int requestId) {
     final call = _calls.remove(requestId);
     call?.timeout?.cancel();
+    if (call != null) _retriedCalls.remove(call.publicId);
   }
 
   void _reportError(
@@ -1068,6 +1282,13 @@ class AxiomRuntimeIo implements AxiomRuntime {
     }
     final future = _initialize(config, assetLoader);
     _initResultFuture = future;
+    // A failed initialize is not cached (F15): the next call retries.
+    // Contracts that already loaded are idempotent to load again.
+    future.then((r) {
+      if (!r.ok && identical(_initResultFuture, future)) {
+        _initResultFuture = null;
+      }
+    });
     return future;
   }
 
@@ -1224,6 +1445,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
         status == FfiError.success || status == FfiError.successUnverified;
     if (ok) {
       _loadedNamespaces.add(namespace);
+      _readEndpointAuth(namespace, contractBytes);
       if (_setNamespaceTokenFfi != null &&
           (_namespaceTokens[namespace] ?? _globalToken) != null) {
         _applyTokensFor(namespace);
@@ -1267,7 +1489,8 @@ class AxiomRuntimeIo implements AxiomRuntime {
   }) {
     final requestId = _nextRequestId++;
     final controller = StreamController<AxiomState<Uint8List>>.broadcast();
-    final call = _Call(controller, namespace, endpointId);
+    final call = _Call(controller, namespace, endpointId, requestId)
+      ..isWebSocket = method.toUpperCase() == 'WS';
     _calls[requestId] = call;
     controller.add(AxiomState.loading());
 
@@ -1295,6 +1518,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
     }
 
     void dispatch(Map<String, String>? sendHeaders) {
+      final requestId = call.nativeId;
       if (!identical(_calls[requestId], call)) return; // cancelled meanwhile
       call.dispatched = true;
       if (_purgedNs.isNotEmpty &&
@@ -1363,7 +1587,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
         );
       });
 
-      if (callStatus == 0) _eventControl?.send('start');
+      if (callStatus == 0) _eventControl?.send(['start', requestId]);
       if (callStatus != 0) {
         final err = AxiomError(
           stage: ErrorStage.requestBuild,
@@ -1376,29 +1600,63 @@ class AxiomRuntimeIo implements AxiomRuntime {
           retryable: false,
         );
         _calls.remove(requestId);
-        _reportError(err, namespace, endpointId, requestId);
+        _retriedCalls.remove(call.publicId);
+        _reportError(err, namespace, endpointId, call.publicId);
         // Deliver after the caller attached its listener.
         scheduleMicrotask(() {
           controller.add(AxiomState.error(err));
           controller.close();
         });
-      } else if (timeout != null && !nativeTimeout) {
+      } else if (timeout != null && !nativeTimeout && call.timeout == null) {
         // Runtime without axiom_call_with_options: timer + cancel.
         call.timeout = Timer(timeout, () {
-          if (!_calls.containsKey(requestId)) return;
+          if (!identical(_calls[call.nativeId], call)) return;
           call.timedOut = true;
-          if (!cancel(requestId)) call.timedOut = false;
+          if (!cancel(call.publicId)) call.timedOut = false;
         });
       }
+    }
+
+    // Published runtime (no axiom_register_auth_provider_v2): it never asks
+    // the provider and only reads tokens stored with axiom_set_auth_token.
+    // Ask the provider for every auth method of the endpoint that has no
+    // explicit token, store the answers, then issue the call; on an auth
+    // failure ask again and re-issue once.
+    final fallbackMethods = _providerFallbackMethods(namespace, endpointId);
+    if (fallbackMethods.isNotEmpty) {
+      Future<void> fill() async {
+        for (final m in fallbackMethods) {
+          String? token;
+          try {
+            token = await _authProvider?.call(namespace, m);
+          } catch (_) {}
+          token ??= _namespaceTokens[namespace] ?? _globalToken;
+          if (token != null && token.isNotEmpty) {
+            _setNativeToken(namespace, m, token);
+            _providerStoredTokens.add((namespace, m));
+          }
+        }
+      }
+
+      call.retryAuth = () {
+        final newId = _nextRequestId++;
+        call.nativeId = newId;
+        call.dispatched = false;
+        _calls[newId] = call;
+        _retriedCalls[call.publicId] = call;
+        fill().whenComplete(() => dispatch(effectiveHeaders));
+      };
+      fill().whenComplete(() => dispatch(effectiveHeaders));
+      return AxiomStreamResponse(requestId, controller.stream);
     }
 
     // Explicit namespace-wide / global token: sent as an Authorization header
     // because backend-profile contracts publish no client auth metadata (see
     // internal/auth_headers.dart). Contracts whose auth methods were
     // registered get the token through the runtime instead.
-    final usesRuntimeAuth = AxiomContractMetadata.authMethodsFor(
-      namespace,
-    ).isNotEmpty;
+    final usesRuntimeAuth =
+        AxiomContractMetadata.authMethodsFor(namespace).isNotEmpty ||
+        (_endpointAuth[namespace]?.containsKey(endpointId) ?? false);
     final explicitToken = _namespaceTokens[namespace] ?? _globalToken;
     final provider = _authProvider;
     if (usesRuntimeAuth ||
@@ -1435,15 +1693,19 @@ class AxiomRuntimeIo implements AxiomRuntime {
     required T Function(dynamic json) decoder,
     AxiomCallOptions? options,
   }) {
-    final key = AxiomQueryKey.build(
+    // Headers and timeout are part of the key (F7): a call that differs
+    // only there must not join another call's request.
+    String keyFor(Map<String, String> customHeaders) => AxiomQueryKey.build(
       endpoint: '${namespace}_$endpointId',
       args: args,
+      headers: {...?headers, ...?options?.headers, ...customHeaders},
+      timeout: options?.timeout,
     );
 
-    return AxiomQuery(key, (customHeaders) {
+    return AxiomQuery(keyFor(const {}), (customHeaders) {
       final mergedHeaders = {...?headers, ...customHeaders};
       return AxiomQueryManager().watchRaw<T>(
-        key,
+        keyFor(customHeaders),
         null,
         namespace: namespace,
         endpointId: endpointId,
@@ -1464,7 +1726,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
           options: options,
         ),
       );
-    }, runtime: this);
+    }, runtime: this, keyForHeaders: keyFor);
   }
 
   @override
@@ -1638,10 +1900,12 @@ class AxiomRuntimeIo implements AxiomRuntime {
 
   @override
   bool cancel(int requestId) {
-    final pending = _calls[requestId];
+    final pending = _retriedCalls[requestId] ?? _calls[requestId];
+    if (pending != null) requestId = pending.nativeId;
     if (pending != null && !pending.dispatched) {
       // Still waiting for the auth provider: never reaches the runtime.
       _calls.remove(requestId);
+      _retriedCalls.remove(pending.publicId);
       pending.controller
         ..add(
           AxiomState.error(
@@ -1652,13 +1916,43 @@ class AxiomRuntimeIo implements AxiomRuntime {
       return true;
     }
     pending?.abandoned = true;
+    pending?.retryAuth = null;
     final fn = _cancelFfi;
     if (fn == null || requestId == 0) return false;
+    var ok = false;
     try {
-      return fn(requestId) == FfiError.success;
+      ok = fn(requestId) == FfiError.success;
     } catch (_) {
-      return false;
+      ok = false;
     }
+    if (ok || pending == null || pending.controller.isClosed) return ok;
+    // Dart still sees the request in flight, but the runtime does not know
+    // it (yet or any more): its task already finished with the Complete not
+    // delivered yet, or it is not registered yet. Cancel on the Dart side
+    // (later runtime events for this id are dropped) and retry the native
+    // cancel once after the next pump so an unregistered task is aborted.
+    final nativeId = requestId;
+    _finishCall(nativeId);
+    var err = parseRuntimeError(FfiError.cancelled, Uint8List(0));
+    if (pending.timedOut) {
+      err = AxiomError(
+        stage: ErrorStage.networkReceive,
+        category: ErrorCategory.timeout,
+        code: const NetworkTimeout(),
+        message: 'Request timed out (per-call timeout)',
+        retryable: true,
+      );
+      _reportError(err, pending.namespace, pending.endpointId, pending.publicId);
+    }
+    pending.controller
+      ..add(AxiomState.error(err))
+      ..close();
+    Timer(const Duration(milliseconds: 5), () {
+      try {
+        fn(nativeId);
+      } catch (_) {}
+    });
+    return true;
   }
 
   /// Closes every Dart-side call stream with a [Cancelled] error (used when
@@ -1666,6 +1960,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
   void _closeAllCalls(String message) {
     final pending = Map.of(_calls);
     _calls.clear();
+    _retriedCalls.clear();
     for (final c in pending.values) {
       c.timeout?.cancel();
       if (c.controller.isClosed) continue;
@@ -1688,9 +1983,14 @@ class AxiomRuntimeIo implements AxiomRuntime {
   Future<void> resetSession() async {
     // axiom_reset_session aborts in-flight tasks and drains queued events
     // without delivering a Cancelled/Complete pair, so close streams here.
-    _resetSessionFfi?.call();
-    // Reset drains queued events without Complete: stop the pump.
-    _eventControl?.send('reset');
+    final reset = _resetSessionFfi;
+    if (reset != null) {
+      reset();
+      // Reset drains queued events without Complete: forget those ids.
+      _eventControl?.send('reset');
+    }
+    // Without axiom_reset_session the old requests keep running natively:
+    // keep pumping until their Completes arrive (ids stay tracked).
     _closeAllCalls('Request cancelled by resetSession');
     // Let the Cancelled events reach query listeners before disposing.
     await Future<void>.delayed(Duration.zero);
