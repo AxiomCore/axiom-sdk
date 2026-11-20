@@ -1,0 +1,471 @@
+{
+  "platform": "web",
+  "baseUrl": "http://127.0.0.1:8791",
+  "pass": 26,
+  "fail": 16,
+  "skip": 23,
+  "checks": [
+    {
+      "name": "unary.get_path_query",
+      "feature": "unary",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 70
+    },
+    {
+      "name": "unary.get_optional_query_omitted",
+      "feature": "unary",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 109
+    },
+    {
+      "name": "unary.post_json",
+      "feature": "unary",
+      "outcome": "FAIL",
+      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_input\",\"message\":\"the contract request body must be an object\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:nv')",
+      "ms": 80
+    },
+    {
+      "name": "unary.put_json",
+      "feature": "unary",
+      "outcome": "FAIL",
+      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_input\",\"message\":\"the contract request body must be an object\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:nv')",
+      "ms": 46
+    },
+    {
+      "name": "unary.delete",
+      "feature": "unary",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 63
+    },
+    {
+      "name": "unary.bytes_body",
+      "feature": "unary",
+      "outcome": "FAIL",
+      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:nv')",
+      "ms": 73
+    },
+    {
+      "name": "types.scalars",
+      "feature": "models",
+      "outcome": "FAIL",
+      "message": "expected data, got error [ErrorStage.deserialize::ErrorCategory.serialization] TypeError: \"AQID\": type 'String' is not a subtype of type 'List<dynamic>' (Code: Instance of 'minified:NA')",
+      "ms": 41
+    },
+    {
+      "name": "types.collections_nested_optional",
+      "feature": "models",
+      "outcome": "FAIL",
+      "message": "expected data, got error [ErrorStage.deserialize::ErrorCategory.serialization] TypeError: \"AQID\": type 'String' is not a subtype of type 'List<dynamic>' (Code: Instance of 'minified:NA')",
+      "ms": 0
+    },
+    {
+      "name": "types.enum_field",
+      "feature": "models",
+      "outcome": "FAIL",
+      "message": "expected data, got error [ErrorStage.deserialize::ErrorCategory.serialization] TypeError: \"AQID\": type 'String' is not a subtype of type 'List<dynamic>' (Code: Instance of 'minified:NA')",
+      "ms": 91
+    },
+    {
+      "name": "types.enum_generated_type",
+      "feature": "generator",
+      "outcome": "SKIP",
+      "message": "pending: generator unit (enum rule emitted as String, not a Dart enum)",
+      "ms": 0
+    },
+    {
+      "name": "types.union",
+      "feature": "generator",
+      "outcome": "SKIP",
+      "message": "pending: backend profile has no union type (CLI 0.156.0); see fixtures/README.md",
+      "ms": 0
+    },
+    {
+      "name": "failure.typed_409_status",
+      "feature": "failures",
+      "outcome": "FAIL",
+      "message": "HTTP status (error: [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:nv')): expected <409>, got <400>",
+      "ms": 81
+    },
+    {
+      "name": "failure.typed_409_payload",
+      "feature": "failures",
+      "outcome": "FAIL",
+      "message": "error carries neither code nor payload: [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:nv') / {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}}",
+      "ms": 24
+    },
+    {
+      "name": "failure.typed_class",
+      "feature": "failures",
+      "outcome": "SKIP",
+      "message": "pending: f1/generator (AxiomError.failureCode, failurePayload, generated Conflict failure)",
+      "ms": 0
+    },
+    {
+      "name": "failure.success_path",
+      "feature": "failures",
+      "outcome": "FAIL",
+      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"invalid_json\",\"message\":\"body is not valid JSON\",\"path\":\"body\",\"status\":400}} (Code: Instance of 'minified:nv')",
+      "ms": 58
+    },
+    {
+      "name": "cache.network_only",
+      "feature": "cache",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 27
+    },
+    {
+      "name": "cache.cache_first",
+      "feature": "cache",
+      "outcome": "FAIL",
+      "message": "source of 2nd call: expected <AxiomSource.cache>, got <AxiomSource.network>",
+      "ms": 15
+    },
+    {
+      "name": "cache.network_first",
+      "feature": "cache",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 15
+    },
+    {
+      "name": "cache.stale_while_revalidate",
+      "feature": "cache",
+      "outcome": "FAIL",
+      "message": "first emitted source of 2nd call: expected <AxiomSource.cache>, got <AxiomSource.network>",
+      "ms": 63
+    },
+    {
+      "name": "cache.identity_invalidates",
+      "feature": "cache",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 95
+    },
+    {
+      "name": "cache.forced_refresh",
+      "feature": "cache",
+      "outcome": "SKIP",
+      "message": "pending: f1 (query.refresh(force: true) -> x-axiom-cache-mode: refresh)",
+      "ms": 0
+    },
+    {
+      "name": "cache.set_get_query_data",
+      "feature": "cache",
+      "outcome": "SKIP",
+      "message": "pending: f1 (setQueryData, getCachedQueryData)",
+      "ms": 0
+    },
+    {
+      "name": "cache.clear_purge",
+      "feature": "cache",
+      "outcome": "SKIP",
+      "message": "pending: f1 (clearCache, purgeCache, invalidate(cacheIdentity))",
+      "ms": 0
+    },
+    {
+      "name": "retry.policy_success",
+      "feature": "retry",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 15
+    },
+    {
+      "name": "retry.on_503",
+      "feature": "retry",
+      "outcome": "SKIP",
+      "message": "pending: fixture cannot fail transiently (managed code is stateless); needs a fault-injecting proxy",
+      "ms": 0
+    },
+    {
+      "name": "auth.bearer_missing_is_401",
+      "feature": "auth",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 22
+    },
+    {
+      "name": "auth.bearer_token",
+      "feature": "auth",
+      "outcome": "FAIL",
+      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"unauthenticated\",\"message\":\"verified identity required\",\"path\":\"authorization\",\"status\":401}} (Code: Instance of 'minified:nv')",
+      "ms": 1
+    },
+    {
+      "name": "auth.api_key_header",
+      "feature": "auth",
+      "outcome": "FAIL",
+      "message": "expected data, got error [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"missing_parameter\",\"message\":\"required input is missing\",\"path\":\"key\",\"status\":400}} (Code: Instance of 'minified:nv')",
+      "ms": 55
+    },
+    {
+      "name": "auth.api_key_header_wrong_is_401",
+      "feature": "auth",
+      "outcome": "FAIL",
+      "message": "status (error: [ErrorStage.networkReceive::ErrorCategory.server] {\"error\":{\"code\":\"missing_parameter\",\"message\":\"required input is missing\",\"path\":\"key\",\"status\":400}} (Code: Instance of 'minified:nv')): expected <401>, got <400>",
+      "ms": 32
+    },
+    {
+      "name": "auth.api_key_query",
+      "feature": "auth",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 52
+    },
+    {
+      "name": "auth.namespace_global_token",
+      "feature": "auth",
+      "outcome": "SKIP",
+      "message": "pending: f1 (namespace-wide and global token setters)",
+      "ms": 0
+    },
+    {
+      "name": "auth.provider_refresh",
+      "feature": "auth",
+      "outcome": "SKIP",
+      "message": "pending: f1 (setAuthProvider -> axiom_register_auth_provider)",
+      "ms": 0
+    },
+    {
+      "name": "auth.cookie_session",
+      "feature": "auth",
+      "outcome": "SKIP",
+      "message": "pending: fixture uses JWT; deployment allows one auth provider",
+      "ms": 0
+    },
+    {
+      "name": "stream.sse",
+      "feature": "streams",
+      "outcome": "FAIL",
+      "message": "expected data, got error [ErrorStage.deserialize::ErrorCategory.serialization] FormatException: SyntaxError: Unexpected token 'i', \"id: t1\ndat\"... is not valid JSON (Code: Instance of 'minified:NA')",
+      "ms": 26
+    },
+    {
+      "name": "stream.chunked_ndjson",
+      "feature": "streams",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 15
+    },
+    {
+      "name": "stream.websocket_echo",
+      "feature": "streams",
+      "outcome": "FAIL",
+      "message": "expected data, got error [ErrorStage.runtime::ErrorCategory.network] {\"error\": \"WebSocket Error\"} (Code: Instance of 'minified:VN')",
+      "ms": 16
+    },
+    {
+      "name": "stream.typed_channel",
+      "feature": "streams",
+      "outcome": "SKIP",
+      "message": "pending: f1/generator (AxiomChannel<Send, Receive> with reconnect policy)",
+      "ms": 0
+    },
+    {
+      "name": "runtime.version_handshake",
+      "feature": "runtime",
+      "outcome": "SKIP",
+      "message": "pending: f1 (AxiomRuntimeInfo abi/data/contract-reader versions)",
+      "ms": 0
+    },
+    {
+      "name": "runtime.init_result",
+      "feature": "runtime",
+      "outcome": "SKIP",
+      "message": "pending: f1 (idempotent init returning AxiomInitResult)",
+      "ms": 0
+    },
+    {
+      "name": "runtime.contract_locked_load",
+      "feature": "runtime",
+      "outcome": "SKIP",
+      "message": "pending: f1 (AxiomContractConfig signature/publicKey/sha256)",
+      "ms": 0
+    },
+    {
+      "name": "runtime.cancel",
+      "feature": "runtime",
+      "outcome": "SKIP",
+      "message": "pending: f1 (AxiomRuntime.cancel, AxiomQuery.cancel)",
+      "ms": 0
+    },
+    {
+      "name": "runtime.reset_session",
+      "feature": "runtime",
+      "outcome": "SKIP",
+      "message": "pending: f1 (resetSession)",
+      "ms": 0
+    },
+    {
+      "name": "runtime.shutdown",
+      "feature": "runtime",
+      "outcome": "SKIP",
+      "message": "pending: f1 (shutdown clears callback)",
+      "ms": 0
+    },
+    {
+      "name": "runtime.call_options",
+      "feature": "runtime",
+      "outcome": "SKIP",
+      "message": "pending: f1 (AxiomCallOptions timeout/headers/cacheMode)",
+      "ms": 0
+    },
+    {
+      "name": "runtime.error_listener",
+      "feature": "runtime",
+      "outcome": "SKIP",
+      "message": "pending: f1 (global onError listener)",
+      "ms": 0
+    },
+    {
+      "name": "runtime.extensions",
+      "feature": "runtime",
+      "outcome": "SKIP",
+      "message": "pending: f1 (loadExtension/invokeExtension/lifecycle/audit, native only)",
+      "ms": 0
+    },
+    {
+      "name": "runtime.base_url_override",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 62
+    },
+    {
+      "name": "c.version_handshake",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 0
+    },
+    {
+      "name": "c.init_result_idempotent",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 28
+    },
+    {
+      "name": "c.locked_load_rejects_bad_hash",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 1
+    },
+    {
+      "name": "c.cancel",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 53
+    },
+    {
+      "name": "c.cancel_websocket",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 301
+    },
+    {
+      "name": "c.call_options_timeout",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 14
+    },
+    {
+      "name": "c.runtime_cache_first",
+      "feature": "cache",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 31
+    },
+    {
+      "name": "c.forced_refresh_header",
+      "feature": "cache",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 63
+    },
+    {
+      "name": "c.invalidate_cache_identity",
+      "feature": "cache",
+      "outcome": "SKIP",
+      "message": "runtime has no cache-invalidate export yet (needs unit r); Dart refetch of active queries only",
+      "ms": 48
+    },
+    {
+      "name": "c.clear_cache",
+      "feature": "cache",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 175
+    },
+    {
+      "name": "c.set_get_query_data",
+      "feature": "cache",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 0
+    },
+    {
+      "name": "c.error_listener",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 63
+    },
+    {
+      "name": "c.typed_failure_fields",
+      "feature": "failures",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 0
+    },
+    {
+      "name": "c.namespace_global_token",
+      "feature": "auth",
+      "outcome": "SKIP",
+      "message": "setters run without error; the fixture contract carries no endpoint auth metadata (\"auth\": null), so no token is injected on any platform",
+      "ms": 0
+    },
+    {
+      "name": "c.auth_provider",
+      "feature": "auth",
+      "outcome": "SKIP",
+      "message": "provider registered; not exercised because the fixture contract has no endpoint auth metadata (web asks the provider before dispatch for endpoints that declare auth methods)",
+      "ms": 0
+    },
+    {
+      "name": "c.extensions_unsupported_on_web",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 0
+    },
+    {
+      "name": "c.reset_session",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 28
+    },
+    {
+      "name": "c.shutdown_reinitialize",
+      "feature": "runtime",
+      "outcome": "PASS",
+      "message": "",
+      "ms": 96
+    }
+  ],
+  "build": {
+    "mode": "release",
+    "baseHref": "/app/",
+    "csp": true,
+    "compiler": "dart2js"
+  },
+  "cspViolations": 0
+}
