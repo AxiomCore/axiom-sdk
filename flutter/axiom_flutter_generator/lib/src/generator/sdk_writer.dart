@@ -578,6 +578,37 @@ class SdkWriter {
     _writeDoc(b, e);
     b.writeln('  AxiomQuery<$rt> ${e.dartName}(${_signature(e, extra: extra)}) {');
     final parts = _requestParts(b, e, idempotency: idem);
+    if ((e.streaming == 'sse' || e.streaming == 'http_stream') && !e.isMutation) {
+      _usesStreams = true;
+      final bodyIdx = parts.indexWhere((p) => p.startsWith('body: '));
+      String? body;
+      if (bodyIdx >= 0) body = parts.removeAt(bodyIdx).substring('body: '.length);
+      final hIdx = parts.indexWhere((p) => p.startsWith('headers: '));
+      final h = parts[hIdx].substring('headers: '.length);
+      parts[hIdx] = h.endsWith('?? headers')
+          ? 'headers: {...($h), ...extra}'
+          : 'headers: {...?($h), ...extra}';
+      b.writeln('    return _streamQuery<$rt>(');
+      b.writeln("      '\${_namespace}_${e.id}_stream_\${jsonEncode(${_argsMap(e)})}',");
+      b.writeln('      _runtime,');
+      b.writeln('      (extra) => _runtime.callStream(');
+      b.writeln('        namespace: _namespace,');
+      b.writeln('        endpointId: ${e.id},');
+      b.writeln('        method: ${GeneratorUtils.str(e.method)},');
+      b.writeln('        path: ${GeneratorUtils.str(e.path)},');
+      for (final p in parts) {
+        b.writeln('        $p,');
+      }
+      b.writeln(body == null
+          ? '        requestBytes: Uint8List(0),'
+          : '        requestBytes: _utf8Bytes($body),');
+      b.writeln('        options: options,');
+      b.writeln('      ),');
+      b.writeln('      ${m.decodeFn(e.returnType)},');
+      b.writeln('    );');
+      b.writeln('  }');
+      return;
+    }
     final call = e.isMutation ? 'sendMutation' : 'send';
     final invalidated = <int>{
       for (final i in e.invalidates) ...?identities[i],
@@ -745,6 +776,45 @@ Uint8List _utf8Bytes(String? text) =>
     }
     if (_usesStreams) {
       b.write(r'''
+
+/// An [AxiomQuery] over a streaming endpoint: one success state per frame.
+AxiomQuery<T> _streamQuery<T>(
+  String key,
+  AxiomRuntime runtime,
+  AxiomStreamResponse Function(Map<String, String> extra) open,
+  T Function(Object?) decode,
+) {
+  return AxiomQuery<T>(key, (extra) {
+    final response = open(extra);
+    final states = response.stream.expand<AxiomState<T>>((state) {
+      final error = state.error;
+      if (error != null) return [AxiomState<T>.error(error)];
+      final data = state.data;
+      if (data == null || data.isEmpty) {
+        return state.isLoading ? [AxiomState<T>.loading()] : const [];
+      }
+      try {
+        return [
+          for (final frame in _splitFrames(utf8.decode(data)))
+            AxiomState<T>.success(decode(frame), state.source, isStreaming: true),
+        ];
+      } on FormatException catch (e) {
+        return [
+          AxiomState<T>.error(
+            AxiomError(
+              stage: ErrorStage.deserialize,
+              category: ErrorCategory.serialization,
+              code: const CodecError(),
+              message: e.message,
+              retryable: false,
+            ),
+          ),
+        ];
+      }
+    }).asBroadcastStream();
+    return AxiomActiveStream<T>(response.requestId, states);
+  }, runtime: runtime);
+}
 
 /// Decodes stream chunks (JSON, NDJSON or SSE `data:` lines) into frames.
 Stream<T> _frames<T>(

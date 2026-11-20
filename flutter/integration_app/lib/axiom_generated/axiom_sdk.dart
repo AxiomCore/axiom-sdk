@@ -274,16 +274,20 @@ class FixtureModule {
 
   /// `GET /stream/chunked` (http_stream).
   AxiomQuery<models.Tick> chunked({String? last, AxiomCallOptions? options}) {
-    return _runtime.send<models.Tick>(
-      namespace: _namespace,
-      endpointId: 4017861805,
-      method: 'GET',
-      path: '/stream/chunked',
-      headers: options?.mergeHeaders(null),
-      queryParams: {if (last case final v?) 'last': v},
-      args: <String, dynamic>{if (last case final v?) 'last': v},
-      decoder: models.Tick.fromJson,
-      options: options,
+    return _streamQuery<models.Tick>(
+      '${_namespace}_4017861805_stream_${jsonEncode(<String, dynamic>{if (last case final v?) 'last': v})}',
+      _runtime,
+      (extra) => _runtime.callStream(
+        namespace: _namespace,
+        endpointId: 4017861805,
+        method: 'GET',
+        path: '/stream/chunked',
+        headers: {...?(options?.mergeHeaders(null)), ...extra},
+        queryParams: {if (last case final v?) 'last': v},
+        requestBytes: Uint8List(0),
+        options: options,
+      ),
+      models.Tick.fromJson,
     );
   }
 
@@ -443,17 +447,19 @@ class FixtureModule {
     final headers = <String, String>{
       if (lastEventId case final v?) 'last-event-id': v,
     };
-    return _runtime.send<models.Tick>(
-      namespace: _namespace,
-      endpointId: 78174837,
-      method: 'GET',
-      path: '/stream/sse',
-      headers: options?.mergeHeaders(headers) ?? headers,
-      args: <String, dynamic>{
-        if (lastEventId case final v?) 'last-event-id': v,
-      },
-      decoder: models.Tick.fromJson,
-      options: options,
+    return _streamQuery<models.Tick>(
+      '${_namespace}_78174837_stream_${jsonEncode(<String, dynamic>{if (lastEventId case final v?) 'last-event-id': v})}',
+      _runtime,
+      (extra) => _runtime.callStream(
+        namespace: _namespace,
+        endpointId: 78174837,
+        method: 'GET',
+        path: '/stream/sse',
+        headers: {...(options?.mergeHeaders(headers) ?? headers), ...extra},
+        requestBytes: Uint8List(0),
+        options: options,
+      ),
+      models.Tick.fromJson,
     );
   }
 
@@ -672,6 +678,49 @@ AxiomQuery<T> _onSuccess<T>(
     isMutation: true,
     runtime: runtime,
   );
+}
+
+/// An [AxiomQuery] over a streaming endpoint: one success state per frame.
+AxiomQuery<T> _streamQuery<T>(
+  String key,
+  AxiomRuntime runtime,
+  AxiomStreamResponse Function(Map<String, String> extra) open,
+  T Function(Object?) decode,
+) {
+  return AxiomQuery<T>(key, (extra) {
+    final response = open(extra);
+    final states = response.stream.expand<AxiomState<T>>((state) {
+      final error = state.error;
+      if (error != null) return [AxiomState<T>.error(error)];
+      final data = state.data;
+      if (data == null || data.isEmpty) {
+        return state.isLoading ? [AxiomState<T>.loading()] : const [];
+      }
+      try {
+        return [
+          for (final frame in _splitFrames(utf8.decode(data)))
+            AxiomState<T>.success(
+              decode(frame),
+              state.source,
+              isStreaming: true,
+            ),
+        ];
+      } on FormatException catch (e) {
+        return [
+          AxiomState<T>.error(
+            AxiomError(
+              stage: ErrorStage.deserialize,
+              category: ErrorCategory.serialization,
+              code: const CodecError(),
+              message: e.message,
+              retryable: false,
+            ),
+          ),
+        ];
+      }
+    }).asBroadcastStream();
+    return AxiomActiveStream<T>(response.requestId, states);
+  }, runtime: runtime);
 }
 
 /// Decodes stream chunks (JSON, NDJSON or SSE `data:` lines) into frames.

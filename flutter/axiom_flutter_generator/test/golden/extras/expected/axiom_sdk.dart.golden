@@ -38,8 +38,11 @@ abstract final class AxiomDefaultConfig {
 
 /// Entry point of the generated client.
 class AxiomSdk {
-  AxiomSdk._(this.runtime, this.initResult)
-    : extras = ExtrasModule._(runtime, 'extras');
+  /// Wraps an already initialized [runtime] (tests, custom start-up).
+  AxiomSdk.fromRuntime(
+    this.runtime, [
+    this.initResult = const AxiomInitResult(ok: true),
+  ]) : extras = ExtrasModule._(runtime, 'extras');
 
   final AxiomRuntime runtime;
 
@@ -70,7 +73,7 @@ class AxiomSdk {
     runtime.debug = cfg.debug;
     final result = await runtime.initialize(cfg, assetLoader: assetLoader);
     result.requireOk();
-    return AxiomSdk._(runtime, result);
+    return AxiomSdk.fromRuntime(runtime, result);
   }
 }
 
