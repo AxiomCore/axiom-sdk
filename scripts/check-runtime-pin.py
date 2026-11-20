@@ -6,6 +6,9 @@ Checks:
   * both podspecs read the pin file and carry no literal version or digest
   * swift/Package.swift binaryTarget url and checksum match the Apple pin
   * the Apple url names the pinned runtime version
+  * variants: axiom_flutter bundles the "lean" Android libraries and wasm,
+    axiom_flutter_extensions bundles the "full" Android libraries
+    (libaxiom_runtime_full.so); every bundled library matches its pinned sha256
   * with --download: the Apple archive digest equals the pinned sha256
 
 Exit status 0 when all checks pass, 1 otherwise.
@@ -25,6 +28,7 @@ PODSPECS = [
     ROOT / "flutter/axiom_flutter/ios/axiom_flutter.podspec",
     ROOT / "flutter/axiom_flutter/macos/axiom_flutter.podspec",
 ]
+EXT_PIN = ROOT / "flutter/axiom_flutter_extensions/runtime-pin.json"
 PACKAGE_SWIFT = ROOT / "swift/Package.swift"
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -81,6 +85,25 @@ def main():
             continue
         actual = hashlib.sha256((wasm_dir / name).read_bytes()).hexdigest()
         check(actual == expected, f"bundled {name} matches wasm.{key}")
+
+    def check_libs(section, jni, name, variant, label):
+        if section.get("distribution") != "bundled":
+            return
+        check(section.get("variant") == variant, f"{label} android.variant is {variant!r}")
+        for abi, entry in sorted((section.get("libraries") or {}).items()):
+            check(entry.get("variant") == variant, f"{label} {abi} variant is {variant!r}")
+            lib = jni / abi / name
+            ok = lib.exists() and hashlib.sha256(lib.read_bytes()).hexdigest() == entry.get("sha256")
+            check(ok, f"{lib.relative_to(ROOT)} matches pinned sha256")
+
+    check_libs(pin.get("android") or {}, ROOT / "flutter/axiom_flutter/android/src/main/jniLibs",
+               "libaxiom_runtime.so", "lean", "axiom_flutter")
+    if wasm.get("variant") is not None:
+        check(wasm.get("variant") == "lean", "axiom_flutter wasm.variant is 'lean'")
+    if EXT_PIN.exists():
+        ext = json.loads(EXT_PIN.read_bytes())
+        check_libs(ext.get("android") or {}, ROOT / "flutter/axiom_flutter_extensions/android/src/main/jniLibs",
+                   "libaxiom_runtime_full.so", "full", "axiom_flutter_extensions")
 
     if args.download:
         print(f"downloading {apple['url']}")
