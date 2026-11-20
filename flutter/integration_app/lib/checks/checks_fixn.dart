@@ -19,7 +19,7 @@ final List<CheckDef> checksFixn = [
     for (final b in utf8.encode('data: héllo 😀\r\ndata: x\r\n\r\n')) {
       out.addAll(p.feed(Uint8List.fromList([b])).map(utf8.decode));
     }
-    expectEq(out, ['héllo 😀\nx'], 'events');
+    expectEq(out.join('|'), 'héllo 😀\nx', 'events');
   }),
   CheckDef('fixn.query_key_includes_headers', 'runtime', (c) async {
     if (kIsWeb) skip('web query keys: unit h (runtime_web.dart)');
