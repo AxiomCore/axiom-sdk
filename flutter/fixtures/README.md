@@ -105,3 +105,13 @@ CORS allows `http://127.0.0.1:8792`, `http://localhost:8792`, `http://127.0.0.1:
   verbatim. That defeats CSRF and is fixture only. Product findings: (1) cookie-session WebSockets
   cannot carry a real CSRF proof from a browser; (2) bearer-only deployments cannot serve browser
   WebSockets at all.
+- **Variants.** `tool/variant-check.sh` adds `variant mobile(include: ["echo", "everything",
+  "createItem"])` to a scratch copy, builds it with `--variant mobile`, runs the generator with
+  `--variant mobile` and asserts the client has only those endpoints. With CLI 0.156.0 the build
+  fails (exit 2): first `AXSERVER_FAILURE_CONTRACT at authApiKeyHeader: unknown public failure
+  endpoint` (an `exposeFailure` on an excluded endpoint), and with those included,
+  `AXSERVER_AUTHORING at <endpoint>: handle() endpoint is not included in this contract` for every
+  excluded managed endpoint (`exclude:` too; the generator's own golden `extras` fixture fails the
+  same way). `axiom explain --variant mobile` does list only the three endpoints. Product finding:
+  managed backend variants cannot be built. Adding a variant line does not change the default
+  build's bytes (same sha256), so it is safe to add to `main.acore` once the CLI accepts it.
