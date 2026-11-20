@@ -1,0 +1,27 @@
+project(id: "dev.axiomcore.example.todos", version: "1.0.0")
+variant default(include: ["*"])
+
+model Greeting { message: String }
+model GreetingIn { name: String }
+model Todo { id: String title: String done: Bool }
+model TodoIn { title: String }
+
+cors(origins: ["http://localhost:3000", "http://127.0.0.1:3000"], methods: [GET, POST], headers: ["accept", "content-type", "x-axiom-request-id", "x-axiom-cache-mode", "traceparent", "tracestate"], credentials: false, maxAge: 10m)
+
+action hello(kind: ActionKind.query, input: Models.GreetingIn, output: Models.Greeting) {
+  managed { return {message: "Hello, " + Input.name} }
+}
+endpoint hello(method: GET, path: "/hello/{name}") {
+  request { path("name", type: String) }
+  handle(action: Actions.hello, input: {name: Input.path.name})
+  response(type: Models.Greeting)
+}
+
+action createTodo(kind: ActionKind.command, input: Models.TodoIn, output: Models.Todo) {
+  managed { return {id: "todo-1", title: Input.title, done: false} }
+}
+endpoint createTodo(method: POST, path: "/todos") {
+  request { body("title", type: String) }
+  handle(action: Actions.createTodo, input: {title: Input.body.title})
+  response(type: Models.Todo, status: 201)
+}
