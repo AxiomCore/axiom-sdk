@@ -19,11 +19,7 @@ Future<void> roundTrip(AuthStorageAdapter s) async {
   final back = (await s.get(key))!;
   expect(back.refreshToken, 's.r1');
   expect(back.sessionId, 's');
-  expect(
-    back.toString().contains('s.r1'),
-    isFalse,
-    reason: 'no token in toString',
-  );
+  expect(back.toString().contains('s.r1'), isFalse, reason: 'no token in toString');
   await s.remove(key);
   expect(await s.get(key), isNull);
   expect(s.shared, isFalse);
@@ -47,34 +43,24 @@ void main() {
     expect(await s.get('k'), isNull);
   });
 
-  test(
-    'macOS defaults to the legacy keychain (no entitlement); opt-in uses data protection',
-    () {
-      expect(
-        secureStorage().platformStore.mOptions
-            .toMap()["usesDataProtectionKeychain"],
-        'false',
-      );
-      expect(platformStorage(), isA<SecureStorageAdapter>());
-      expect(
-        secureStorage(
-          macOsDataProtectionKeychain: true,
-        ).platformStore.mOptions.toMap()["usesDataProtectionKeychain"],
-        'true',
-      );
-    },
-  );
+  test('macOS defaults to the legacy keychain (no entitlement); opt-in uses data protection', () {
+    expect(secureStorage().platformStore.mOptions.toMap()["usesDataProtectionKeychain"], 'false');
+    expect(platformStorage(), isA<SecureStorageAdapter>());
+    expect(
+      secureStorage(
+        macOsDataProtectionKeychain: true,
+      ).platformStore.mOptions.toMap()["usesDataProtectionKeychain"],
+      'true',
+    );
+  });
 
-  test(
-    'unavailable platform store falls back to memory without throwing',
-    () async {
-      final s = secureStorage(storage: _BrokenStore());
-      expect(s.usingMemoryFallback, isFalse);
-      expect(await s.get('k'), isNull); // restore at startup: no throw
-      expect(s.usingMemoryFallback, isTrue);
-      await roundTrip(s);
-    },
-  );
+  test('unavailable platform store falls back to memory without throwing', () async {
+    final s = secureStorage(storage: _BrokenStore());
+    expect(s.usingMemoryFallback, isFalse);
+    expect(await s.get('k'), isNull); // restore at startup: no throw
+    expect(s.usingMemoryFallback, isTrue);
+    await roundTrip(s);
+  });
 
   test('fallbackToMemory: false rethrows', () async {
     final s = secureStorage(storage: _BrokenStore(), fallbackToMemory: false);
@@ -82,16 +68,11 @@ void main() {
   });
 
   test('sessionStorageAdapter is unavailable off the web', () async {
-    await expectLater(
-      sessionStorageAdapter().get('k'),
-      throwsA(isA<AxiomAuthError>()),
-    );
+    await expectLater(sessionStorageAdapter().get('k'), throwsA(isA<AxiomAuthError>()));
   });
 
   testWidgets('AxiomAuthBuilder follows the session', (tester) async {
-    final auth = AxiomAuth(
-      const AxiomAuthOptions(issuer: 'https://auth.test/p'),
-    );
+    final auth = AxiomAuth(const AxiomAuthOptions(issuer: 'https://auth.test/p'));
     await tester.pumpWidget(
       MaterialApp(
         home: AxiomAuthBuilder(
@@ -113,10 +94,6 @@ void main() {
 /// A platform store that fails like a missing keychain entitlement (-34018).
 class _BrokenStore implements FlutterSecureStorage {
   @override
-  dynamic noSuchMethod(Invocation invocation) => Future<Never>.error(
-    PlatformException(
-      code: '-34018',
-      message: 'A required entitlement is missing',
-    ),
-  );
+  dynamic noSuchMethod(Invocation invocation) =>
+      Future<Never>.error(PlatformException(code: '-34018', message: 'A required entitlement is missing'));
 }

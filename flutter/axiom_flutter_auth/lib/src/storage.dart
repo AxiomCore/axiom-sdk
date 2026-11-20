@@ -3,9 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import 'session_storage_stub.dart'
-    if (dart.library.js_interop) 'session_storage_web.dart'
-    as web_store;
+import 'session_storage_stub.dart' if (dart.library.js_interop) 'session_storage_web.dart' as web_store;
 import 'types.dart';
 
 /// Holds only the refresh record (never the access token).
@@ -29,8 +27,7 @@ class _MemoryStorage extends AuthStorageAdapter {
   @override
   Future<RefreshRecord?> get(String key) async => _slots[key];
   @override
-  Future<void> set(String key, RefreshRecord value) async =>
-      _slots[key] = value;
+  Future<void> set(String key, RefreshRecord value) async => _slots[key] = value;
   @override
   Future<void> remove(String key) async => _slots.remove(key);
 }
@@ -63,9 +60,7 @@ SecureStorageAdapter secureStorage({
   storage ??
       FlutterSecureStorage(
         aOptions: const AndroidOptions(),
-        iOptions: const IOSOptions(
-          accessibility: KeychainAccessibility.first_unlock_this_device,
-        ),
+        iOptions: const IOSOptions(accessibility: KeychainAccessibility.first_unlock_this_device),
         mOptions: MacOsOptions(
           accessibility: KeychainAccessibility.first_unlock_this_device,
           usesDataProtectionKeychain: macOsDataProtectionKeychain,
@@ -90,14 +85,10 @@ class SecureStorageAdapter extends AuthStorageAdapter {
 
   // Keychain and Keystore keys must be plain; the issuer URL is hashed into a
   // stable short name.
-  String _k(String key) =>
-      'axiom_auth.${base64Url.encode(utf8.encode(key)).replaceAll('=', '')}';
+  String _k(String key) => 'axiom_auth.${base64Url.encode(utf8.encode(key)).replaceAll('=', '')}';
 
   /// Runs [op] against the platform store; on failure switches to memory once.
-  Future<T> _guard<T>(
-    Future<T> Function() op,
-    Future<T> Function(_MemoryStorage m) fallback,
-  ) async {
+  Future<T> _guard<T>(Future<T> Function() op, Future<T> Function(_MemoryStorage m) fallback) async {
     final m = _memory;
     if (m != null) return fallback(m);
     try {
@@ -135,14 +126,11 @@ class SecureStorageAdapter extends AuthStorageAdapter {
   }, (m) => m.get(key));
 
   @override
-  Future<void> set(String key, RefreshRecord value) => _guard(
-    () => _s.write(key: _k(key), value: jsonEncode(value.toJson())),
-    (m) => m.set(key, value),
-  );
+  Future<void> set(String key, RefreshRecord value) =>
+      _guard(() => _s.write(key: _k(key), value: jsonEncode(value.toJson())), (m) => m.set(key, value));
 
   @override
-  Future<void> remove(String key) =>
-      _guard(() => _s.delete(key: _k(key)), (m) => m.remove(key));
+  Future<void> remove(String key) => _guard(() => _s.delete(key: _k(key)), (m) => m.remove(key));
 }
 
 /// Web only: the record in `window.sessionStorage` (per tab, survives a
@@ -166,8 +154,7 @@ class _SessionStorage extends AuthStorageAdapter {
   }
 
   @override
-  Future<void> set(String key, RefreshRecord value) async =>
-      web_store.write(key, jsonEncode(value.toJson()));
+  Future<void> set(String key, RefreshRecord value) async => web_store.write(key, jsonEncode(value.toJson()));
 
   @override
   Future<void> remove(String key) async => web_store.delete(key);
@@ -175,8 +162,6 @@ class _SessionStorage extends AuthStorageAdapter {
 
 /// [sessionStorageAdapter] on web, [secureStorage] everywhere else
 /// (legacy keychain on macOS unless [macOsDataProtectionKeychain] is true).
-AuthStorageAdapter platformStorage({
-  bool macOsDataProtectionKeychain = false,
-}) => web_store.isWeb
+AuthStorageAdapter platformStorage({bool macOsDataProtectionKeychain = false}) => web_store.isWeb
     ? sessionStorageAdapter()
     : secureStorage(macOsDataProtectionKeychain: macOsDataProtectionKeychain);

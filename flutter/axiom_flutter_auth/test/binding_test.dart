@@ -14,8 +14,7 @@ import 'package:http/testing.dart';
 const _issuer = 'https://auth.test.invalid/local/p';
 
 String _jwt(int n) {
-  String b64(Object o) =>
-      base64Url.encode(utf8.encode(jsonEncode(o))).replaceAll('=', '');
+  String b64(Object o) => base64Url.encode(utf8.encode(jsonEncode(o))).replaceAll('=', '');
   return '${b64({'alg': 'none'})}.${b64({'sub': 'u', 'iat': 1763640000, 'exp': 4102444800, 'n': n})}.sig';
 }
 
@@ -29,10 +28,7 @@ MockClient _scriptedIssuer() {
         jsonEncode({
           'access_token': _jwt(n),
           'refresh_token': 'r$n',
-          'refresh_expires_at': DateTime.now()
-              .toUtc()
-              .add(const Duration(days: 1))
-              .toIso8601String(),
+          'refresh_expires_at': DateTime.now().toUtc().add(const Duration(days: 1)).toIso8601String(),
           'session': {'id': 's'},
         }),
         200,
@@ -58,32 +54,23 @@ class _Rt implements AxiomRuntime {
   @override
   void clearGlobalAuthToken() => global = null;
   @override
-  void setNamespaceAuthToken({
-    required String namespace,
-    required String token,
-  }) {
+  void setNamespaceAuthToken({required String namespace, required String token}) {
     if (!namespaceSupported) throw UnimplementedError('setNamespaceAuthToken');
     ns[namespace] = token;
   }
 
   @override
   void clearNamespaceAuthToken({required String namespace}) {
-    if (!namespaceSupported)
-      throw UnimplementedError('clearNamespaceAuthToken');
+    if (!namespaceSupported) throw UnimplementedError('clearNamespaceAuthToken');
     ns.remove(namespace);
   }
 
   @override
-  void setAuthToken({
-    required String namespace,
-    required String methodName,
-    required String token,
-  }) => perMethod['$namespace.$methodName'] = token;
+  void setAuthToken({required String namespace, required String methodName, required String token}) =>
+      perMethod['$namespace.$methodName'] = token;
   @override
-  void clearAuthToken({
-    required String namespace,
-    required String methodName,
-  }) => perMethod.remove('$namespace.$methodName');
+  void clearAuthToken({required String namespace, required String methodName}) =>
+      perMethod.remove('$namespace.$methodName');
   @override
   void setAuthProvider(AxiomAuthProvider? p) => provider = p;
   @override
@@ -100,72 +87,45 @@ void main() {
   test('token goes to the bound namespaces only, never global', () async {
     final rt = _Rt();
     rt.ns['cms'] = 'app-set-vendor-key';
-    final auth = AxiomAuth(
-      AxiomAuthOptions(issuer: _issuer, httpClient: _scriptedIssuer()),
-    );
-    final binding = AxiomAuthBinding.attach(
-      auth,
-      runtime: rt,
-      namespaces: const ['api', 'billing'],
-    );
+    final auth = AxiomAuth(AxiomAuthOptions(issuer: _issuer, httpClient: _scriptedIssuer()));
+    final binding = AxiomAuthBinding.attach(auth, runtime: rt, namespaces: const ['api', 'billing']);
     await auth.signInWithPassword('a@example.com', 'pw');
     final t = await auth.accessToken();
     expect(rt.global, isNull, reason: 'binding must never set a global token');
     expect(rt.ns, {'api': t, 'billing': t, 'cms': 'app-set-vendor-key'});
     expect(await rt.provider!('api', 'm'), t);
-    expect(
-      await rt.provider!('cms', 'm'),
-      isNull,
-      reason: 'third-party namespace gets no user token',
-    );
+    expect(await rt.provider!('cms', 'm'), isNull, reason: 'third-party namespace gets no user token');
     expect(await rt.provider!('', ''), isNull);
     await auth.signOut();
     await Future<void>.delayed(Duration.zero);
-    expect(rt.ns, {
-      'cms': 'app-set-vendor-key',
-    }, reason: 'sign-out clears exactly the bound namespaces');
+    expect(rt.ns, {'cms': 'app-set-vendor-key'}, reason: 'sign-out clears exactly the bound namespaces');
     expect(rt.resets, 1);
-    expect(
-      await rt.provider!('cms', 'm'),
-      isNull,
-      reason: 're-registered provider stays scoped',
-    );
+    expect(await rt.provider!('cms', 'm'), isNull, reason: 're-registered provider stays scoped');
     binding.detach();
     expect(rt.provider, isNull);
     auth.dispose();
   });
 
-  test(
-    'namespaces is required and non-empty; authMethods must be in scope',
-    () {
-      final auth = AxiomAuth(
-        AxiomAuthOptions(issuer: _issuer, httpClient: _scriptedIssuer()),
-      );
-      expect(
-        () =>
-            AxiomAuthBinding.attach(auth, runtime: _Rt(), namespaces: const []),
-        throwsArgumentError,
-      );
-      expect(
-        () => AxiomAuthBinding.attach(
-          auth,
-          runtime: _Rt(),
-          namespaces: const ['api'],
-          authMethods: const {
-            'cms': ['bearer'],
-          },
-        ),
-        throwsArgumentError,
-      );
-      auth.dispose();
-    },
-  );
+  test('namespaces is required and non-empty; authMethods must be in scope', () {
+    final auth = AxiomAuth(AxiomAuthOptions(issuer: _issuer, httpClient: _scriptedIssuer()));
+    expect(() => AxiomAuthBinding.attach(auth, runtime: _Rt(), namespaces: const []), throwsArgumentError);
+    expect(
+      () => AxiomAuthBinding.attach(
+        auth,
+        runtime: _Rt(),
+        namespaces: const ['api'],
+        authMethods: const {
+          'cms': ['bearer'],
+        },
+      ),
+      throwsArgumentError,
+    );
+    auth.dispose();
+  });
 
   test('old runtime: per-method fallback for bound namespaces only', () async {
     final rt = _Rt(namespaceSupported: false);
-    final auth = AxiomAuth(
-      AxiomAuthOptions(issuer: _issuer, httpClient: _scriptedIssuer()),
-    );
+    final auth = AxiomAuth(AxiomAuthOptions(issuer: _issuer, httpClient: _scriptedIssuer()));
     AxiomAuthBinding.attach(
       auth,
       runtime: rt,
@@ -189,9 +149,6 @@ void main() {
     expect(AxiomAuthHeaders.explicitTokenFor('', tokens, null), isNull);
     expect(AxiomAuthHeaders.explicitTokenFor('cms', tokens, 'G'), 'G');
     expect(AxiomAuthHeaders.explicitTokenFor('api', tokens, 'G'), 'A');
-    expect(
-      AxiomAuthHeaders.explicitTokenFor('cms', const {'cms': ''}, null),
-      isNull,
-    );
+    expect(AxiomAuthHeaders.explicitTokenFor('cms', const {'cms': ''}, null), isNull);
   });
 }

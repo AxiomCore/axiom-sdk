@@ -28,13 +28,7 @@ import 'types.dart';
 /// `setAuthToken` for every method listed in [authMethods]
 /// (`{namespace: [methodName, ...]}`); its keys must be bound namespaces.
 class AxiomAuthBinding {
-  AxiomAuthBinding._(
-    this.auth,
-    this.runtime,
-    this.namespaces,
-    this.authMethods,
-    this.resetSessionOnSignOut,
-  );
+  AxiomAuthBinding._(this.auth, this.runtime, this.namespaces, this.authMethods, this.resetSessionOnSignOut);
 
   final AxiomAuth auth;
   final AxiomRuntime runtime;
@@ -64,19 +58,11 @@ class AxiomAuthBinding {
   }) {
     final scoped = namespaces.where((n) => n.isNotEmpty).toSet();
     if (scoped.isEmpty) {
-      throw ArgumentError.value(
-        namespaces,
-        'namespaces',
-        'name at least one namespace the access token is meant for',
-      );
+      throw ArgumentError.value(namespaces, 'namespaces', 'name at least one namespace the access token is meant for');
     }
     final stray = authMethods.keys.where((ns) => !scoped.contains(ns));
     if (stray.isNotEmpty) {
-      throw ArgumentError.value(
-        authMethods,
-        'authMethods',
-        'namespaces ${stray.join(', ')} are not in `namespaces`',
-      );
+      throw ArgumentError.value(authMethods, 'authMethods', 'namespaces ${stray.join(', ')} are not in `namespaces`');
     }
     final b = AxiomAuthBinding._(
       auth,
@@ -99,9 +85,7 @@ class AxiomAuthBinding {
   void _registerProvider() {
     try {
       runtime.setAuthProvider(
-        (namespace, methodName) => namespaces.contains(namespace)
-            ? auth.accessToken()
-            : Future.value(null),
+        (namespace, methodName) => namespaces.contains(namespace) ? auth.accessToken() : Future.value(null),
       );
       _providerSet = true;
     } catch (_) {
@@ -145,9 +129,7 @@ class AxiomAuthBinding {
 
   void _onSession(PublicSession s) {
     final signedIn = s.principal != null;
-    final ended =
-        _wasSignedIn &&
-        (s.status == AuthStatus.anonymous || s.status == AuthStatus.expired);
+    final ended = _wasSignedIn && (s.status == AuthStatus.anonymous || s.status == AuthStatus.expired);
     if (s.status == AuthStatus.authenticated || ended) _wasSignedIn = signedIn;
     if (ended && resetSessionOnSignOut) {
       unawaited(_reset());
