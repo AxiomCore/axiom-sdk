@@ -40,7 +40,7 @@ class _BenchApi implements BenchApi {
     try {
       _value = ItemList.fromJson(_result.data!);
     } on Object catch (e, s) {
-      errorLogger?.logError(e, s, _options, _result);
+      errorLogger?.logError(e, s, _options);
       rethrow;
     }
     return _value;
@@ -67,7 +67,7 @@ class _BenchApi implements BenchApi {
     try {
       _value = ItemList.fromJson(_result.data!);
     } on Object catch (e, s) {
-      errorLogger?.logError(e, s, _options, _result);
+      errorLogger?.logError(e, s, _options);
       rethrow;
     }
     return _value;
@@ -94,7 +94,7 @@ class _BenchApi implements BenchApi {
     try {
       _value = Item.fromJson(_result.data!);
     } on Object catch (e, s) {
-      errorLogger?.logError(e, s, _options, _result);
+      errorLogger?.logError(e, s, _options);
       rethrow;
     }
     return _value;
@@ -122,7 +122,7 @@ class _BenchApi implements BenchApi {
     try {
       _value = Item.fromJson(_result.data!);
     } on Object catch (e, s) {
-      errorLogger?.logError(e, s, _options, _result);
+      errorLogger?.logError(e, s, _options);
       rethrow;
     }
     return _value;

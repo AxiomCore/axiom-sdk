@@ -11,6 +11,8 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:axiom_flutter/axiom_flutter.dart';
+// ignore: implementation_imports
+import 'package:axiom_flutter/src/query_manager.dart';
 import 'package:bench_dio_client/bench_dio_client.dart' as rf;
 import 'package:bench_http_client/bench_http_client.dart' as hc;
 import 'package:dio/dio.dart';
@@ -24,7 +26,16 @@ import 'axiom_generated/models.dart' as ax;
 
 const String benchBaseUrl =
     String.fromEnvironment('BENCH_BASE_URL', defaultValue: 'http://127.0.0.1:8851');
-const String benchSelection = String.fromEnvironment('BENCH', defaultValue: 'all');
+const String _benchDefine = String.fromEnvironment('BENCH', defaultValue: 'all');
+
+/// On web `?bench=` in the page URL overrides the define, so one build serves every run.
+String get benchSelection {
+  if (kIsWeb) {
+    final q = Uri.base.queryParameters['bench'];
+    if (q != null && q.isNotEmpty) return q;
+  }
+  return _benchDefine;
+}
 const int benchCalls = int.fromEnvironment('BENCH_CALLS', defaultValue: 200);
 
 String get platformName {
@@ -83,6 +94,25 @@ Future<T> axData<T>(AxiomQuery<T> q) async {
     throw StateError('axiom error: ${s.error}');
   }
   return s.data as T;
+}
+
+/// Like [axData], then drops the SDK's in-memory query for this key so the next identical
+/// call goes to the runtime again. Without this, a repeat call that arrives before the runtime's
+/// Complete event is answered from the Dart query state (see README, "Findings").
+Future<T> axFresh<T>(AxiomQuery<T> q) async {
+  try {
+    return await axData(q);
+  } finally {
+    AxiomQueryManager().remove(q.key);
+  }
+}
+
+Future<AxiomState<T>> settleFresh<T>(AxiomQuery<T> q) async {
+  try {
+    return await settle(q);
+  } finally {
+    AxiomQueryManager().remove(q.key);
+  }
 }
 
 Dio newDio() => Dio(BaseOptions(baseUrl: benchBaseUrl));
@@ -159,7 +189,7 @@ class BenchRunner {
     final httpApi = hc.HttpBenchApi(benchBaseUrl);
     final cases = <String, Map<String, Future<int> Function(int i)>>{
       'small_get_item': {
-        'axiom': (i) async => (await axData(sdk.bench.getItem(id: '${i % 50 + 1}'))).qty,
+        'axiom': (i) async => (await axFresh(sdk.bench.getItem(id: '${i % 50 + 1}'))).qty,
         'dio': (i) async => (await dioApi.getItem('${i % 50 + 1}')).qty,
         'http': (i) async => (await httpApi.getItem('${i % 50 + 1}')).qty,
       },
@@ -169,9 +199,14 @@ class BenchRunner {
         'http': (i) async => (await httpApi.createItem(name: 'n$i', price: 1.5, qty: i)).qty,
       },
       'large_list_1000': {
-        'axiom': (i) async => (await axData(sdk.bench.listItems(n: 1000))).items.length,
+        'axiom': (i) async => (await axFresh(sdk.bench.listItems(n: 1000))).items.length,
         'dio': (i) async => (await dioApi.listItems(1000)).items.length,
         'http': (i) async => (await httpApi.listItems(1000)).items.length,
+      },
+      'large_list_10000': {
+        'axiom': (i) async => (await axFresh(sdk.bench.listItems(n: 10000))).items.length,
+        'dio': (i) async => (await dioApi.listItems(10000)).items.length,
+        'http': (i) async => (await httpApi.listItems(10000)).items.length,
       },
     };
     const warmup = 20;
@@ -204,13 +239,13 @@ class BenchRunner {
     // Axiom: cachedItems is cacheFirst (ttl 10m) in the contract.
     {
       final first = Stopwatch()..start();
-      await axData(sdk.bench.cachedItems(n: n));
+      await axFresh(sdk.bench.cachedItems(n: n));
       first.stop();
       final samples = <double>[];
       final sources = <String, int>{};
       for (var i = 0; i < reps; i++) {
         final sw = Stopwatch()..start();
-        final s = await settle(sdk.bench.cachedItems(n: n));
+        final s = await settleFresh(sdk.bench.cachedItems(n: n));
         sw.stop();
         samples.add(_ms(sw));
         sources[s.source.name] = (sources[s.source.name] ?? 0) + 1;
