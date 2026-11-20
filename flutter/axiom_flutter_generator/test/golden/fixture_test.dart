@@ -91,7 +91,13 @@ void main() {
       for (final line in content.split('\n').where((l) => l.startsWith('import '))) {
         expect(
           line,
-          anyOf(startsWith("import 'dart:"), "import 'package:axiom_flutter/axiom_flutter.dart';", "import 'models.dart' as models;"),
+          anyOf(
+            startsWith("import 'dart:"),
+            "import 'package:axiom_flutter/axiom_flutter.dart';",
+            // Legacy start-up fallback until initialize() lands everywhere.
+            "import 'package:flutter/services.dart' show rootBundle;",
+            "import 'models.dart' as models;",
+          ),
         );
       }
     }

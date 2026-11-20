@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:axiom_flutter/axiom_flutter.dart';
+import 'package:flutter/services.dart' show rootBundle;
 
 import 'models.dart' as models;
 
@@ -65,7 +66,13 @@ class AxiomSdk {
     final runtime = AxiomRuntime();
     runtime.debug = cfg.debug;
     models.ContractFailure.registerAll();
-    final result = await runtime.initialize(cfg, assetLoader: assetLoader);
+    AxiomInitResult result;
+    try {
+      result = await runtime.initialize(cfg, assetLoader: assetLoader);
+    } on UnimplementedError {
+      // Runtime package without initialize(): legacy start-up.
+      result = await _legacyInit(runtime, cfg, assetLoader);
+    }
     result.requireOk();
     return AxiomSdk.fromRuntime(runtime, result);
   }
@@ -637,6 +644,39 @@ class FixtureModuleAxiomNamespace {
   void invalidateAll() {
     _runtime.invalidate(namespace: _namespace);
   }
+}
+
+/// Start-up for axiom_flutter versions whose initialize() is not
+/// implemented yet: init + loadContract per namespace.
+Future<AxiomInitResult> _legacyInit(
+  AxiomRuntime runtime,
+  AxiomConfig cfg,
+  AxiomAssetLoader? assetLoader,
+) async {
+  final load =
+      assetLoader ??
+      (String path) async => (await rootBundle.load(path)).buffer.asUint8List();
+  await runtime.init(cfg.dbPath);
+  final contracts = <String, AxiomContractLoadResult>{};
+  for (final entry in cfg.contracts.entries) {
+    final baseUrl = cfg.resolveBaseUrl(entry.key);
+    runtime.loadContract(
+      namespace: entry.key,
+      baseUrl: baseUrl,
+      contractBytes: await load(entry.value.assetPath),
+      signature: entry.value.signature,
+      publicKey: entry.value.publicKey,
+    );
+    contracts[entry.key] = AxiomContractLoadResult(
+      namespace: entry.key,
+      baseUrl: baseUrl,
+      status: entry.value.signature == null ? -1 : 0,
+      trust: entry.value.signature == null
+          ? AxiomContractTrust.unsigned
+          : AxiomContractTrust.signed,
+    );
+  }
+  return AxiomInitResult(ok: true, contracts: contracts);
 }
 
 /// Refetches active queries of [endpointIds] after a mutation (the runtime

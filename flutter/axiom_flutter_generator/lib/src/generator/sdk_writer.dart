@@ -114,6 +114,9 @@ class SdkWriter {
     }
     if (dartImports.isNotEmpty) b.writeln();
     b.writeln("import 'package:axiom_flutter/axiom_flutter.dart';");
+    // Only for the legacy start-up fallback (remove once every supported
+    // axiom_flutter implements initialize()).
+    b.writeln("import 'package:flutter/services.dart' show rootBundle;");
     b.writeln();
     b.writeln("import 'models.dart' as models;");
     b.writeln();
@@ -217,7 +220,13 @@ class SdkWriter {
     if (schema.failures.isNotEmpty) {
       b.writeln('    models.ContractFailure.registerAll();');
     }
-    b.writeln('    final result = await runtime.initialize(cfg, assetLoader: assetLoader);');
+    b.writeln('    AxiomInitResult result;');
+    b.writeln('    try {');
+    b.writeln('      result = await runtime.initialize(cfg, assetLoader: assetLoader);');
+    b.writeln('    } on UnimplementedError {');
+    b.writeln('      // Runtime package without initialize(): legacy start-up.');
+    b.writeln('      result = await _legacyInit(runtime, cfg, assetLoader);');
+    b.writeln('    }');
     b.writeln('    result.requireOk();');
     b.writeln('    return AxiomSdk.fromRuntime(runtime, result);');
     b.writeln('  }');
@@ -708,6 +717,41 @@ class SdkWriter {
   void _writeHelpers(StringBuffer b) {
     final text = b.toString();
     bool uses(String name) => text.contains('$name(');
+    b.write(r'''
+/// Start-up for axiom_flutter versions whose initialize() is not
+/// implemented yet: init + loadContract per namespace.
+Future<AxiomInitResult> _legacyInit(
+  AxiomRuntime runtime,
+  AxiomConfig cfg,
+  AxiomAssetLoader? assetLoader,
+) async {
+  final load =
+      assetLoader ??
+      (String path) async => (await rootBundle.load(path)).buffer.asUint8List();
+  await runtime.init(cfg.dbPath);
+  final contracts = <String, AxiomContractLoadResult>{};
+  for (final entry in cfg.contracts.entries) {
+    final baseUrl = cfg.resolveBaseUrl(entry.key);
+    runtime.loadContract(
+      namespace: entry.key,
+      baseUrl: baseUrl,
+      contractBytes: await load(entry.value.assetPath),
+      signature: entry.value.signature,
+      publicKey: entry.value.publicKey,
+    );
+    contracts[entry.key] = AxiomContractLoadResult(
+      namespace: entry.key,
+      baseUrl: baseUrl,
+      status: entry.value.signature == null ? -1 : 0,
+      trust: entry.value.signature == null
+          ? AxiomContractTrust.unsigned
+          : AxiomContractTrust.signed,
+    );
+  }
+  return AxiomInitResult(ok: true, contracts: contracts);
+}
+
+''');
     if (_usesInvalidation && uses('_invalidateEndpoints')) {
       b.write(r'''
 /// Refetches active queries of [endpointIds] after a mutation (the runtime
