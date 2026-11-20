@@ -1,0 +1,50 @@
+project(id: "dev.axiomcore.genextra", version: "1.0.0")
+variant default(include: ["*"])
+variant mobile(include: ["shape", "signup"])
+
+model Circle { kind: String radius: Float64 }
+model Square { kind: String side: Float64 }
+model Drawing {
+  shape: Field(validate: {type: "discriminatedUnion", discriminator: "kind", options: [{type: "object", ref: "Circle"}, {type: "object", ref: "Square"}]}, type: Json)
+  either: Field(validate: {type: "union", options: [{type: "object", ref: "Circle"}, {type: "object", ref: "Square"}]}, type: Json)
+  status: Field(validate: {type: "enum", values: ["draft", "published", "in-review"]}, type: String)
+  maybeStatus: Field(validate: {type: "enum", values: ["a", "b"]}, type: Optional<String>)
+  layers: Optional<List<Models.Circle>>
+  byName: Map<String, List<Models.Square>>
+  created: DateTime
+  blob: Optional<Bytes>
+}
+model SignupIn {
+  email: Field(validate: {type: "string", email: true, max: 120}, type: String)
+  name: Field(validate: {type: "string", min: 2, max: 40}, type: String)
+  code: Field(validate: {type: "string", regex: "^[A-Z]{3}-[0-9]{2}$"}, type: String)
+  age: Field(validate: {type: "number", min: 13, max: 130, int: true}, type: Int32)
+  score: Field(validate: {type: "number", min: 0, max: 1}, type: Optional<Float64>)
+}
+model Account { id: String email: String }
+
+action shape(kind: ActionKind.query, input: Models.Drawing, output: Models.Drawing) {
+  managed { return Input }
+}
+endpoint shape(method: POST, path: "/shape") {
+  request { body("shape", type: Json) body("either", type: Json) body("status", type: String) body("maybeStatus", type: String, optional: true) body("layers", type: List<Models.Circle>, optional: true) body("byName", type: Map<String, List<Models.Square>>) body("created", type: DateTime) body("blob", type: Bytes, optional: true) }
+  handle(action: Actions.shape, input: {shape: Input.body.shape, either: Input.body.either, status: Input.body.status, maybeStatus: Input.body.maybeStatus, layers: Input.body.layers, byName: Input.body.byName, created: Input.body.created, blob: Input.body.blob})
+  response(type: Models.Drawing)
+  cacheIdentity("drawing")
+}
+action signup(kind: ActionKind.command, input: Models.SignupIn, output: Models.Account) {
+  managed { return {id: "a1", email: Input.email} }
+}
+endpoint signup(method: POST, path: "/signup") {
+  request { body("email", type: String) body("name", type: String) body("code", type: String) body("age", type: Int32) body("score", type: Float64, optional: true) }
+  handle(action: Actions.signup, input: {email: Input.body.email, name: Input.body.name, code: Input.body.code, age: Input.body.age, score: Input.body.score})
+  response(type: Models.Account)
+  invalidates("drawing")
+}
+action ping(kind: ActionKind.query, output: Models.Account) {
+  managed { return {id: "p", email: "x"} }
+}
+endpoint ping(method: GET, path: "/ping") {
+  handle(action: Actions.ping)
+  response(type: Models.Account)
+}

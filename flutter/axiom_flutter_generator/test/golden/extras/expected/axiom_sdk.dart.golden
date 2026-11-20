@@ -1,0 +1,298 @@
+// GENERATED CODE - DO NOT EDIT.
+// axiom_flutter_generator 0.147.5
+// extras: dev.axiomcore.genextra 1.0.0 variant default schema 7dd286ad2334
+
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:axiom_flutter/axiom_flutter.dart';
+
+import 'models.dart' as models;
+
+/// Contract configuration written by `axiom pull`.
+abstract final class AxiomDefaultConfig {
+  static const bool _release = bool.fromEnvironment('dart.vm.product');
+
+  static const AxiomConfig config = AxiomConfig(
+    contracts: {
+      'extras': AxiomContractConfig(
+        baseUrl: 'https://api.example.com',
+        assetPath: 'assets/axiom/extras.axiom',
+        signature: 'c2lnbmF0dXJl',
+        publicKey: 'cHVibGljLWtleQ==',
+        // Release builds use the hash-locked load.
+        sha256: _release
+            ? 'de4f3f47bfc1e677bc4cf5c9685954292c1ce79a1c823ed77fa16ea3622ebae9'
+            : null,
+      ),
+    },
+    requireSignedContracts: _release,
+  );
+
+  /// sha256 of each contract asset at generation time.
+  static const Map<String, String> contractSha256 = {
+    'extras':
+        'de4f3f47bfc1e677bc4cf5c9685954292c1ce79a1c823ed77fa16ea3622ebae9',
+  };
+}
+
+/// Entry point of the generated client.
+class AxiomSdk {
+  AxiomSdk._(this.runtime, this.initResult)
+    : extras = ExtrasModule._(runtime, 'extras');
+
+  final AxiomRuntime runtime;
+
+  /// Outcome of runtime start-up and contract loading.
+  final AxiomInitResult initResult;
+
+  /// Endpoints of the `extras` contract.
+  final ExtrasModule extras;
+
+  /// Starts the runtime and loads the contracts.
+  ///
+  /// Base URL priority: [baseUrlOverrides] > [environment] (or the
+  /// config's, else `--dart-define=AXIOM_ENV` / `AXIOM_BASE_URL`) >
+  /// the generated default. Throws when initialization fails.
+  static Future<AxiomSdk> create({
+    AxiomConfig? config,
+    AxiomEnvironment? environment,
+    Map<String, String>? baseUrlOverrides,
+    AxiomAssetLoader? assetLoader,
+  }) async {
+    final base = config ?? AxiomDefaultConfig.config;
+    final cfg = base.copyWith(
+      environment:
+          environment ?? base.environment ?? AxiomEnvironment.fromDartDefines(),
+      baseUrlOverrides: baseUrlOverrides,
+    );
+    final runtime = AxiomRuntime();
+    runtime.debug = cfg.debug;
+    final result = await runtime.initialize(cfg, assetLoader: assetLoader);
+    result.requireOk();
+    return AxiomSdk._(runtime, result);
+  }
+}
+
+/// Client for the `extras` contract (dev.axiomcore.genextra 1.0.0).
+class ExtrasModule {
+  ExtrasModule._(this._runtime, this._namespace)
+    : axiom = ExtrasModuleAxiomNamespace._(_runtime, _namespace);
+
+  final AxiomRuntime _runtime;
+  final String _namespace;
+
+  /// Auth tokens and cache control for this namespace.
+  final ExtrasModuleAxiomNamespace axiom;
+
+  /// Endpoint ids by contract endpoint name.
+  static const Map<String, int> endpointIds = {
+    'ping': 404569265,
+    'shape': 779237560,
+    'signup': 164815625,
+  };
+
+  /// Endpoint ids by contract cache identity.
+  static const Map<String, List<int>> cacheIdentities = {
+    'drawing': [779237560],
+  };
+
+  /// Auth method names declared by the contract.
+  static const List<String> authMethods = [];
+
+  /// `GET /ping`.
+  AxiomQuery<models.Account> ping({AxiomCallOptions? options}) {
+    return _runtime.send<models.Account>(
+      namespace: _namespace,
+      endpointId: 404569265,
+      method: 'GET',
+      path: '/ping',
+      headers: options?.mergeHeaders(null),
+      args: <String, dynamic>{},
+      decoder: models.Account.fromJson,
+      options: options,
+    );
+  }
+
+  /// `POST /shape`.
+  ///
+  /// Cache identity: `drawing`.
+  AxiomQuery<models.Drawing> shape({
+    required Object? shape,
+    required Object? either,
+    required String status,
+    String? maybeStatus,
+    List<models.Circle>? layers,
+    required Map<String, List<models.Square>> byName,
+    required DateTime created,
+    Uint8List? blob,
+    String? idempotencyKey,
+    AxiomCallOptions? options,
+  }) {
+    final headers = <String, String>{
+      if (idempotencyKey case final k?) 'Idempotency-Key': k,
+    };
+    return _runtime.sendMutation<models.Drawing>(
+      namespace: _namespace,
+      endpointId: 779237560,
+      method: 'POST',
+      path: '/shape',
+      headers: options?.mergeHeaders(headers) ?? headers,
+      body: jsonEncode(<String, dynamic>{
+        'shape': shape,
+        'either': either,
+        'status': status,
+        if (maybeStatus case final v?) 'maybeStatus': v,
+        if (layers case final v?) 'layers': [for (final e in v) e.toJson()],
+        'byName': {
+          for (final e in byName.entries)
+            e.key: [for (final e in e.value) e.toJson()],
+        },
+        'created': created.toIso8601String(),
+        if (blob case final v?)
+          'blob': models.AxiomGeneratedCodec.bytesToJson(v),
+      }),
+      args: <String, dynamic>{
+        'shape': shape,
+        'either': either,
+        'status': status,
+        if (maybeStatus case final v?) 'maybeStatus': v,
+        if (layers case final v?) 'layers': [for (final e in v) e.toJson()],
+        'byName': {
+          for (final e in byName.entries)
+            e.key: [for (final e in e.value) e.toJson()],
+        },
+        'created': created.toIso8601String(),
+        if (blob case final v?)
+          'blob': models.AxiomGeneratedCodec.bytesToJson(v),
+      },
+      decoder: models.Drawing.fromJson,
+      options: options,
+    );
+  }
+
+  /// `POST /signup`.
+  ///
+  /// On success invalidates: `drawing`.
+  AxiomQuery<models.Account> signup({
+    required String email,
+    required String name,
+    required String code,
+    required int age,
+    double? score,
+    String? idempotencyKey,
+    AxiomCallOptions? options,
+  }) {
+    final headers = <String, String>{
+      if (idempotencyKey case final k?) 'Idempotency-Key': k,
+    };
+    final query = _runtime.sendMutation<models.Account>(
+      namespace: _namespace,
+      endpointId: 164815625,
+      method: 'POST',
+      path: '/signup',
+      headers: options?.mergeHeaders(headers) ?? headers,
+      body: jsonEncode(<String, dynamic>{
+        'email': email,
+        'name': name,
+        'code': code,
+        'age': age,
+        if (score case final v?) 'score': v,
+      }),
+      args: <String, dynamic>{
+        'email': email,
+        'name': name,
+        'code': code,
+        'age': age,
+        if (score case final v?) 'score': v,
+      },
+      decoder: models.Account.fromJson,
+      options: options,
+    );
+    return _onSuccess(query, _runtime, () {
+      _invalidateEndpoints(_runtime, _namespace, const [779237560]);
+    });
+  }
+
+  /// Refetches the active queries of every endpoint with [identity].
+  void invalidateIdentity(String identity) {
+    final ids = cacheIdentities[identity];
+    if (ids == null) return;
+    _invalidateEndpoints(_runtime, _namespace, ids);
+  }
+}
+
+/// Namespace-level runtime controls for `extras`.
+class ExtrasModuleAxiomNamespace {
+  ExtrasModuleAxiomNamespace._(this._runtime, this._namespace);
+
+  final AxiomRuntime _runtime;
+  final String _namespace;
+
+  void setAuthToken(String methodName, String token) {
+    _runtime.setAuthToken(
+      namespace: _namespace,
+      methodName: methodName,
+      token: token,
+    );
+  }
+
+  void clearAuthToken(String methodName) {
+    _runtime.clearAuthToken(namespace: _namespace, methodName: methodName);
+  }
+
+  /// Sets [token] for every auth method of this namespace.
+  void setNamespaceToken(String token) {
+    _runtime.setNamespaceAuthToken(namespace: _namespace, token: token);
+  }
+
+  void clearNamespaceToken() {
+    _runtime.clearNamespaceAuthToken(namespace: _namespace);
+  }
+
+  /// Marks every cached query of this namespace stale and refetches.
+  void invalidateAll() {
+    _runtime.invalidate(namespace: _namespace);
+  }
+}
+
+/// Refetches active queries of [endpointIds] after a mutation (the runtime
+/// already dropped their cached responses).
+void _invalidateEndpoints(
+  AxiomRuntime runtime,
+  String namespace,
+  List<int> endpointIds,
+) {
+  for (final id in endpointIds) {
+    try {
+      runtime.invalidate(namespace: namespace, endpointId: id);
+    } on UnimplementedError {
+      return;
+    }
+  }
+}
+
+/// Wraps a mutation so [onSuccess] runs once after its first success.
+AxiomQuery<T> _onSuccess<T>(
+  AxiomQuery<T> query,
+  AxiomRuntime runtime,
+  void Function() onSuccess,
+) {
+  var done = false;
+  return AxiomQuery<T>(
+    query.key,
+    (headers) {
+      headers.forEach(query.setHeader);
+      final stream = query.stream.map((state) {
+        if (!done && state.status == AxiomStatus.success) {
+          done = true;
+          onSuccess();
+        }
+        return state;
+      });
+      return AxiomActiveStream<T>(query.requestId ?? 0, stream);
+    },
+    isMutation: true,
+    runtime: runtime,
+  );
+}

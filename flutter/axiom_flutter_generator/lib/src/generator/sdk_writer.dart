@@ -127,8 +127,12 @@ class SdkWriter {
     final allSigned = contracts.every((c) => c.signature != null && c.publicKey != null);
     b.writeln('/// Contract configuration written by `axiom pull`.');
     b.writeln('abstract final class AxiomDefaultConfig {');
-    b.writeln("  static const bool _release = bool.fromEnvironment('dart.vm.product');");
-    b.writeln();
+    final usesRelease = allSigned ||
+        contracts.any((c) => c.sha256 != null && c.signature != null && c.publicKey != null);
+    if (usesRelease) {
+      b.writeln("  static const bool _release = bool.fromEnvironment('dart.vm.product');");
+      b.writeln();
+    }
     b.writeln('  static const AxiomConfig config = AxiomConfig(');
     b.writeln('    contracts: {');
     for (final c in contracts) {
@@ -670,7 +674,9 @@ class SdkWriter {
   // ---------------------------------------------------------------------------
 
   void _writeHelpers(StringBuffer b) {
-    if (_usesInvalidation) {
+    final text = b.toString();
+    bool uses(String name) => text.contains('$name(');
+    if (_usesInvalidation && uses('_invalidateEndpoints')) {
       b.write(r'''
 /// Refetches active queries of [endpointIds] after a mutation (the runtime
 /// already dropped their cached responses).
@@ -688,6 +694,10 @@ void _invalidateEndpoints(
   }
 }
 
+''');
+    }
+    if (uses('_onSuccess')) {
+      b.write(r'''
 /// Wraps a mutation so [onSuccess] runs once after its first success.
 AxiomQuery<T> _onSuccess<T>(
   AxiomQuery<T> query,
@@ -726,10 +736,14 @@ String _newIdempotencyKey() {
 
 ''');
     }
-    if (_usesStreams) {
+    if (uses('_utf8Bytes')) {
       b.write(r'''
 Uint8List _utf8Bytes(String? text) =>
     text == null ? Uint8List(0) : Uint8List.fromList(utf8.encode(text));
+''');
+    }
+    if (_usesStreams) {
+      b.write(r'''
 
 /// Decodes stream chunks (JSON, NDJSON or SSE `data:` lines) into frames.
 Stream<T> _frames<T>(

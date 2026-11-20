@@ -21,8 +21,11 @@ class ModelWriter {
     b.writeln();
     b.writeln("import 'package:axiom_flutter/axiom_flutter.dart';");
     b.writeln();
-    b.writeln('const Object _unset = Object();');
-    b.writeln();
+    if (schema.models.values.any((m) => m.fields.any((f) => f.optional)) ||
+        schema.failures.values.any((f) => f.fields.any((x) => x.optional))) {
+      b.writeln('const Object _unset = Object();');
+      b.writeln();
+    }
     _writeCodec(b);
 
     for (final name in schema.enums.keys.toList()..sort()) {

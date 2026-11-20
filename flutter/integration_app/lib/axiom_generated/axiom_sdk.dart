@@ -11,8 +11,6 @@ import 'models.dart' as models;
 
 /// Contract configuration written by `axiom pull`.
 abstract final class AxiomDefaultConfig {
-  static const bool _release = bool.fromEnvironment('dart.vm.product');
-
   static const AxiomConfig config = AxiomConfig(
     contracts: {
       'fixture': AxiomContractConfig(
@@ -672,9 +670,6 @@ AxiomQuery<T> _onSuccess<T>(
     runtime: runtime,
   );
 }
-
-Uint8List _utf8Bytes(String? text) =>
-    text == null ? Uint8List(0) : Uint8List.fromList(utf8.encode(text));
 
 /// Decodes stream chunks (JSON, NDJSON or SSE `data:` lines) into frames.
 Stream<T> _frames<T>(

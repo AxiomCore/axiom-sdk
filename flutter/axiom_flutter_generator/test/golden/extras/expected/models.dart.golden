@@ -1,0 +1,685 @@
+// GENERATED CODE - DO NOT EDIT.
+// axiom_flutter_generator 0.147.5
+// extras: dev.axiomcore.genextra 1.0.0 variant default schema 7dd286ad2334
+
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:axiom_flutter/axiom_flutter.dart';
+
+const Object _unset = Object();
+
+/// JSON helpers used by the generated models and client.
+abstract final class AxiomGeneratedCodec {
+  static String asString(Object? v) => v as String;
+  static bool asBool(Object? v) => v as bool;
+  static Object? asJson(Object? v) => v;
+  static void asVoid(Object? v) {}
+
+  static int asInt(Object? v) => switch (v) {
+    int() => v,
+    num() => v.toInt(),
+    String() => int.parse(v),
+    _ => throw FormatException('expected an integer, got $v'),
+  };
+
+  static double asDouble(Object? v) => switch (v) {
+    num() => v.toDouble(),
+    String() => double.parse(v),
+    _ => throw FormatException('expected a number, got $v'),
+  };
+
+  static DateTime asDateTime(Object? v) => switch (v) {
+    String() => DateTime.parse(v),
+    int() => DateTime.fromMillisecondsSinceEpoch(v, isUtc: true),
+    _ => throw FormatException('expected a date-time, got $v'),
+  };
+
+  /// Bytes travel as base64 strings; a list of ints is accepted too.
+  static Uint8List asBytes(Object? v) => switch (v) {
+    String() => base64Decode(v),
+    List() => Uint8List.fromList(v.cast<int>()),
+    _ => throw FormatException('expected bytes, got $v'),
+  };
+
+  static String bytesToJson(Uint8List v) => base64Encode(v);
+
+  static Map<String, dynamic> asObject(Object? v) =>
+      (v as Map).cast<String, dynamic>();
+
+  static List<T> asList<T>(Object? v, T Function(Object?) item) => [
+    for (final e in v as List) item(e),
+  ];
+
+  static Map<String, T> asMap<T>(Object? v, T Function(Object?) value) => {
+    for (final e in (v as Map).entries) e.key as String: value(e.value),
+  };
+
+  static Map<K, T> asKeyedMap<K, T>(
+    Object? v,
+    K Function(String) key,
+    T Function(Object?) value,
+  ) => {
+    for (final e in (v as Map).entries) key(e.key as String): value(e.value),
+  };
+
+  static bool deepEquals(Object? a, Object? b) {
+    if (identical(a, b)) return true;
+    if (a is List && b is List) {
+      if (a.length != b.length) return false;
+      for (var i = 0; i < a.length; i++) {
+        if (!deepEquals(a[i], b[i])) return false;
+      }
+      return true;
+    }
+    if (a is Map && b is Map) {
+      if (a.length != b.length) return false;
+      for (final e in a.entries) {
+        if (!b.containsKey(e.key) || !deepEquals(e.value, b[e.key])) {
+          return false;
+        }
+      }
+      return true;
+    }
+    return a == b;
+  }
+
+  static int deepHash(Object? v) => switch (v) {
+    List() => Object.hashAll(v.map(deepHash)),
+    Map() => Object.hashAllUnordered(
+      v.entries.map((e) => Object.hash(deepHash(e.key), deepHash(e.value))),
+    ),
+    _ => v.hashCode,
+  };
+
+  /// Code and payload of a contract failure carried by [error]: the
+  /// runtime's `failureCode`/`failurePayload`, else the server body in
+  /// `details` (`{"error": {"code": ..., "payload": ...}}`).
+  static (String?, Object?) failureParts(AxiomError error) {
+    if (error.failureCode != null) {
+      return (error.failureCode, error.failurePayload);
+    }
+    final details = error.details;
+    if (details == null || details.isEmpty) return (null, null);
+    try {
+      final decoded = jsonDecode(details);
+      if (decoded is Map) {
+        final body = decoded['error'] is Map
+            ? decoded['error'] as Map
+            : decoded;
+        final code = body['code'] ?? body['failure_code'];
+        if (code is String) {
+          return (code, body['payload'] ?? body['failure_payload']);
+        }
+      }
+    } on FormatException {
+      return (null, null);
+    }
+    return (null, null);
+  }
+}
+
+enum DrawingMaybeStatus {
+  a('a'),
+  b('b'),
+
+  /// A value this client version does not know.
+  unknown(null);
+
+  const DrawingMaybeStatus(this.value);
+
+  /// Wire value; null for [unknown].
+  final String? value;
+
+  static DrawingMaybeStatus fromJson(Object? json) {
+    for (final v in values) {
+      if (v.value == json) return v;
+    }
+    return unknown;
+  }
+
+  String toJson() => value ?? 'unknown';
+}
+
+enum DrawingStatus {
+  draft('draft'),
+  published('published'),
+  inReview('in-review'),
+
+  /// A value this client version does not know.
+  unknown(null);
+
+  const DrawingStatus(this.value);
+
+  /// Wire value; null for [unknown].
+  final String? value;
+
+  static DrawingStatus fromJson(Object? json) {
+    for (final v in values) {
+      if (v.value == json) return v;
+    }
+    return unknown;
+  }
+
+  String toJson() => value ?? 'unknown';
+}
+
+/// One of: Circle, Square.
+sealed class DrawingEither {
+  const DrawingEither();
+
+  factory DrawingEither.fromJson(Object? json) {
+    if (json is Map) {
+      if (json.containsKey('kind') && json.containsKey('radius')) {
+        return DrawingEitherCircle(Circle.fromJson(json));
+      }
+      if (json.containsKey('kind') && json.containsKey('side')) {
+        return DrawingEitherSquare(Square.fromJson(json));
+      }
+    }
+    return DrawingEitherUnknown(json);
+  }
+
+  Object? toJson();
+}
+
+final class DrawingEitherCircle extends DrawingEither {
+  const DrawingEitherCircle(this.value);
+  final Circle value;
+
+  @override
+  Object? toJson() => value.toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is DrawingEitherCircle && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => 'DrawingEitherCircle($value)';
+}
+
+final class DrawingEitherSquare extends DrawingEither {
+  const DrawingEitherSquare(this.value);
+  final Square value;
+
+  @override
+  Object? toJson() => value.toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is DrawingEitherSquare && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => 'DrawingEitherSquare($value)';
+}
+
+/// A DrawingEither value matching no known option.
+final class DrawingEitherUnknown extends DrawingEither {
+  const DrawingEitherUnknown(this.raw);
+  final Object? raw;
+
+  @override
+  Object? toJson() => raw;
+
+  @override
+  bool operator ==(Object other) =>
+      other is DrawingEitherUnknown &&
+      AxiomGeneratedCodec.deepEquals(other.raw, raw);
+
+  @override
+  int get hashCode => AxiomGeneratedCodec.deepHash(raw);
+
+  @override
+  String toString() => 'DrawingEitherUnknown($raw)';
+}
+
+/// One of: Circle, Square.
+sealed class DrawingShape {
+  const DrawingShape();
+
+  factory DrawingShape.fromJson(Object? json) {
+    if (json is Map) {
+      final tag = json['kind'];
+      if (tag is String) {
+        switch (tag.toLowerCase()) {
+          case 'circle':
+            return DrawingShapeCircle(Circle.fromJson(json));
+          case 'square':
+            return DrawingShapeSquare(Square.fromJson(json));
+        }
+      }
+      if (json.containsKey('kind') && json.containsKey('radius')) {
+        return DrawingShapeCircle(Circle.fromJson(json));
+      }
+      if (json.containsKey('kind') && json.containsKey('side')) {
+        return DrawingShapeSquare(Square.fromJson(json));
+      }
+    }
+    return DrawingShapeUnknown(json);
+  }
+
+  Object? toJson();
+}
+
+final class DrawingShapeCircle extends DrawingShape {
+  const DrawingShapeCircle(this.value);
+  final Circle value;
+
+  @override
+  Object? toJson() => value.toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is DrawingShapeCircle && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => 'DrawingShapeCircle($value)';
+}
+
+final class DrawingShapeSquare extends DrawingShape {
+  const DrawingShapeSquare(this.value);
+  final Square value;
+
+  @override
+  Object? toJson() => value.toJson();
+
+  @override
+  bool operator ==(Object other) =>
+      other is DrawingShapeSquare && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => 'DrawingShapeSquare($value)';
+}
+
+/// A DrawingShape value matching no known option.
+final class DrawingShapeUnknown extends DrawingShape {
+  const DrawingShapeUnknown(this.raw);
+  final Object? raw;
+
+  @override
+  Object? toJson() => raw;
+
+  @override
+  bool operator ==(Object other) =>
+      other is DrawingShapeUnknown &&
+      AxiomGeneratedCodec.deepEquals(other.raw, raw);
+
+  @override
+  int get hashCode => AxiomGeneratedCodec.deepHash(raw);
+
+  @override
+  String toString() => 'DrawingShapeUnknown($raw)';
+}
+
+class Account {
+  const Account({required this.email, required this.id});
+
+  factory Account.fromJson(Object? json) {
+    final map = AxiomGeneratedCodec.asObject(json);
+    return Account(
+      email: AxiomGeneratedCodec.asString(map['email']),
+      id: AxiomGeneratedCodec.asString(map['id']),
+    );
+  }
+
+  final String email;
+  final String id;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{'email': email, 'id': id};
+
+  Account copyWith({String? email, String? id}) =>
+      Account(email: email ?? this.email, id: id ?? this.id);
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Account && other.email == email && other.id == id;
+
+  @override
+  int get hashCode => Object.hashAll([email, id]);
+
+  @override
+  String toString() => 'Account(email: $email, id: $id)';
+}
+
+class Circle {
+  const Circle({required this.kind, required this.radius});
+
+  factory Circle.fromJson(Object? json) {
+    final map = AxiomGeneratedCodec.asObject(json);
+    return Circle(
+      kind: AxiomGeneratedCodec.asString(map['kind']),
+      radius: AxiomGeneratedCodec.asDouble(map['radius']),
+    );
+  }
+
+  final String kind;
+  final double radius;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'kind': kind,
+    'radius': radius,
+  };
+
+  Circle copyWith({String? kind, double? radius}) =>
+      Circle(kind: kind ?? this.kind, radius: radius ?? this.radius);
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Circle && other.kind == kind && other.radius == radius;
+
+  @override
+  int get hashCode => Object.hashAll([kind, radius]);
+
+  @override
+  String toString() => 'Circle(kind: $kind, radius: $radius)';
+}
+
+class Drawing {
+  const Drawing({
+    this.blob,
+    required this.byName,
+    required this.created,
+    required this.either,
+    this.layers,
+    this.maybeStatus,
+    required this.shape,
+    required this.status,
+  });
+
+  factory Drawing.fromJson(Object? json) {
+    final map = AxiomGeneratedCodec.asObject(json);
+    return Drawing(
+      blob: map['blob'] == null
+          ? null
+          : AxiomGeneratedCodec.asBytes(map['blob']),
+      byName: AxiomGeneratedCodec.asMap(
+        map['byName'],
+        (e) => AxiomGeneratedCodec.asList(e, Square.fromJson),
+      ),
+      created: AxiomGeneratedCodec.asDateTime(map['created']),
+      either: DrawingEither.fromJson(map['either']),
+      layers: map['layers'] == null
+          ? null
+          : AxiomGeneratedCodec.asList(map['layers'], Circle.fromJson),
+      maybeStatus: map['maybeStatus'] == null
+          ? null
+          : DrawingMaybeStatus.fromJson(map['maybeStatus']),
+      shape: DrawingShape.fromJson(map['shape']),
+      status: DrawingStatus.fromJson(map['status']),
+    );
+  }
+
+  final Uint8List? blob;
+  final Map<String, List<Square>> byName;
+  final DateTime created;
+  final DrawingEither either;
+  final List<Circle>? layers;
+  final DrawingMaybeStatus? maybeStatus;
+  final DrawingShape shape;
+  final DrawingStatus status;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    if (blob case final v?) 'blob': AxiomGeneratedCodec.bytesToJson(v),
+    'byName': {
+      for (final e in byName.entries)
+        e.key: [for (final e in e.value) e.toJson()],
+    },
+    'created': created.toIso8601String(),
+    'either': either.toJson(),
+    if (layers case final v?) 'layers': [for (final e in v) e.toJson()],
+    if (maybeStatus case final v?) 'maybeStatus': v.toJson(),
+    'shape': shape.toJson(),
+    'status': status.toJson(),
+  };
+
+  Drawing copyWith({
+    Object? blob = _unset,
+    Map<String, List<Square>>? byName,
+    DateTime? created,
+    DrawingEither? either,
+    Object? layers = _unset,
+    Object? maybeStatus = _unset,
+    DrawingShape? shape,
+    DrawingStatus? status,
+  }) => Drawing(
+    blob: identical(blob, _unset) ? this.blob : blob as Uint8List?,
+    byName: byName ?? this.byName,
+    created: created ?? this.created,
+    either: either ?? this.either,
+    layers: identical(layers, _unset) ? this.layers : layers as List<Circle>?,
+    maybeStatus: identical(maybeStatus, _unset)
+        ? this.maybeStatus
+        : maybeStatus as DrawingMaybeStatus?,
+    shape: shape ?? this.shape,
+    status: status ?? this.status,
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Drawing &&
+          AxiomGeneratedCodec.deepEquals(other.blob, blob) &&
+          AxiomGeneratedCodec.deepEquals(other.byName, byName) &&
+          other.created == created &&
+          other.either == either &&
+          AxiomGeneratedCodec.deepEquals(other.layers, layers) &&
+          other.maybeStatus == maybeStatus &&
+          other.shape == shape &&
+          other.status == status;
+
+  @override
+  int get hashCode => Object.hashAll([
+    AxiomGeneratedCodec.deepHash(blob),
+    AxiomGeneratedCodec.deepHash(byName),
+    created,
+    either,
+    AxiomGeneratedCodec.deepHash(layers),
+    maybeStatus,
+    shape,
+    status,
+  ]);
+
+  @override
+  String toString() =>
+      'Drawing(blob: $blob, byName: $byName, created: $created, either: $either, layers: $layers, maybeStatus: $maybeStatus, shape: $shape, status: $status)';
+}
+
+/// Form validators for [Drawing] built from the contract field
+/// rules. Each has the `TextFormField.validator` signature.
+abstract final class DrawingValidators {
+  static String? maybeStatus(String? value) {
+    if (value == null || value.isEmpty) return null;
+    const allowed = {'a', 'b'};
+    if (!allowed.contains(value)) {
+      return 'Must be one of: a, b';
+    }
+    return null;
+  }
+
+  static String? status(String? value) {
+    if (value == null || value.isEmpty) return 'Required';
+    const allowed = {'draft', 'published', 'in-review'};
+    if (!allowed.contains(value)) {
+      return 'Must be one of: draft, published, in-review';
+    }
+    return null;
+  }
+
+  /// All validators by wire field name.
+  static const Map<String, String? Function(String?)> all = {
+    'maybeStatus': maybeStatus,
+    'status': status,
+  };
+}
+
+class SignupIn {
+  const SignupIn({
+    required this.age,
+    required this.code,
+    required this.email,
+    required this.name,
+    this.score,
+  });
+
+  factory SignupIn.fromJson(Object? json) {
+    final map = AxiomGeneratedCodec.asObject(json);
+    return SignupIn(
+      age: AxiomGeneratedCodec.asInt(map['age']),
+      code: AxiomGeneratedCodec.asString(map['code']),
+      email: AxiomGeneratedCodec.asString(map['email']),
+      name: AxiomGeneratedCodec.asString(map['name']),
+      score: map['score'] == null
+          ? null
+          : AxiomGeneratedCodec.asDouble(map['score']),
+    );
+  }
+
+  final int age;
+  final String code;
+  final String email;
+  final String name;
+  final double? score;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'age': age,
+    'code': code,
+    'email': email,
+    'name': name,
+    if (score case final v?) 'score': v,
+  };
+
+  SignupIn copyWith({
+    int? age,
+    String? code,
+    String? email,
+    String? name,
+    Object? score = _unset,
+  }) => SignupIn(
+    age: age ?? this.age,
+    code: code ?? this.code,
+    email: email ?? this.email,
+    name: name ?? this.name,
+    score: identical(score, _unset) ? this.score : score as double?,
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SignupIn &&
+          other.age == age &&
+          other.code == code &&
+          other.email == email &&
+          other.name == name &&
+          other.score == score;
+
+  @override
+  int get hashCode => Object.hashAll([age, code, email, name, score]);
+
+  @override
+  String toString() =>
+      'SignupIn(age: $age, code: $code, email: $email, name: $name, score: $score)';
+}
+
+/// Form validators for [SignupIn] built from the contract field
+/// rules. Each has the `TextFormField.validator` signature.
+abstract final class SignupInValidators {
+  static String? age(String? value) {
+    if (value == null || value.isEmpty) return 'Required';
+    final number = num.tryParse(value.trim());
+    if (number == null) return 'Must be a number';
+    if (number % 1 != 0) return 'Must be a whole number';
+    if (number < 13) return 'Must be at least 13';
+    if (number > 130) return 'Must be at most 130';
+    return null;
+  }
+
+  static String? code(String? value) {
+    if (value == null || value.isEmpty) return 'Required';
+    if (!RegExp('^[A-Z]{3}-[0-9]{2}\$').hasMatch(value)) {
+      return 'Invalid format';
+    }
+    return null;
+  }
+
+  static String? email(String? value) {
+    if (value == null || value.isEmpty) return 'Required';
+    if (value.length > 120) return 'Must be at most 120 characters';
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value)) {
+      return 'Must be a valid email address';
+    }
+    return null;
+  }
+
+  static String? name(String? value) {
+    if (value == null || value.isEmpty) return 'Required';
+    if (value.length < 2) return 'Must be at least 2 characters';
+    if (value.length > 40) return 'Must be at most 40 characters';
+    return null;
+  }
+
+  static String? score(String? value) {
+    if (value == null || value.isEmpty) return null;
+    final number = num.tryParse(value.trim());
+    if (number == null) return 'Must be a number';
+    if (number < 0) return 'Must be at least 0';
+    if (number > 1) return 'Must be at most 1';
+    return null;
+  }
+
+  /// All validators by wire field name.
+  static const Map<String, String? Function(String?)> all = {
+    'age': age,
+    'code': code,
+    'email': email,
+    'name': name,
+    'score': score,
+  };
+}
+
+class Square {
+  const Square({required this.kind, required this.side});
+
+  factory Square.fromJson(Object? json) {
+    final map = AxiomGeneratedCodec.asObject(json);
+    return Square(
+      kind: AxiomGeneratedCodec.asString(map['kind']),
+      side: AxiomGeneratedCodec.asDouble(map['side']),
+    );
+  }
+
+  final String kind;
+  final double side;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'kind': kind,
+    'side': side,
+  };
+
+  Square copyWith({String? kind, double? side}) =>
+      Square(kind: kind ?? this.kind, side: side ?? this.side);
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Square && other.kind == kind && other.side == side;
+
+  @override
+  int get hashCode => Object.hashAll([kind, side]);
+
+  @override
+  String toString() => 'Square(kind: $kind, side: $side)';
+}

@@ -24,6 +24,8 @@ Future<void> main(List<String> arguments) async {
     ..addOption('signature', help: 'Contract signature (base64)')
     ..addOption('public-key', help: 'Public key verifying the signature (base64)')
     ..addOption('sha256', help: 'Contract sha256 (computed from the asset when omitted)')
+    ..addOption('contract', help: 'Generate from this .axiom file instead of AxiomDeps.toml (needs --namespace)')
+    ..addOption('out-dir', help: 'Absolute output directory (overrides --project-root/lib/--out)')
     ..addFlag('format', defaultsTo: true, help: 'Run dart format on the output')
     ..addFlag('help', abbr: 'h', negatable: false);
 
@@ -40,21 +42,30 @@ Future<void> main(List<String> arguments) async {
   final configPath = args['config'] as String?;
   final outDir = (args['out'] as String?) ?? 'axiom_generated';
   final projectRoot = (args['project-root'] as String?) ?? Directory.current.path;
-  if (configPath == null) _fail('--config <AxiomDeps.toml> is required');
-
-  final pubspecFile = File('$projectRoot/pubspec.yaml');
-  if (!pubspecFile.existsSync()) _fail('pubspec.yaml not found at $projectRoot');
-  loadYaml(pubspecFile.readAsStringSync());
-
-  final tomlFile = File(configPath);
-  if (!tomlFile.existsSync()) _fail('AxiomDeps.toml not found at $configPath');
-  final tomlDoc = TomlDocument.parse(tomlFile.readAsStringSync()).toMap();
-  final contractsNode = tomlDoc['contracts'] as Map<String, dynamic>?;
-  if (contractsNode == null || contractsNode.isEmpty) {
-    _fail('No [contracts] found in $configPath');
+  final directContract = args['contract'] as String?;
+  final only = args['namespace'] as String?;
+  final Map<String, dynamic> contractsNode;
+  final String configDir;
+  if (directContract != null) {
+    if (only == null) _fail('--contract needs --namespace <name>');
+    contractsNode = {
+      only: {'source': File(directContract).absolute.path},
+    };
+    configDir = Directory.current.path;
+  } else {
+    if (configPath == null) _fail('--config <AxiomDeps.toml> is required');
+    final pubspecFile = File('$projectRoot/pubspec.yaml');
+    if (!pubspecFile.existsSync()) _fail('pubspec.yaml not found at $projectRoot');
+    loadYaml(pubspecFile.readAsStringSync());
+    final tomlFile = File(configPath);
+    if (!tomlFile.existsSync()) _fail('AxiomDeps.toml not found at $configPath');
+    final tomlDoc = TomlDocument.parse(tomlFile.readAsStringSync()).toMap();
+    final node = tomlDoc['contracts'] as Map<String, dynamic>?;
+    if (node == null || node.isEmpty) _fail('No [contracts] found in $configPath');
+    contractsNode = node;
+    configDir = tomlFile.parent.path;
   }
 
-  final only = args['namespace'] as String?;
   String? flag(String name, String ns) =>
       (only == null || only == ns) ? args[name] as String? : null;
 
@@ -67,8 +78,8 @@ Future<void> main(List<String> arguments) async {
     final meta = (entry.value as Map).cast<String, dynamic>();
     final assetPath = 'assets/axiom/$name.axiom';
     final candidates = <String>[
-      '$projectRoot/$assetPath',
-      if (meta['source'] is String) _resolve(meta['source'] as String, tomlFile.parent.path),
+      if (directContract == null) '$projectRoot/$assetPath',
+      if (meta['source'] is String) _resolve(meta['source'] as String, configDir),
       '$home/.axiom/contracts/$name/contract.axiom',
     ];
     final found = candidates.where((p) => File(p).existsSync()).firstOrNull;
@@ -113,7 +124,8 @@ Future<void> main(List<String> arguments) async {
 
   final written = <String>[];
   for (final e in files.entries) {
-    final path = '$projectRoot/lib/$outDir/${e.key}';
+    final dir = (args['out-dir'] as String?) ?? '$projectRoot/lib/$outDir';
+    final path = '$dir/${e.key}';
     File(path)
       ..createSync(recursive: true)
       ..writeAsStringSync(e.value);
