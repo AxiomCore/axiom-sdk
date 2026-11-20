@@ -29,7 +29,7 @@ final checksWebspeed = <CheckDef>[
   }),
   CheckDef('ws.invalid_json_same_error', 'webspeed', (c) async {
     _webOnly();
-    // A namespace whose base URL is the page origin: /index.html is a 200
+    // A namespace whose base URL is the page's base: /index.html is a 200
     // text/html body, which the runtime's JSON syntax check rejects.
     final rt = c.sdk.runtime;
     final bytes = (await rootBundle.load('assets/axiom/fixture.axiom'))
@@ -37,7 +37,7 @@ final checksWebspeed = <CheckDef>[
         .asUint8List();
     rt.loadContract(
       namespace: 'ws_html',
-      baseUrl: wsPageOrigin(),
+      baseUrl: wsPageBase(),
       contractBytes: bytes,
     );
     final resp = rt.callStream(

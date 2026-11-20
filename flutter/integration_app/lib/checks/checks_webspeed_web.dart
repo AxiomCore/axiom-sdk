@@ -9,4 +9,8 @@ int wsExternalBodies() => AxiomRuntimeWeb.debugExternalBodyCount;
 int wsFastStarts() => AxiomRuntimeWeb.debugFastStartCount;
 Set<int> wsFastGet(String namespace) =>
     AxiomRuntimeWeb().debugFastGetEndpoints(namespace);
-String wsPageOrigin() => web.window.location.origin;
+/// The page's base URL without the trailing slash (honours --base-href).
+String wsPageBase() {
+  final b = web.document.baseURI;
+  return b.endsWith('/') ? b.substring(0, b.length - 1) : b;
+}

@@ -3,4 +3,4 @@ const bool wsIsWeb = false;
 int wsExternalBodies() => 0;
 int wsFastStarts() => 0;
 Set<int> wsFastGet(String namespace) => const {};
-String wsPageOrigin() => '';
+String wsPageBase() => '';
