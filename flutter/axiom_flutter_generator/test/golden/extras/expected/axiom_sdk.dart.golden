@@ -89,6 +89,11 @@ class ExtrasModule {
   ExtrasModule._(this._runtime, this._namespace)
     : axiom = ExtrasModuleAxiomNamespace._(_runtime, _namespace);
 
+  /// Binds this client to another namespace of [runtime], for example the same
+  /// contract loaded a second time with a different base URL.
+  ExtrasModule(AxiomRuntime runtime, String namespace)
+    : this._(runtime, namespace);
+
   final AxiomRuntime _runtime;
   final String _namespace;
 

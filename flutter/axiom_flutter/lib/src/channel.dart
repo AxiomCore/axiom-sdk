@@ -5,7 +5,10 @@ import 'internal/axiom_codec.dart';
 
 /// Returned by SDK endpoints defined as `http_stream`, `sse`, or `file_stream`.
 class AxiomStreamQuery<T> {
+  /// Stream of states, one success state per received item.
   final Stream<AxiomState<T>> stream;
+
+  /// Wraps [stream].
   AxiomStreamQuery(this.stream);
 }
 
@@ -21,8 +24,11 @@ class AxiomReconnectPolicy {
 
   /// Delay before the first attempt; doubled per attempt up to [maxDelay].
   final Duration initialDelay;
+
+  /// Upper bound for the delay between attempts.
   final Duration maxDelay;
 
+  /// Creates a policy. Disabled by default.
   const AxiomReconnectPolicy({
     this.enabled = false,
     this.maxAttempts,
@@ -51,6 +57,8 @@ class AxiomReconnectPolicy {
 /// channel reconnects.
 class AxiomChannel<ReceiveType, SendType> {
   int _requestId;
+
+  /// Received messages as states. Stays the same across reconnects.
   final Stream<AxiomState<ReceiveType>> stream;
   final AxiomRuntime _runtime;
 
@@ -59,6 +67,7 @@ class AxiomChannel<ReceiveType, SendType> {
 
   bool _closed = false;
 
+  /// Created by [AxiomRuntime.openChannel]; you do not call this directly.
   AxiomChannel(
     this._requestId,
     this.stream,
@@ -72,6 +81,7 @@ class AxiomChannel<ReceiveType, SendType> {
   /// Used by runtime implementations when a reconnect opens a new request.
   void updateRequestId(int value) => _requestId = value;
 
+  /// True after [close].
   bool get isClosed => _closed;
 
   /// Sends a message up to the server via the active WebSocket.

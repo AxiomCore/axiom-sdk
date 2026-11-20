@@ -1,5 +1,3 @@
-// FILE: lib/src/config.dart
-
 /// Configuration for one contract namespace.
 class AxiomContractConfig {
   /// Default base URL baked in by the generator. Overridden by
@@ -22,6 +20,7 @@ class AxiomContractConfig {
   /// `axiom pull`; generated code sets it in release builds.
   final String? sha256;
 
+  /// Creates the configuration of one contract.
   const AxiomContractConfig({
     required this.baseUrl,
     required this.assetPath,
@@ -33,6 +32,7 @@ class AxiomContractConfig {
   /// True when this contract must go through the hash-locked load.
   bool get isLocked => sha256 != null && sha256!.isNotEmpty;
 
+  /// Returns a copy with the given fields replaced.
   AxiomContractConfig copyWith({
     String? baseUrl,
     String? assetPath,
@@ -51,6 +51,7 @@ class AxiomContractConfig {
 /// A named deployment environment (for example `dev`, `staging`, `prod`)
 /// mapping namespaces to base URLs.
 class AxiomEnvironment {
+  /// Environment name, for example `staging`.
   final String name;
 
   /// Base URL per namespace for this environment.
@@ -60,6 +61,7 @@ class AxiomEnvironment {
   /// contract default.
   final String? defaultBaseUrl;
 
+  /// Creates an environment.
   const AxiomEnvironment({
     required this.name,
     this.baseUrls = const {},
@@ -80,9 +82,17 @@ class AxiomEnvironment {
   }
 }
 
+/// Runtime configuration: the contracts to load and how to resolve their base URLs.
+///
+/// The generated `AxiomDefaultConfig.config` is a ready-made instance.
 class AxiomConfig {
+  /// Contracts to load, keyed by namespace.
   final Map<String, AxiomContractConfig> contracts;
+
+  /// Logs runtime events to the console when true.
   final bool debug;
+
+  /// Folder of the persistent cache. Null uses the platform default.
   final String? dbPath;
 
   /// Selected environment; its URLs override contract defaults.
@@ -95,6 +105,7 @@ class AxiomConfig {
   /// sets this in release builds.
   final bool requireSignedContracts;
 
+  /// Creates a configuration.
   const AxiomConfig({
     required this.contracts,
     this.debug = false,
@@ -122,6 +133,7 @@ class AxiomConfig {
     return contract.baseUrl;
   }
 
+  /// Returns a copy with the given fields replaced.
   AxiomConfig copyWith({
     Map<String, AxiomContractConfig>? contracts,
     bool? debug,

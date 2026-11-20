@@ -1,0 +1,53 @@
+// Android module of axiom_flutter (ffiPlugin: true, no Java/Kotlin code).
+// It only ships the prebuilt runtime libraries from src/main/jniLibs/<abi>/.
+// See README.md in this directory for how they are produced and updated.
+group = "dev.axiomcore.axiom_flutter"
+version = "1.0"
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.7.3")
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: "com.android.library"
+
+android {
+    namespace = "dev.axiomcore.axiom_flutter"
+    compileSdk = 35
+
+    defaultConfig {
+        minSdk = 24
+        consumerProguardFiles "consumer-rules.pro"
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ["src/main/jniLibs"]
+        }
+    }
+
+    packagingOptions {
+        jniLibs {
+            // Keep the .so uncompressed and page aligned in the APK so it is
+            // mapped in place (16 KB page devices included).
+            useLegacyPackaging = false
+        }
+    }
+}

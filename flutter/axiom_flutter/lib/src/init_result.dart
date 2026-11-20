@@ -16,7 +16,10 @@ enum AxiomContractTrust {
 
 /// Load outcome for one contract namespace.
 class AxiomContractLoadResult {
+  /// Contract namespace.
   final String namespace;
+
+  /// Base URL the contract was loaded with.
   final String baseUrl;
 
   /// Raw status returned by the runtime (0 success, -1 success unverified,
@@ -29,6 +32,7 @@ class AxiomContractLoadResult {
   /// Error description when [ok] is false.
   final Object? error;
 
+  /// Creates a load result.
   const AxiomContractLoadResult({
     required this.namespace,
     required this.baseUrl,
@@ -37,7 +41,10 @@ class AxiomContractLoadResult {
     this.error,
   });
 
+  /// True when the contract loaded (signed or unsigned).
   bool get ok => status == 0 || status == -1;
+
+  /// True when the contract was loaded with a verified signature or hash lock.
   bool get isSigned =>
       trust == AxiomContractTrust.signed || trust == AxiomContractTrust.locked;
 
@@ -71,6 +78,7 @@ class AxiomInitResult {
   /// initialization.
   final bool alreadyInitialized;
 
+  /// Creates an init result.
   const AxiomInitResult({
     required this.ok,
     this.error,

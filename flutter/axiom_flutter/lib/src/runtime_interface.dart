@@ -14,15 +14,27 @@ import 'runtime_stub.dart'
     if (dart.library.io) 'runtime_io.dart'
     if (dart.library.js_interop) 'runtime_web.dart';
 
+/// Raw response stream of [AxiomRuntime.callStream].
 class AxiomStreamResponse {
+  /// Runtime request id; pass it to [AxiomRuntime.cancel].
   final int requestId;
+
+  /// Raw byte states, one per chunk.
   final Stream<AxiomState<Uint8List>> stream;
+
+  /// Creates a response.
   AxiomStreamResponse(this.requestId, this.stream);
 }
 
+/// A request id with its typed state stream.
 class AxiomActiveStream<T> {
+  /// Runtime request id; pass it to [AxiomRuntime.cancel].
   final int requestId;
+
+  /// Typed states of the request.
   final Stream<AxiomState<T>> stream;
+
+  /// Creates an active stream.
   AxiomActiveStream(this.requestId, this.stream);
 }
 
@@ -43,8 +55,10 @@ typedef AxiomAssetLoader = Future<Uint8List> Function(String assetPath);
 /// calls -> optional [resetSession] on logout -> [shutdown] on hot restart or
 /// app exit. After [shutdown], [initialize] may be called again.
 abstract class AxiomRuntime {
+  /// Returns the runtime for the current platform (native or web).
   factory AxiomRuntime() => getRuntime();
 
+  /// Prints runtime events to the console when true.
   bool debug = false;
 
   // ---------------------------------------------------------------------------
@@ -83,6 +97,7 @@ abstract class AxiomRuntime {
   /// library but does not start the runtime.
   AxiomRuntimeInfo get runtimeInfo;
 
+  /// Legacy start-up: [init] plus one unnamed contract. New code should use [initialize].
   Future<void> startup({
     required String baseUrl,
     required Uint8List contractBytes,
@@ -119,6 +134,10 @@ abstract class AxiomRuntime {
   // Calls
   // ---------------------------------------------------------------------------
 
+  /// Sends a query to [endpointId] of [namespace]. Generated clients call
+  /// this; you normally use the generated method instead.
+  ///
+  /// [args] build the cache key. [decoder] maps the response JSON to [T].
   AxiomQuery<T> send<T>({
     required String namespace,
     required int endpointId,
@@ -133,6 +152,8 @@ abstract class AxiomRuntime {
     AxiomCallOptions? options,
   });
 
+  /// Like [send] for commands (POST, PUT, DELETE). The query is a mutation:
+  /// it is never deduplicated and never cancelled implicitly.
   AxiomQuery<T> sendMutation<T>({
     required String namespace,
     required int endpointId,
@@ -147,6 +168,8 @@ abstract class AxiomRuntime {
     AxiomCallOptions? options,
   });
 
+  /// Starts a streaming call (SSE, NDJSON, file stream) and returns the raw
+  /// chunks. Generated `...Stream()` methods decode the frames for you.
   AxiomStreamResponse callStream({
     required String namespace,
     required int endpointId,
@@ -189,6 +212,7 @@ abstract class AxiomRuntime {
     required String token,
   });
 
+  /// Removes the token set by [setAuthToken].
   void clearAuthToken({required String namespace, required String methodName});
 
   /// Sets [token] for every auth method of [namespace]. Per-method tokens
@@ -198,18 +222,22 @@ abstract class AxiomRuntime {
     required String token,
   });
 
+  /// Removes the token set by [setNamespaceAuthToken].
   void clearNamespaceAuthToken({required String namespace});
 
   /// Sets [token] for every namespace and auth method. Namespace and
   /// per-method tokens take precedence.
   void setGlobalAuthToken(String token);
 
+  /// Removes the token set by [setGlobalAuthToken].
   void clearGlobalAuthToken();
 
   /// Registers (or with null, removes) the refresh callback asked for a
   /// token when the runtime needs one. Replaces any previous provider.
   void setAuthProvider(AxiomAuthProvider? provider);
 
+  /// Sends [payload] on the open stream [requestId] (legacy WebSocket API;
+  /// prefer [AxiomChannel.send]).
   void sendStreamMessage({required int requestId, required Uint8List payload});
 
   // ---------------------------------------------------------------------------
@@ -305,37 +333,82 @@ abstract class AxiomRuntime {
   Future<Object?> extensionAudit();
 }
 
+/// Event type codes sent by the runtime callback.
 class EventType {
+  /// The request finished.
   static const int complete = 0;
+
+  /// Data came from the network.
   static const int networkSuccess = 1;
+
+  /// Data came from the cache.
   static const int cacheHit = 2;
+
+  /// Cached data was returned and a network refresh started.
   static const int cacheHitAndFetching = 3;
+
+  /// The request failed.
   static const int error = 4;
+
+  /// One chunk of a streaming response.
   static const int streamChunk = 5;
 }
 
+/// Status codes returned by the runtime C API.
 class FfiError {
+  /// Contract loaded without a signature.
   static const int successUnverified = -1;
+
+  /// Success.
   static const int success = 0;
+
+  /// Unknown error.
   static const int unknownError = 1;
+
+  /// The request could not be parsed.
   static const int requestParsingFailed = 2;
+
+  /// Network error.
   static const int networkError = 3;
+
+  /// The response could not be decoded.
   static const int responseDeserializationFailed = 4;
+
+  /// The endpoint id is not in the contract.
   static const int unknownEndpoint = 5;
+
+  /// Timeout.
   static const int timeout = 6;
+
+  /// The request failed.
   static const int requestFailed = 7;
+
+  /// Authentication failed.
   static const int authError = 8;
+
+  /// The server returned an error.
   static const int serverError = 9;
+
+  /// The contract is invalid or its proof does not match.
   static const int invalidContract = 10;
+
+  /// The runtime is older than the contract needs.
   static const int runtimeTooOld = 11;
+
+  /// No contract is loaded for the namespace.
   static const int contractNotLoaded = 12;
+
+  /// Runtime initialization failed.
   static const int initializationFailed = 13;
+
+  /// Internal runtime error.
   static const int internalError = 14;
 
   /// Request cancelled by `axiom_cancel` / reset. The error message is plain
   /// text (`Request cancelled by host`), not AxiomError JSON.
   static const int cancelled = 15;
 
+  /// Readable name of [code].
   static String name(int code) {
     return switch (code) {
       successUnverified => 'SuccessUnverified',

@@ -16,5 +16,6 @@ class AxiomMutation<T, Args> {
   /// Always backed by sendMutation — never cached.
   final AxiomQuery<T> Function(Args) mutationFn;
 
+  /// Creates a mutation that runs [mutationFn] with the arguments given to `execute`.
   AxiomMutation(this.mutationFn);
 }
