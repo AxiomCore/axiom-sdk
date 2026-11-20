@@ -83,6 +83,11 @@ class FixtureModule {
   FixtureModule._(this._runtime, this._namespace)
     : axiom = FixtureModuleAxiomNamespace._(_runtime, _namespace);
 
+  /// Binds this contract to another [namespace] already loaded into [runtime]
+  /// (for example the same contract against a second base URL).
+  FixtureModule(AxiomRuntime runtime, String namespace)
+    : this._(runtime, namespace);
+
   final AxiomRuntime _runtime;
   final String _namespace;
 
