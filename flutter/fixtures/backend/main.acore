@@ -52,7 +52,7 @@ failure unauthorized(payload: Models.Problem, status: 401, category: FailureCate
 
 guard signedIn(kind: GuardKind.authenticated)
 
-cors(origins: ["http://127.0.0.1:8792", "http://localhost:8792"], methods: [GET, POST, PUT, DELETE], headers: ["accept", "authorization", "axiom-public-failures", "content-type", "last-event-id", "traceparent", "tracestate", "x-api-key", "x-axiom-cache-mode", "x-axiom-request-id", "x-axiom-submission-resolution", "x-fixture-nonce"], credentials: false, maxAge: 10m)
+cors(origins: ["http://127.0.0.1:8792", "http://localhost:8792", "http://127.0.0.1:8802", "http://localhost:8802"], methods: [GET, POST, PUT, DELETE], headers: ["accept", "authorization", "axiom-public-failures", "content-type", "last-event-id", "traceparent", "tracestate", "x-api-key", "x-axiom-cache-mode", "x-axiom-request-id", "x-axiom-submission-resolution", "x-fixture-nonce"], credentials: false, maxAge: 10m)
 
 // ---- unary ----
 action echo(kind: ActionKind.query, input: Models.EchoIn, output: Models.Echo) {
@@ -264,4 +264,4 @@ endpoint wsEcho(method: WS, path: "/stream/ws") {
 }
 streamPolicy sse(endpoint: Routes.sse, buffer: 2, maxFrameBytes: 16384, maxFrames: 100, heartbeat: 10s, stallTimeout: 5s, maxConnections: 16, idField: .id)
 streamPolicy chunked(endpoint: Routes.chunked, buffer: 2, maxFrameBytes: 16384, maxFrames: 100, heartbeat: 10s, stallTimeout: 5s, maxConnections: 16)
-streamPolicy wsEcho(endpoint: Routes.wsEcho, maxFrameBytes: 16384, maxFrames: 100, heartbeat: 10s, stallTimeout: 5s, maxConnections: 16, origins: ["http://127.0.0.1:8792", "http://localhost:8792"])
+streamPolicy wsEcho(endpoint: Routes.wsEcho, maxFrameBytes: 16384, maxFrames: 100, heartbeat: 10s, stallTimeout: 5s, maxConnections: 16, origins: ["http://127.0.0.1:8792", "http://localhost:8792", "http://127.0.0.1:8802", "http://localhost:8802"])

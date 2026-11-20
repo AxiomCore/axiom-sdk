@@ -3,6 +3,7 @@ import 'cache.dart';
 import 'checks_c.dart';
 import 'checks_d.dart';
 import 'checks_f.dart';
+import 'checks_g.dart';
 import 'ctx.dart';
 import 'failures.dart';
 import 'streams.dart';
@@ -20,4 +21,5 @@ final List<CheckDef> allChecks = [
   ...checksC,
   ...dChecks,
   ...checksF,
+  ...checksG,
 ];
