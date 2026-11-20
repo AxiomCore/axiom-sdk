@@ -1,6 +1,7 @@
 import 'auth.dart';
 import 'cache.dart';
 import 'checks_c.dart';
+import 'checks_f.dart';
 import 'ctx.dart';
 import 'failures.dart';
 import 'streams.dart';
@@ -16,4 +17,5 @@ final List<CheckDef> allChecks = [
   ...streamChecks,
   ...runtimeChecks,
   ...checksC,
+  ...checksF,
 ];
