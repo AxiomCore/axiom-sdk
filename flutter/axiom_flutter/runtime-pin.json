@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "runtime_version": "0.148.6",
+  "apple": {
+    "archive": "AxiomRuntime.xcframework.zip",
+    "url": "https://github.com/AxiomCore/AxiomCore/releases/download/v0.148.6/AxiomRuntime.xcframework.zip",
+    "sha256": "f8b394fe7be49091face20e142ae2c3f2c4ad2a47235d736c137493bbe014db6"
+  },
+  "android": {
+    "archive": null,
+    "url": null,
+    "sha256": null
+  },
+  "wasm": {
+    "runtime_commit": null,
+    "axiom_runtime_js_sha256": null,
+    "axiom_runtime_bg_wasm_sha256": null
+  }
+}

@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""Check that every AxiomRuntime pin in axiom-sdk agrees with runtime-pin.json.
+
+Checks:
+  * flutter/axiom_flutter/runtime-pin.json is byte-identical to runtime-pin.json
+  * both podspecs read the pin file and carry no literal version or digest
+  * swift/Package.swift binaryTarget url and checksum match the Apple pin
+  * the Apple url names the pinned runtime version
+  * with --download: the Apple archive digest equals the pinned sha256
+
+Exit status 0 when all checks pass, 1 otherwise.
+"""
+import argparse
+import hashlib
+import json
+import re
+import sys
+import urllib.request
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+PIN = ROOT / "runtime-pin.json"
+FLUTTER_PIN = ROOT / "flutter/axiom_flutter/runtime-pin.json"
+PODSPECS = [
+    ROOT / "flutter/axiom_flutter/ios/axiom_flutter.podspec",
+    ROOT / "flutter/axiom_flutter/macos/axiom_flutter.podspec",
+]
+PACKAGE_SWIFT = ROOT / "swift/Package.swift"
+SHA_RE = re.compile(r"^[0-9a-f]{64}$")
+
+failures = []
+
+
+def check(ok, message):
+    print(("ok   " if ok else "FAIL ") + message)
+    if not ok:
+        failures.append(message)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--download", action="store_true",
+                        help="download the Apple archive and verify its sha256")
+    args = parser.parse_args()
+
+    pin_bytes = PIN.read_bytes()
+    pin = json.loads(pin_bytes)
+    version = pin["runtime_version"]
+    apple = pin["apple"]
+    print(f"runtime-pin.json: runtime {version}")
+
+    check(FLUTTER_PIN.exists() and FLUTTER_PIN.read_bytes() == pin_bytes,
+          f"{FLUTTER_PIN.relative_to(ROOT)} identical to runtime-pin.json")
+    check(bool(SHA_RE.match(apple["sha256"])), "apple.sha256 is 64 lowercase hex characters")
+    check(f"/v{version}/{apple['archive']}" in apple["url"],
+          "apple.url names runtime_version and archive")
+
+    for spec in PODSPECS:
+        text = spec.read_text()
+        rel = spec.relative_to(ROOT)
+        check("runtime-pin.json" in text and "runtime_pin.fetch('apple')" in text,
+              f"{rel} reads runtime-pin.json")
+        check(not re.search(r"\b[0-9a-f]{64}\b", text), f"{rel} has no literal sha256")
+        check(not re.search(r"runtime_version\s*=\s*'", text),
+              f"{rel} has no literal runtime version")
+
+    swift = PACKAGE_SWIFT.read_text()
+    url = re.search(r'url:\s*"([^"]+AxiomRuntime[^"]*)"', swift)
+    checksum = re.search(r'checksum:\s*"([0-9a-f]{64})"', swift)
+    check(bool(url) and url.group(1) == apple["url"], "swift/Package.swift url matches apple.url")
+    check(bool(checksum) and checksum.group(1) == apple["sha256"],
+          "swift/Package.swift checksum matches apple.sha256")
+
+    if args.download:
+        print(f"downloading {apple['url']}")
+        digest = hashlib.sha256()
+        size = 0
+        with urllib.request.urlopen(apple["url"], timeout=120) as response:
+            while True:
+                chunk = response.read(1 << 20)
+                if not chunk:
+                    break
+                digest.update(chunk)
+                size += len(chunk)
+        actual = digest.hexdigest()
+        print(f"downloaded {size} bytes, sha256 {actual}")
+        check(actual == apple["sha256"], "downloaded Apple archive matches apple.sha256")
+
+    if failures:
+        print(f"{len(failures)} check(s) failed")
+        return 1
+    print("all runtime pin checks passed")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
