@@ -1,0 +1,890 @@
+{
+  "endpoints": {
+    "cachedItems": {
+      "id": 1375712977,
+      "cache": {
+        "strategy": "cache_first",
+        "ttlSeconds": 600
+      },
+      "method": "GET",
+      "parameters": [
+        {
+          "isOptional": false,
+          "name": "n",
+          "source": "query",
+          "typeRef": {
+            "kind": "int32"
+          }
+        }
+      ],
+      "path": "/cached/items",
+      "returnIsOptional": false,
+      "returnType": {
+        "kind": "named",
+        "value": "ItemList"
+      },
+      "name": "cachedItems"
+    },
+    "createItem": {
+      "id": 3770474694,
+      "method": "POST",
+      "parameters": [
+        {
+          "isOptional": false,
+          "name": "name",
+          "source": "body",
+          "typeRef": {
+            "kind": "string"
+          }
+        },
+        {
+          "isOptional": false,
+          "name": "price",
+          "source": "body",
+          "typeRef": {
+            "kind": "float64"
+          }
+        },
+        {
+          "isOptional": false,
+          "name": "qty",
+          "source": "body",
+          "typeRef": {
+            "kind": "int32"
+          }
+        }
+      ],
+      "path": "/items",
+      "returnIsOptional": false,
+      "returnType": {
+        "kind": "named",
+        "value": "Item"
+      },
+      "name": "createItem"
+    },
+    "getItem": {
+      "id": 3817711848,
+      "cache": {
+        "strategy": "network_only",
+        "ttlSeconds": 60
+      },
+      "method": "GET",
+      "parameters": [
+        {
+          "isOptional": false,
+          "name": "id",
+          "source": "path",
+          "typeRef": {
+            "kind": "string"
+          }
+        }
+      ],
+      "path": "/items/{id}",
+      "returnIsOptional": false,
+      "returnType": {
+        "kind": "named",
+        "value": "Item"
+      },
+      "name": "getItem"
+    },
+    "listItems": {
+      "id": 113632206,
+      "cache": {
+        "strategy": "network_only",
+        "ttlSeconds": 60
+      },
+      "method": "GET",
+      "parameters": [
+        {
+          "isOptional": false,
+          "name": "n",
+          "source": "query",
+          "typeRef": {
+            "kind": "int32"
+          }
+        }
+      ],
+      "path": "/items",
+      "returnIsOptional": false,
+      "returnType": {
+        "kind": "named",
+        "value": "ItemList"
+      },
+      "name": "listItems"
+    },
+    "wsEcho": {
+      "id": 3413220605,
+      "method": "WS",
+      "parameters": [
+        {
+          "isOptional": false,
+          "name": "message",
+          "source": "body",
+          "typeRef": {
+            "kind": "named",
+            "value": "Ping"
+          }
+        }
+      ],
+      "path": "/ws",
+      "returnIsOptional": false,
+      "returnType": {
+        "kind": "named",
+        "value": "Ping"
+      },
+      "streaming": {
+        "client": {
+          "model": {
+            "kind": "named",
+            "value": "Ping"
+          }
+        },
+        "direction": "bidirectional",
+        "reconnect": "auto",
+        "server": {
+          "model": {
+            "kind": "named",
+            "value": "Ping"
+          }
+        },
+        "type": "websocket"
+      },
+      "name": "wsEcho"
+    }
+  },
+  "models": {
+    "Item": {
+      "fields": {
+        "active": {
+          "isOptional": false,
+          "name": "active",
+          "typeRef": {
+            "kind": "bool"
+          }
+        },
+        "id": {
+          "isOptional": false,
+          "name": "id",
+          "typeRef": {
+            "kind": "string"
+          }
+        },
+        "name": {
+          "isOptional": false,
+          "name": "name",
+          "typeRef": {
+            "kind": "string"
+          }
+        },
+        "price": {
+          "isOptional": false,
+          "name": "price",
+          "typeRef": {
+            "kind": "float64"
+          }
+        },
+        "qty": {
+          "isOptional": false,
+          "name": "qty",
+          "typeRef": {
+            "kind": "int32"
+          }
+        },
+        "tags": {
+          "isOptional": false,
+          "name": "tags",
+          "typeRef": {
+            "kind": "list",
+            "value": {
+              "kind": "string"
+            }
+          }
+        }
+      },
+      "name": "Item"
+    },
+    "ItemInput": {
+      "fields": {
+        "name": {
+          "isOptional": false,
+          "name": "name",
+          "typeRef": {
+            "kind": "string"
+          }
+        },
+        "price": {
+          "isOptional": false,
+          "name": "price",
+          "typeRef": {
+            "kind": "float64"
+          }
+        },
+        "qty": {
+          "isOptional": false,
+          "name": "qty",
+          "typeRef": {
+            "kind": "int32"
+          }
+        }
+      },
+      "name": "ItemInput"
+    },
+    "ItemList": {
+      "fields": {
+        "items": {
+          "isOptional": false,
+          "name": "items",
+          "typeRef": {
+            "kind": "list",
+            "value": {
+              "kind": "named",
+              "value": "Item"
+            }
+          }
+        },
+        "total": {
+          "isOptional": false,
+          "name": "total",
+          "typeRef": {
+            "kind": "int32"
+          }
+        }
+      },
+      "name": "ItemList"
+    },
+    "ItemRef": {
+      "fields": {
+        "id": {
+          "isOptional": false,
+          "name": "id",
+          "typeRef": {
+            "kind": "string"
+          }
+        }
+      },
+      "name": "ItemRef"
+    },
+    "ListIn": {
+      "fields": {
+        "n": {
+          "isOptional": false,
+          "name": "n",
+          "typeRef": {
+            "kind": "int32"
+          }
+        }
+      },
+      "name": "ListIn"
+    },
+    "Ping": {
+      "fields": {
+        "seq": {
+          "isOptional": false,
+          "name": "seq",
+          "typeRef": {
+            "kind": "int32"
+          }
+        },
+        "text": {
+          "isOptional": false,
+          "name": "text",
+          "typeRef": {
+            "kind": "string"
+          }
+        }
+      },
+      "name": "Ping"
+    },
+    "SocketIn": {
+      "fields": {
+        "message": {
+          "isOptional": false,
+          "name": "message",
+          "typeRef": {
+            "kind": "named",
+            "value": "Ping"
+          }
+        }
+      },
+      "name": "SocketIn"
+    }
+  },
+  "project": {
+    "id": "dev.axiomcore.bench",
+    "version": "1.0.0"
+  },
+  "server": {
+    "actions": {
+      "createItem": {
+        "implementation": {
+          "handler": "createItem",
+          "kind": "managed"
+        },
+        "input": {
+          "kind": "named",
+          "value": "ItemInput"
+        },
+        "kind": "command",
+        "output": {
+          "kind": "named",
+          "value": "Item"
+        },
+        "program": {
+          "flow": [
+            {
+              "provenance": {
+                "end": 2484,
+                "origin": "inferred",
+                "source": "action.createItem",
+                "start": 2383
+              },
+              "statement": {
+                "kind": "return",
+                "value": {
+                  "fields": [
+                    [
+                      "id",
+                      {
+                        "kind": "literal",
+                        "value": "new"
+                      }
+                    ],
+                    [
+                      "name",
+                      {
+                        "kind": "field",
+                        "name": "name",
+                        "optional": false,
+                        "target": {
+                          "kind": "name",
+                          "name": "Input"
+                        }
+                      }
+                    ],
+                    [
+                      "price",
+                      {
+                        "kind": "field",
+                        "name": "price",
+                        "optional": false,
+                        "target": {
+                          "kind": "name",
+                          "name": "Input"
+                        }
+                      }
+                    ],
+                    [
+                      "qty",
+                      {
+                        "kind": "field",
+                        "name": "qty",
+                        "optional": false,
+                        "target": {
+                          "kind": "name",
+                          "name": "Input"
+                        }
+                      }
+                    ],
+                    [
+                      "active",
+                      {
+                        "kind": "literal",
+                        "value": true
+                      }
+                    ],
+                    [
+                      "tags",
+                      {
+                        "items": [
+                          {
+                            "kind": "literal",
+                            "value": "new"
+                          }
+                        ],
+                        "kind": "list"
+                      }
+                    ]
+                  ],
+                  "kind": "record"
+                }
+              }
+            }
+          ],
+          "result": {
+            "kind": "literal",
+            "value": null
+          },
+          "steps": []
+        },
+        "settings": {
+          "admission": {},
+          "guards": [],
+          "scopes": [],
+          "successStatus": null,
+          "typedFailures": []
+        }
+      },
+      "echoSocket": {
+        "implementation": {
+          "handler": "echoSocket",
+          "kind": "managed"
+        },
+        "input": {
+          "kind": "named",
+          "value": "SocketIn"
+        },
+        "kind": "stream",
+        "output": {
+          "kind": "named",
+          "value": "Ping"
+        },
+        "program": {
+          "flow": [
+            {
+              "provenance": {
+                "end": 3140,
+                "origin": "inferred",
+                "source": "action.echoSocket",
+                "start": 3083
+              },
+              "statement": {
+                "kind": "return",
+                "value": {
+                  "fields": [
+                    [
+                      "text",
+                      {
+                        "kind": "field",
+                        "name": "text",
+                        "optional": false,
+                        "target": {
+                          "kind": "field",
+                          "name": "message",
+                          "optional": false,
+                          "target": {
+                            "kind": "name",
+                            "name": "Input"
+                          }
+                        }
+                      }
+                    ],
+                    [
+                      "seq",
+                      {
+                        "kind": "field",
+                        "name": "seq",
+                        "optional": false,
+                        "target": {
+                          "kind": "field",
+                          "name": "message",
+                          "optional": false,
+                          "target": {
+                            "kind": "name",
+                            "name": "Input"
+                          }
+                        }
+                      }
+                    ]
+                  ],
+                  "kind": "record"
+                }
+              }
+            }
+          ],
+          "result": {
+            "kind": "literal",
+            "value": null
+          },
+          "steps": []
+        },
+        "settings": {
+          "admission": {},
+          "guards": [
+            "signedIn"
+          ],
+          "scopes": [],
+          "successStatus": null,
+          "typedFailures": []
+        }
+      },
+      "getItem": {
+        "implementation": {
+          "handler": "getItem",
+          "kind": "managed"
+        },
+        "input": {
+          "kind": "named",
+          "value": "ItemRef"
+        },
+        "kind": "query",
+        "output": {
+          "kind": "named",
+          "value": "Item"
+        },
+        "program": {
+          "flow": [
+            {
+              "provenance": {
+                "end": 2033,
+                "origin": "inferred",
+                "source": "action.getItem",
+                "start": 1946
+              },
+              "statement": {
+                "kind": "return",
+                "value": {
+                  "fields": [
+                    [
+                      "id",
+                      {
+                        "kind": "field",
+                        "name": "id",
+                        "optional": false,
+                        "target": {
+                          "kind": "name",
+                          "name": "Input"
+                        }
+                      }
+                    ],
+                    [
+                      "name",
+                      {
+                        "kind": "literal",
+                        "value": "item"
+                      }
+                    ],
+                    [
+                      "price",
+                      {
+                        "integer": false,
+                        "kind": "numeric",
+                        "representation": "1.5"
+                      }
+                    ],
+                    [
+                      "qty",
+                      {
+                        "integer": true,
+                        "kind": "numeric",
+                        "representation": "1"
+                      }
+                    ],
+                    [
+                      "active",
+                      {
+                        "kind": "literal",
+                        "value": true
+                      }
+                    ],
+                    [
+                      "tags",
+                      {
+                        "items": [
+                          {
+                            "kind": "literal",
+                            "value": "a"
+                          },
+                          {
+                            "kind": "literal",
+                            "value": "b"
+                          }
+                        ],
+                        "kind": "list"
+                      }
+                    ]
+                  ],
+                  "kind": "record"
+                }
+              }
+            }
+          ],
+          "result": {
+            "kind": "literal",
+            "value": null
+          },
+          "steps": []
+        },
+        "settings": {
+          "admission": {},
+          "guards": [],
+          "scopes": [],
+          "successStatus": null,
+          "typedFailures": []
+        }
+      },
+      "listItems": {
+        "implementation": {
+          "handler": "listItems",
+          "kind": "managed"
+        },
+        "input": {
+          "kind": "named",
+          "value": "ListIn"
+        },
+        "kind": "query",
+        "output": {
+          "kind": "named",
+          "value": "ItemList"
+        },
+        "program": {
+          "flow": [
+            {
+              "provenance": {
+                "end": 1352,
+                "origin": "inferred",
+                "source": "action.listItems",
+                "start": 1241
+              },
+              "statement": {
+                "kind": "return",
+                "value": {
+                  "fields": [
+                    [
+                      "items",
+                      {
+                        "items": [
+                          {
+                            "fields": [
+                              [
+                                "id",
+                                {
+                                  "kind": "literal",
+                                  "value": "1"
+                                }
+                              ],
+                              [
+                                "name",
+                                {
+                                  "kind": "literal",
+                                  "value": "item 1"
+                                }
+                              ],
+                              [
+                                "price",
+                                {
+                                  "integer": false,
+                                  "kind": "numeric",
+                                  "representation": "1.5"
+                                }
+                              ],
+                              [
+                                "qty",
+                                {
+                                  "integer": true,
+                                  "kind": "numeric",
+                                  "representation": "1"
+                                }
+                              ],
+                              [
+                                "active",
+                                {
+                                  "kind": "literal",
+                                  "value": true
+                                }
+                              ],
+                              [
+                                "tags",
+                                {
+                                  "items": [
+                                    {
+                                      "kind": "literal",
+                                      "value": "a"
+                                    },
+                                    {
+                                      "kind": "literal",
+                                      "value": "b"
+                                    }
+                                  ],
+                                  "kind": "list"
+                                }
+                              ]
+                            ],
+                            "kind": "record"
+                          }
+                        ],
+                        "kind": "list"
+                      }
+                    ],
+                    [
+                      "total",
+                      {
+                        "kind": "field",
+                        "name": "n",
+                        "optional": false,
+                        "target": {
+                          "kind": "name",
+                          "name": "Input"
+                        }
+                      }
+                    ]
+                  ],
+                  "kind": "record"
+                }
+              }
+            }
+          ],
+          "result": {
+            "kind": "literal",
+            "value": null
+          },
+          "steps": []
+        },
+        "settings": {
+          "admission": {},
+          "guards": [],
+          "scopes": [],
+          "successStatus": null,
+          "typedFailures": []
+        }
+      }
+    },
+    "cors": {
+      "credentials": false,
+      "headers": [
+        "accept",
+        "authorization",
+        "axiom-public-failures",
+        "content-type",
+        "traceparent",
+        "tracestate",
+        "x-axiom-cache-mode",
+        "x-axiom-request-id",
+        "x-axiom-submission-resolution"
+      ],
+      "maxAgeSeconds": 600,
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "origins": [
+        "*"
+      ]
+    },
+    "endpointPolicies": {
+      "cachedItems": {
+        "admission": {},
+        "guards": [],
+        "handle": {
+          "action": "listItems",
+          "input": {
+            "n": {
+              "name": "n",
+              "source": "query"
+            }
+          }
+        },
+        "scopes": [],
+        "successStatus": null,
+        "typedFailures": []
+      },
+      "createItem": {
+        "admission": {},
+        "guards": [],
+        "handle": {
+          "action": "createItem",
+          "input": {
+            "name": {
+              "name": "name",
+              "source": "body"
+            },
+            "price": {
+              "name": "price",
+              "source": "body"
+            },
+            "qty": {
+              "name": "qty",
+              "source": "body"
+            }
+          }
+        },
+        "scopes": [],
+        "successStatus": 201,
+        "typedFailures": []
+      },
+      "getItem": {
+        "admission": {},
+        "guards": [],
+        "handle": {
+          "action": "getItem",
+          "input": {
+            "id": {
+              "name": "id",
+              "source": "path"
+            }
+          }
+        },
+        "scopes": [],
+        "successStatus": null,
+        "typedFailures": []
+      },
+      "listItems": {
+        "admission": {},
+        "guards": [],
+        "handle": {
+          "action": "listItems",
+          "input": {
+            "n": {
+              "name": "n",
+              "source": "query"
+            }
+          }
+        },
+        "scopes": [],
+        "successStatus": null,
+        "typedFailures": []
+      },
+      "wsEcho": {
+        "admission": {},
+        "guards": [],
+        "handle": {
+          "action": "echoSocket",
+          "input": {
+            "message": {
+              "name": "message",
+              "source": "body"
+            }
+          }
+        },
+        "scopes": [],
+        "successStatus": null,
+        "typedFailures": []
+      }
+    },
+    "guards": {
+      "signedIn": {
+        "kind": "authenticated"
+      }
+    },
+    "integrations": {
+      "caches": {},
+      "outbound": {},
+      "streams": {
+        "wsEcho": {
+          "buffer": 2,
+          "endpoint": "wsEcho",
+          "heartbeatMs": 10000,
+          "idField": null,
+          "maxConnections": 16,
+          "maxFrameBytes": 16384,
+          "maxFrames": 10000,
+          "origins": [
+            "http://127.0.0.1:8852",
+            "http://localhost:8852"
+          ],
+          "stallTimeoutMs": 5000
+        }
+      },
+      "uploads": {}
+    },
+    "language": {
+      "enabled": true
+    }
+  },
+  "variants": {
+    "default": {
+      "include": [
+        "*"
+      ]
+    }
+  }
+}
