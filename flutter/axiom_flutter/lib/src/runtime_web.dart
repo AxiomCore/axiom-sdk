@@ -46,6 +46,7 @@ import 'internal/sse.dart';
 import 'internal/query_key.dart';
 import 'internal/tracing.dart';
 import 'internal/contract_load_status.dart';
+import 'internal/web_json.dart';
 
 AxiomRuntime getRuntime() => AxiomRuntimeWeb();
 
@@ -337,6 +338,22 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   @override
   bool debug = false;
 
+  /// C1.1: response bodies the runtime handed over as the browser's own
+  /// ArrayBuffer (`axiom_web_body`), by request id, until their
+  /// NetworkSuccess event arrives. Value: (buffer, flags).
+  final _externalBodies = <int, (JSArrayBuffer, int)>{};
+
+  /// Bodies already parsed in [_onEvent] (JSON syntax check), so the decoder
+  /// does not parse them again.
+  static final Expando<_Parsed> _parsedBodies = Expando('axiomParsedBody');
+
+  /// When false the runtime copies every body through wasm memory as before
+  /// 0.150.1 (the hook is not installed). Set before initialize().
+  static bool externalBodies = true;
+
+  /// Test hook: bodies received through `axiom_web_body` so far.
+  static int debugExternalBodyCount = 0;
+
   /// Test hook (integration checks only): when set, the next dispatch in
   /// [callStream] fails synchronously as if the wasm call threw.
   bool? debugFailNextDispatch;
@@ -426,6 +443,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   void _start(String? dbPath) {
     _setupWebCallback();
     _setupNotify();
+    _setupBodyHook();
     _pump?.cancel();
     // Event-driven runtimes (axiom_wasm_host_notify_version) call
     // `axiom_web_notify` when a response is queued, so the timer is only a
@@ -616,6 +634,57 @@ class AxiomRuntimeWeb implements AxiomRuntime {
             .toJS;
   }
 
+  /// The runtime (builds with `axiom_wasm_body_external_version`) calls
+  /// `axiom_web_body(id, arrayBuffer, flags)` for a successful JSON body it
+  /// does not need to keep, then sends NetworkSuccess with no bytes.
+  void _setupBodyHook() {
+    if (!externalBodies) {
+      globalContext.delete('axiom_web_body'.toJS);
+      return;
+    }
+    globalContext['axiom_web_body'] =
+        ((JSNumber reqId, JSArrayBuffer buffer, JSNumber flags) {
+              final id = reqId.toDartInt;
+              if (_requests.containsKey(id)) {
+                _externalBodies[id] = (buffer, flags.toDartInt);
+                debugExternalBodyCount++;
+              }
+            })
+            .toJS;
+  }
+
+  static const int _bodyCheckJson = 1;
+  static const int _bodyEmptyOk = 2;
+
+  static bool _allWhitespace(Uint8List b) {
+    for (final c in b) {
+      if (c != 0x20 && c != 0x0a && c != 0x0d && c != 0x09) return false;
+    }
+    return true;
+  }
+
+  /// Same error the runtime raises when the JSON syntax check fails
+  /// (engine.rs stage_validate_response, `not_json`).
+  static AxiomError _notJsonError(Object e) {
+    final source = e is FormatException ? e.message : e.toString();
+    return _decodeError(
+      FfiError.responseDeserializationFailed,
+      Uint8List.fromList(
+        utf8.encode(
+          jsonEncode({
+            'stage': 'ValidationResponse',
+            'category': 'Validation',
+            'code': 'JsonParseError',
+            'message': 'Server response is not valid JSON',
+            'retryable': false,
+            'details': null,
+            'source': source,
+          }),
+        ),
+      ),
+    );
+  }
+
   bool _drainScheduled = false;
 
   void _drain() {
@@ -653,7 +722,14 @@ class AxiomRuntimeWeb implements AxiomRuntime {
             .toJS;
   }
 
-  void _onEvent(int id, int evt, int errCode, Uint8List data, Uint8List err) {
+  void _onEvent(
+    int id,
+    int evt,
+    int errCode,
+    Uint8List data,
+    Uint8List err, {
+    AxiomError? preset,
+  }) {
     // ignore: parameter_assignments
     final req = _requests[id];
     if (req == null) return;
@@ -689,7 +765,8 @@ class AxiomRuntimeWeb implements AxiomRuntime {
         );
         return;
       case EventType.error:
-        var error = _decodeError(errCode, err);
+        _externalBodies.remove(id);
+        var error = preset ?? _decodeError(errCode, err);
         if (req.timedOut && error.isCancelled) {
           error = AxiomError(
             stage: ErrorStage.networkSend,
@@ -712,6 +789,30 @@ class AxiomRuntimeWeb implements AxiomRuntime {
         if (!controller.isClosed) controller.add(AxiomState.error(error));
         return;
       default:
+        _Parsed? parsed;
+        final external = evt == EventType.networkSuccess && data.isEmpty
+            ? _externalBodies.remove(id)
+            : null;
+        if (external != null) {
+          final (buffer, flags) = external;
+          data = buffer.toDart.asUint8List();
+          if (flags & _bodyCheckJson != 0 &&
+              !(flags & _bodyEmptyOk != 0 && _allWhitespace(data))) {
+            try {
+              parsed = _Parsed(AxiomWebJson.decode(buffer));
+            } catch (e) {
+              _onEvent(
+                id,
+                EventType.error,
+                FfiError.responseDeserializationFailed,
+                Uint8List(0),
+                Uint8List(0),
+                preset: _notJsonError(e),
+              );
+              return;
+            }
+          }
+        }
         if (data.isEmpty && evt != EventType.networkSuccess) return;
         if (AxiomSseParser.looksLike(data)) {
           // A whole event-stream body delivered as one response.
@@ -721,6 +822,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
           );
           if (events.isNotEmpty) data = events.last;
         }
+        if (parsed != null) _parsedBodies[data] = parsed;
         if (!controller.isClosed) {
           controller.add(
             AxiomState.success(
@@ -773,6 +875,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   }
 
   void _finish(int id) {
+    _externalBodies.remove(id);
     final req = _requests.remove(id);
     if (req == null) return;
     req.timeout?.cancel();
@@ -1363,8 +1466,11 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       );
     }
     try {
+      final parsed = _parsedBodies[state.data!];
       return AxiomState<T>.success(
-        AxiomCodec.decode(state.data!, decoder),
+        parsed != null
+            ? decoder(parsed.value)
+            : AxiomCodec.decode(state.data!, decoder),
         state.source,
         isFetching: state.isFetching,
         isStreaming: state.isStreaming,
@@ -1961,4 +2067,10 @@ class AxiomRuntimeWeb implements AxiomRuntime {
 class _WebAlloc {
   final int ptr, len;
   const _WebAlloc(this.ptr, this.len);
+}
+
+/// A body parsed by the JSON syntax check (value may be null).
+class _Parsed {
+  _Parsed(this.value);
+  final Object? value;
 }
