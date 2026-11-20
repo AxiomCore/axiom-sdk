@@ -13,6 +13,8 @@ Pod::Spec.new do |s|
   s.author           = { 'Axiom' => 'contact@yashmakan.com' }
   s.source           = { :path => '.' }
   s.source_files     = 'Classes/**/*'
+  # Privacy manifest (required-reason APIs used by the runtime: file timestamps).
+  s.resource_bundles = { 'axiom_flutter_privacy' => ['Resources/PrivacyInfo.xcprivacy'] }
   s.platform         = :osx, '11.0'
   s.dependency       'FlutterMacOS'
 

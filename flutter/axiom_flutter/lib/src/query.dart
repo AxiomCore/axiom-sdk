@@ -34,7 +34,13 @@ class AxiomQuery<T> {
   }) : _runtime = runtime;
 
   /// Runtime request id of the current fetch, once [stream] was read.
-  int? get requestId => _requestId;
+  int? get requestId {
+    if (!isMutation) {
+      final live = AxiomQueryManager().requestIdFor(key);
+      if (live != null && live != 0) return live;
+    }
+    return _requestId;
+  }
 
   void setHeader(String key, String value) {
     _customHeaders[key] = value;
@@ -55,16 +61,13 @@ class AxiomQuery<T> {
   /// (header `x-axiom-cache-mode: refresh`, see [AxiomCacheMode.refresh]).
   void refresh({bool force = false}) {
     if (isMutation) return;
-    if (force) {
-      throw UnimplementedError('AxiomQuery.refresh(force: true)');
-    }
-    AxiomQueryManager().invalidate(key);
+    AxiomQueryManager().invalidate(key, force: force);
   }
 
   /// Cancels the in-flight request, if any. Listeners receive one error
   /// with code [Cancelled]. Returns true when a live request was cancelled.
   bool cancel() {
-    final id = _requestId;
+    final id = requestId;
     if (id == null || id == 0) return false;
     return (_runtime ?? AxiomRuntime()).cancel(id);
   }
@@ -72,7 +75,9 @@ class AxiomQuery<T> {
   Future<void> prefetch() async {
     final subscription = stream.listen(null);
     try {
-      await stream.firstWhere((s) => s.hasData || s.hasError);
+      // Wait for a settled value so a background revalidation is not
+      // cancelled when this temporary listener leaves.
+      await stream.firstWhere((s) => (s.hasData && !s.isFetching) || s.hasError);
     } finally {
       subscription.cancel();
     }

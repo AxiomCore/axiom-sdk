@@ -1,5 +1,7 @@
 import 'auth.dart';
 import 'cache.dart';
+import 'checks_a.dart';
+import 'checks_b.dart';
 import 'checks_c.dart';
 import 'checks_d.dart';
 import 'checks_f.dart';
@@ -17,7 +19,9 @@ final List<CheckDef> allChecks = [
   ...authChecks,
   ...streamChecks,
   ...runtimeChecks,
+  ...androidChecks,
   ...checksC,
   ...dChecks,
   ...checksF,
+  ...checksB, // keep last: ends with b.shutdown_restart
 ];
