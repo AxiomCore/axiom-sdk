@@ -2,11 +2,19 @@ import 'state.dart';
 
 /// One error seen by the runtime, delivered on [AxiomRuntime.onError].
 class AxiomErrorEvent {
+  /// The error.
   final AxiomError error;
+
+  /// Contract namespace of the failed call, when known.
   final String? namespace;
+
+  /// Endpoint id of the failed call, when known.
   final int? endpointId;
+
+  /// Runtime request id of the failed call, when known.
   final int? requestId;
 
+  /// Creates an error event.
   const AxiomErrorEvent(
     this.error, {
     this.namespace,
@@ -43,6 +51,7 @@ class AxiomFailureRegistry {
     _decoders[_key(namespace, failureCode)] = decoder;
   }
 
+  /// Removes the decoders of [namespace], or all decoders when it is null.
   static void unregisterAll({String? namespace}) {
     if (namespace == null) {
       _decoders.clear();

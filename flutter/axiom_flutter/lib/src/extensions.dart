@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'state.dart';
 
+/// Helpers on a stream of [AxiomState] values.
 extension AxiomStreamExtensions<T> on Stream<AxiomState<T>> {
   /// Returns a Future that completes with the first valid data received.
   /// Useful for "awaiting" a stream result like a standard API call.

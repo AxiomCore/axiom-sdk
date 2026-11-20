@@ -24,6 +24,7 @@ class AxiomCallOptions {
   /// Cache behaviour; [AxiomCacheMode.refresh] adds [axiomCacheModeHeader].
   final AxiomCacheMode cacheMode;
 
+  /// Creates call options. All fields are optional.
   const AxiomCallOptions({
     this.timeout,
     this.headers,
@@ -37,6 +38,7 @@ class AxiomCallOptions {
     if (cacheMode == AxiomCacheMode.refresh) axiomCacheModeHeader: 'refresh',
   };
 
+  /// Returns a copy with the given fields replaced.
   AxiomCallOptions copyWith({
     Duration? timeout,
     Map<String, String>? headers,
