@@ -1,0 +1,368 @@
+{
+  "method": "Size table: baseline app vs Axiom lean (default) vs Axiom + extensions add-on.\n\n  python3 tool/size_table.py [--out results/size-table.json] [--skip-apk] [--skip-web]\n      [--variants baseline,axiom,axiom_extensions]\n      [--runtime NAME=DIR ...]   extra Axiom variants with replaced runtime binaries, e.g.\n                                 --runtime axiom_full=/home/node/fp/artifacts/perf/default\n                                 DIR/android-<abi>/libaxiom_runtime.so (or DIR/<abi>/...) and\n                                 DIR/wasm/{axiom_runtime_bg.wasm,axiom_runtime.js} replace the\n                                 binaries in a scratch copy of axiom_flutter (the repo is untouched)\n\nEvery variant is a scratch copy of baseline_app/ (dio + http, one call each) under\nbuild/size_variants/<name>/:\n  baseline          as is (no axiom_flutter dependency)\n  axiom             + axiom_flutter (path dependency on this repo: whatever runtime it bundles;\n                    the sha256 of the bundled binaries is recorded) + app/lib/size_main.dart as\n                    main.dart + the generated client + the contract asset\n  axiom_extensions  axiom + the add-on package flutter/axiom_flutter_extensions (skipped with\n                    status not_available when the package is not on this branch)\nBuilds `flutter build apk --release --split-per-abi` and `flutter build web --release`.\nPer ABI: APK bytes, libaxiom_runtime.so in-APK (compressed, what the APK stores) and raw\n(installed, extracted on device) bytes, and gzip -9 of the raw .so (download estimate; Play\ndelivers compressed splits, bundletool was not used). Web: raw, gzip -9 and brotli (q11, via\nnode's zlib) bytes of all .js/.wasm/.mjs files, and of the Axiom runtime assets.",
+  "variants": {
+    "baseline": {
+      "apk": {
+        "arm64-v8a": {
+          "apk": 14934249,
+          "libapp_so_in_apk": 3277728,
+          "libapp_so_raw": 3277728,
+          "libflutter_so_in_apk": 11275648,
+          "libflutter_so_raw": 11275648
+        },
+        "armeabi-v7a": {
+          "apk": 12061517,
+          "libapp_so_in_apk": 3670612,
+          "libapp_so_raw": 3670612,
+          "libflutter_so_in_apk": 8009696,
+          "libflutter_so_raw": 8009696
+        },
+        "x86_64": {
+          "apk": 16105283,
+          "libapp_so_in_apk": 3343264,
+          "libapp_so_raw": 3343264,
+          "libflutter_so_in_apk": 12381152,
+          "libflutter_so_raw": 12381152
+        }
+      },
+      "web": {
+        "js_wasm_raw": 18059530,
+        "js_wasm_gzip": 6994282,
+        "js_wasm_brotli": 5410005,
+        "files": {
+          "flutter.js": {
+            "raw": 8535,
+            "gzip": 3268,
+            "brotli": 2853
+          },
+          "flutter_bootstrap.js": {
+            "raw": 8861,
+            "gzip": 3406,
+            "brotli": 2978
+          },
+          "main.dart.js": {
+            "raw": 1741584,
+            "gzip": 512450,
+            "brotli": 403539
+          },
+          "flutter_service_worker.js": {
+            "raw": 7982,
+            "gzip": 2839,
+            "brotli": 2315
+          },
+          "canvaskit/canvaskit.js": {
+            "raw": 86619,
+            "gzip": 27477,
+            "brotli": 24341
+          },
+          "canvaskit/skwasm.js": {
+            "raw": 59192,
+            "gzip": 16084,
+            "brotli": 14126
+          },
+          "canvaskit/skwasm.wasm": {
+            "raw": 3427673,
+            "gzip": 1460420,
+            "brotli": 1152226
+          },
+          "canvaskit/canvaskit.wasm": {
+            "raw": 7004972,
+            "gzip": 2815942,
+            "brotli": 2191400
+          },
+          "canvaskit/chromium/canvaskit.js": {
+            "raw": 86256,
+            "gzip": 27433,
+            "brotli": 24305
+          },
+          "canvaskit/chromium/canvaskit.wasm": {
+            "raw": 5627856,
+            "gzip": 2124963,
+            "brotli": 1591922
+          }
+        },
+        "axiom_assets": {
+          "raw": 0,
+          "gzip": 0,
+          "brotli": 0
+        },
+        "main_dart_js": {
+          "raw": 1741584,
+          "gzip": 512450,
+          "brotli": 403539
+        }
+      },
+      "status": "ok"
+    },
+    "axiom": {
+      "bundled_runtime_sha256": {
+        "arm64-v8a": "22fbd670a353963bfce054b9fe129b4c337a2054b6f4434b7f47ccbd3e691339",
+        "armeabi-v7a": "c0b2576a8d9f9bfb4a33229d9f0fe5869f9093246ae8e0551e88c7db8a26775f",
+        "x86_64": "3fc35b455ac623e4e58435bcd68ef74aa483faf289411825670e61f7bbfd7f85",
+        "wasm": "99a490b55d2ff2e04e6f53b4521f24e417e4667040a89a8e141cd9b0ebad70ba"
+      },
+      "apk": {
+        "arm64-v8a": {
+          "apk": 19953265,
+          "libapp_so_in_apk": 3474336,
+          "libapp_so_raw": 3474336,
+          "axiom_so_in_apk": 4804712,
+          "axiom_so_raw": 4804712,
+          "axiom_so_gzip9": 2383309,
+          "runtime_raw": 4804712,
+          "runtime_gzip9": 2383309,
+          "libflutter_so_in_apk": 11275648,
+          "libflutter_so_raw": 11275648
+        },
+        "armeabi-v7a": {
+          "apk": 15720663,
+          "libapp_so_in_apk": 3899988,
+          "libapp_so_raw": 3899988,
+          "axiom_so_in_apk": 3410196,
+          "axiom_so_raw": 3410196,
+          "axiom_so_gzip9": 1960461,
+          "runtime_raw": 3410196,
+          "runtime_gzip9": 1960461,
+          "libflutter_so_in_apk": 8009696,
+          "libflutter_so_raw": 8009696
+        },
+        "x86_64": {
+          "apk": 22025416,
+          "libapp_so_in_apk": 3539872,
+          "libapp_so_raw": 3539872,
+          "axiom_so_in_apk": 5701680,
+          "axiom_so_raw": 5701680,
+          "axiom_so_gzip9": 2507018,
+          "runtime_raw": 5701680,
+          "runtime_gzip9": 2507018,
+          "libflutter_so_in_apk": 12381152,
+          "libflutter_so_raw": 12381152
+        }
+      },
+      "web": {
+        "js_wasm_raw": 20278462,
+        "js_wasm_gzip": 7825511,
+        "js_wasm_brotli": 6015224,
+        "files": {
+          "flutter.js": {
+            "raw": 8535,
+            "gzip": 3268,
+            "brotli": 2853
+          },
+          "flutter_bootstrap.js": {
+            "raw": 8861,
+            "gzip": 3407,
+            "brotli": 2980
+          },
+          "main.dart.js": {
+            "raw": 1802449,
+            "gzip": 532599,
+            "brotli": 419336
+          },
+          "flutter_service_worker.js": {
+            "raw": 8262,
+            "gzip": 2957,
+            "brotli": 2423
+          },
+          "canvaskit/canvaskit.js": {
+            "raw": 86619,
+            "gzip": 27477,
+            "brotli": 24341
+          },
+          "canvaskit/skwasm.js": {
+            "raw": 59192,
+            "gzip": 16084,
+            "brotli": 14126
+          },
+          "canvaskit/skwasm.wasm": {
+            "raw": 3427673,
+            "gzip": 1460420,
+            "brotli": 1152226
+          },
+          "canvaskit/canvaskit.wasm": {
+            "raw": 7004972,
+            "gzip": 2815942,
+            "brotli": 2191400
+          },
+          "canvaskit/chromium/canvaskit.js": {
+            "raw": 86256,
+            "gzip": 27433,
+            "brotli": 24305
+          },
+          "canvaskit/chromium/canvaskit.wasm": {
+            "raw": 5627856,
+            "gzip": 2124963,
+            "brotli": 1591922
+          },
+          "assets/packages/axiom_flutter/lib/assets/wasm/axiom_runtime.js": {
+            "raw": 34290,
+            "gzip": 6573,
+            "brotli": 5687
+          },
+          "assets/packages/axiom_flutter/lib/assets/wasm/axiom_runtime_bg.wasm": {
+            "raw": 2123497,
+            "gzip": 804388,
+            "brotli": 583625
+          }
+        },
+        "axiom_assets": {
+          "raw": 2157787,
+          "gzip": 810961,
+          "brotli": 589312
+        },
+        "main_dart_js": {
+          "raw": 1802449,
+          "gzip": 532599,
+          "brotli": 419336
+        }
+      },
+      "status": "ok",
+      "apk_delta_vs_baseline": {
+        "arm64-v8a": 5019016,
+        "armeabi-v7a": 3659146,
+        "x86_64": 5920133
+      },
+      "web_delta_vs_baseline": {
+        "js_wasm_raw": 2218932,
+        "js_wasm_gzip": 831229,
+        "js_wasm_brotli": 605219
+      }
+    },
+    "axiom_extensions": {
+      "bundled_runtime_sha256": {
+        "arm64-v8a": "22fbd670a353963bfce054b9fe129b4c337a2054b6f4434b7f47ccbd3e691339",
+        "armeabi-v7a": "c0b2576a8d9f9bfb4a33229d9f0fe5869f9093246ae8e0551e88c7db8a26775f",
+        "x86_64": "3fc35b455ac623e4e58435bcd68ef74aa483faf289411825670e61f7bbfd7f85",
+        "wasm": "99a490b55d2ff2e04e6f53b4521f24e417e4667040a89a8e141cd9b0ebad70ba"
+      },
+      "apk": {
+        "arm64-v8a": {
+          "apk": 22525670,
+          "libapp_so_in_apk": 3474336,
+          "libapp_so_raw": 3474336,
+          "axiom_full_so_in_apk": 7375344,
+          "axiom_full_so_raw": 7375344,
+          "axiom_full_so_gzip9": 3499993,
+          "runtime_raw": 7375344,
+          "runtime_gzip9": 3499993,
+          "libflutter_so_in_apk": 11275648,
+          "libflutter_so_raw": 11275648
+        },
+        "armeabi-v7a": {
+          "apk": 17506636,
+          "libapp_so_in_apk": 3899988,
+          "libapp_so_raw": 3899988,
+          "axiom_full_so_in_apk": 5197156,
+          "axiom_full_so_raw": 5197156,
+          "axiom_full_so_gzip9": 2894970,
+          "runtime_raw": 5197156,
+          "runtime_gzip9": 2894970,
+          "libflutter_so_in_apk": 8009696,
+          "libflutter_so_raw": 8009696
+        },
+        "x86_64": {
+          "apk": 25171261,
+          "libapp_so_in_apk": 3539872,
+          "libapp_so_raw": 3539872,
+          "axiom_full_so_in_apk": 8861496,
+          "axiom_full_so_raw": 8861496,
+          "axiom_full_so_gzip9": 3666294,
+          "runtime_raw": 8861496,
+          "runtime_gzip9": 3666294,
+          "libflutter_so_in_apk": 12381152,
+          "libflutter_so_raw": 12381152
+        }
+      },
+      "web": {
+        "js_wasm_raw": 20278461,
+        "js_wasm_gzip": 7825508,
+        "js_wasm_brotli": 6015228,
+        "files": {
+          "flutter.js": {
+            "raw": 8535,
+            "gzip": 3268,
+            "brotli": 2853
+          },
+          "flutter_bootstrap.js": {
+            "raw": 8860,
+            "gzip": 3407,
+            "brotli": 2982
+          },
+          "main.dart.js": {
+            "raw": 1802449,
+            "gzip": 532599,
+            "brotli": 419336
+          },
+          "flutter_service_worker.js": {
+            "raw": 8262,
+            "gzip": 2954,
+            "brotli": 2425
+          },
+          "canvaskit/canvaskit.js": {
+            "raw": 86619,
+            "gzip": 27477,
+            "brotli": 24341
+          },
+          "canvaskit/skwasm.js": {
+            "raw": 59192,
+            "gzip": 16084,
+            "brotli": 14126
+          },
+          "canvaskit/skwasm.wasm": {
+            "raw": 3427673,
+            "gzip": 1460420,
+            "brotli": 1152226
+          },
+          "canvaskit/canvaskit.wasm": {
+            "raw": 7004972,
+            "gzip": 2815942,
+            "brotli": 2191400
+          },
+          "canvaskit/chromium/canvaskit.js": {
+            "raw": 86256,
+            "gzip": 27433,
+            "brotli": 24305
+          },
+          "canvaskit/chromium/canvaskit.wasm": {
+            "raw": 5627856,
+            "gzip": 2124963,
+            "brotli": 1591922
+          },
+          "assets/packages/axiom_flutter/lib/assets/wasm/axiom_runtime.js": {
+            "raw": 34290,
+            "gzip": 6573,
+            "brotli": 5687
+          },
+          "assets/packages/axiom_flutter/lib/assets/wasm/axiom_runtime_bg.wasm": {
+            "raw": 2123497,
+            "gzip": 804388,
+            "brotli": 583625
+          }
+        },
+        "axiom_assets": {
+          "raw": 2157787,
+          "gzip": 810961,
+          "brotli": 589312
+        },
+        "main_dart_js": {
+          "raw": 1802449,
+          "gzip": 532599,
+          "brotli": 419336
+        }
+      },
+      "status": "ok",
+      "apk_delta_vs_baseline": {
+        "arm64-v8a": 7591421,
+        "armeabi-v7a": 5445119,
+        "x86_64": 9065978
+      },
+      "web_delta_vs_baseline": {
+        "js_wasm_raw": 2218931,
+        "js_wasm_gzip": 831226,
+        "js_wasm_brotli": 605223
+      }
+    }
+  },
+  "flutter": "Flutter 3.32.0 \u2022 channel stable \u2022 https://github.com/flutter/flutter.git",
+  "sdk_commit": "6a48226"
+}

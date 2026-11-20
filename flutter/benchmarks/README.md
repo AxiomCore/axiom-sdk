@@ -101,6 +101,16 @@ python3 tool/render_readme.py results/<date>-linux-chrome.json --insert ../../RE
 
 ## Results
 
+0.150.1 numbers of record (axiom-sdk 6a48226, lean runtime from axiom-runtime c600a8d; measured
+2026-11-20 21:11-21:21 UTC on the lane-3 box, idle, load log `results/load-2026-11-21.log`):
+`results/2026-11-21-linux-chrome-idle.json` (web, 3 runs, h1 + h2 pass),
+`results/2026-11-21-linux-vm.json` (native Dart VM, 3 runs), `results/size-table-2026-11-21.json`,
+rendered into `results/README-SUMMARY.md`, `results/README-TABLE.md`,
+`results/BEFORE-AFTER-2026-11-21.md` (vs 0.150.0) and `results/history.jsonl`. A first set
+(20:44-21:01 UTC) failed the 10% rule because the box was loaded during runs 1-2; it is kept as
+`results/*2026-11-21-attempt1*` and not used.
+
+
 Numbers of record: `results/2026-11-20-linux-chrome-idle.json` (3 full web runs on an idle box,
 tooling, LOC, size), rendered by `tool/render_readme.py` into `results/README-TABLE.md` (the table
 for the repo README). Raw inputs: `results/raw-web-idle-run{1,2,3}.jsonl`, `tooling-l2.json`,
