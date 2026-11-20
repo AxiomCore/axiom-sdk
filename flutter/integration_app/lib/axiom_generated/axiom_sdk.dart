@@ -31,8 +31,11 @@ abstract final class AxiomDefaultConfig {
 
 /// Entry point of the generated client.
 class AxiomSdk {
-  AxiomSdk._(this.runtime, this.initResult)
-    : fixture = FixtureModule._(runtime, 'fixture');
+  /// Wraps an already initialized [runtime] (tests, custom start-up).
+  AxiomSdk.fromRuntime(
+    this.runtime, [
+    this.initResult = const AxiomInitResult(ok: true),
+  ]) : fixture = FixtureModule._(runtime, 'fixture');
 
   final AxiomRuntime runtime;
 
@@ -64,7 +67,7 @@ class AxiomSdk {
     models.ContractFailure.registerAll();
     final result = await runtime.initialize(cfg, assetLoader: assetLoader);
     result.requireOk();
-    return AxiomSdk._(runtime, result);
+    return AxiomSdk.fromRuntime(runtime, result);
   }
 }
 

@@ -173,7 +173,8 @@ class SdkWriter {
   void _writeSdk(StringBuffer b) {
     b.writeln('/// Entry point of the generated client.');
     b.writeln('class AxiomSdk {');
-    b.write('  AxiomSdk._(this.runtime, this.initResult)');
+    b.writeln('  /// Wraps an already initialized [runtime] (tests, custom start-up).');
+    b.write('  AxiomSdk.fromRuntime(this.runtime, [this.initResult = const AxiomInitResult(ok: true)])');
     final inits = [
       for (final c in contracts)
         '${_prop(c)} = ${_moduleClass(c)}._(runtime, ${GeneratorUtils.str(c.namespace)})',
@@ -218,7 +219,7 @@ class SdkWriter {
     }
     b.writeln('    final result = await runtime.initialize(cfg, assetLoader: assetLoader);');
     b.writeln('    result.requireOk();');
-    b.writeln('    return AxiomSdk._(runtime, result);');
+    b.writeln('    return AxiomSdk.fromRuntime(runtime, result);');
     b.writeln('  }');
     b.writeln('}');
     b.writeln();
