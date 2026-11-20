@@ -101,6 +101,9 @@ same contract gives the same bytes.
   - commands with `invalidates` refetch the matching active queries on
     success; idempotent commands take an `idempotencyKey`
 - `endpointIds`, `cacheIdentities` and `authMethods` constants per module.
+- Model RPCs (`rpcs` on a model) become extension methods on the model,
+  e.g. `person.getContacts(sdk.rpc, limit: 10)`, which call the mapped
+  endpoint with the request built by the RPC resolver.
 - `sdk.<ns>.axiom`: tokens (`setAuthToken`, `setNamespaceToken`) and
   `invalidateAll()` for the namespace.
 
@@ -108,7 +111,9 @@ same contract gives the same bytes.
 
 - a class per model with `fromJson`, `toJson`, `==`, `hashCode`, `copyWith`
   and `toString`
-- Dart enums with an `unknown` value for values added on the server later
+- Dart enums with an `unknown` value for values added on the server later.
+  A model keeps the original wire value of such a field and sends it back
+  unchanged; `unknown.toJson()` on its own throws instead of inventing a value
 - sealed classes for unions
 - `DateTime` for timestamps, `Uint8List` for bytes (base64 on the wire)
 - a class per contract `failure`, a sealed `<Endpoint>Errors` type and
@@ -116,7 +121,19 @@ same contract gives the same bytes.
 - `<Model>Validators` with one `String? Function(String?)` per field rule,
   usable as a `TextFormField` validator
 
-Do not edit the generated files. Exclude them from analysis if you want:
+Names: a Dart name that two contract names map to (`user_id` and `userId`),
+or that clashes with a reserved word or a generated member (`toJson`,
+`copyWith`, `hashCode`, `axiom`, ...), gets a `$` prefix or a numeric suffix
+(`userId2`). A name that is already valid as written keeps it. JSON keys are
+never renamed. Two contract types or namespaces that map to the same Dart
+class name stop generation with an error.
+
+`int64` fields map to `int`. On the web `jsonDecode` rounds integers above
+2^53 (snowflake IDs, for example) without an error, so send such values as
+strings in the contract.
+
+The generated files analyze cleanly with `flutter_lints`. You can still
+exclude them from analysis:
 
 ```yaml
 analyzer:
