@@ -66,9 +66,16 @@ if (!axiomKeepLeanRuntime) {
                 p.tasks.matching {
                     it.name ==~ /merge\w*NativeLibs/ || it.name ==~ /strip\w*DebugSymbols/
                 }.configureEach { t ->
+                    // Configuration-cache safe: the output FileCollection is
+                    // captured at configuration time; the action uses only
+                    // java.io.File (no Project or Task access at execution).
+                    def outs = t.outputs.files
                     t.doLast {
-                        t.outputs.files.each { out ->
-                            p.fileTree(out) { include "**/libaxiom_runtime.so" }.each { it.delete() }
+                        outs.files.each { File out ->
+                            if (!out.isDirectory()) return
+                            out.eachFileRecurse(groovy.io.FileType.FILES) { File f ->
+                                if (f.name == "libaxiom_runtime.so") f.delete()
+                            }
                         }
                     }
                 }
