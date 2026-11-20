@@ -11,6 +11,16 @@ write Dio or Retrofit code, JSON parsing, or cache logic by hand.
 The network layer is a Rust runtime. It is loaded with `dart:ffi` on Android,
 iOS and macOS, and as a bundled WebAssembly module on web.
 
+> **0.150.1 behaviour change:** on Android and web the package bundles the
+> lean runtime (no executable extensions, no telemetry exporter). Everything
+> else works unchanged. Apps that use extensions on Android add
+> [`axiom_flutter_extensions`](#extensions). iOS and macOS are unchanged.
+> See [Size and performance](#size-and-performance).
+<!-- VERIFY: lean default and add-on from /home/node/fp/pack/REPORT.md -->
+
+New to the SDK? [`doc/usage.md`](doc/usage.md) lists every step from contract
+to first query.
+
 - [Install](#install)
 - [Platform setup](#platform-setup)
 - [Generate a client](#generate-a-client)
@@ -24,6 +34,7 @@ iOS and macOS, and as a bundled WebAssembly module on web.
 - [Signed and hash-locked contracts](#signed-and-hash-locked-contracts)
 - [Environments and base URLs](#environments-and-base-urls)
 - [Extensions](#extensions)
+- [Size and performance](#size-and-performance)
 - [Troubleshooting](#troubleshooting)
 
 ## Install
@@ -43,10 +54,10 @@ from `build_runner`.
 
 | Platform | Minimum | Runtime binary |
 | --- | --- | --- |
-| Android | API 24 | `libaxiom_runtime.so` for arm64-v8a, armeabi-v7a, x86_64, shipped in the package |
+| Android | API 24 | lean `libaxiom_runtime.so` for arm64-v8a, armeabi-v7a, x86_64, shipped in the package (full runtime with `axiom_flutter_extensions`) |
 | iOS | 13.0 | `AxiomRuntime.xcframework`, downloaded by CocoaPods and checked against a pinned SHA-256 |
 | macOS | 11.0 | same XCFramework |
-| Web | any browser with WebAssembly | `axiom_runtime_bg.wasm`, bundled as a package asset |
+| Web | any browser with WebAssembly | lean `axiom_runtime_bg.wasm`, bundled as a package asset |
 
 Linux and Windows are not supported.
 
@@ -418,7 +429,58 @@ extensions from bytes embedded in the app: `loadExtension`,
 `AxiomRuntime`. A failed call throws `AxiomExtensionException`. On web these
 methods throw `UnsupportedError`.
 
+From 0.150.1 the Android runtime bundled with `axiom_flutter` is lean and has
+no extension support; the four methods throw an error that names
+`axiom_flutter_extensions`. To use extensions on Android, add the add-on,
+which carries the full runtime (the app then ships only that library):
+
+```yaml
+dependencies:
+  axiom_flutter: ^0.150.1
+  axiom_flutter_extensions: ^0.150.1
+```
+
+iOS and macOS use the full published runtime 0.148.6 with or without the
+add-on.
+
 <!-- VERIFY: runtime.extensions (SKIP in every receipt on the Linux box; needs a native extension build) -->
+
+## Size and performance
+
+What the runtime adds to an app (bytes, runtime library only; from the
+`flutter/perf` artifact measurements):
+
+| Target | Full runtime | Lean runtime (0.150.1 default) | Lean, gzip -9 |
+| --- | --- | --- | --- |
+| Android arm64-v8a | 10,123,728 | 5,025,888 | 2,483,034 |
+| Android armeabi-v7a | 7,280,044 | 3,538,792 | 2,040,974 |
+| Android x86_64 | 12,512,352 | 5,957,296 | 2,615,356 |
+| Web `axiom_runtime_bg.wasm` | 2,475,214 | 2,067,867 | 786,604 |
+
+<!-- VERIFY: replace with the final 0.150.1 artifacts from /home/node/fp/rtlean/REPORT.md (item 8) -->
+
+- Android stores native libraries uncompressed in the APK (minSdk 24), so the
+  APK and the installed app grow by the raw size; Google Play downloads are
+  compressed (about the gzip column). Publish an App Bundle, or use
+  `flutter build apk --split-per-abi`, so users get only their ABI.
+- The plugin removes the unused web runtime from Android builds (about
+  0.96 MB per APK). `axiom.keepWebAssets=true` in `android/gradle.properties`
+  keeps it. iOS and macOS bundles still carry it; see
+  [`doc/wasm-size.md`](doc/wasm-size.md).
+- Responses of endpoints without field rules get a JSON syntax check instead
+  of a full parse, which is most of the time the runtime spent on large
+  lists in 0.150.0. Accept and reject behaviour is unchanged.
+  <!-- VERIFY: 10k-item before/after row from /home/node/fp/bench2/REPORT.md (p1's preliminary row had 12.1% spread, not publishable) -->
+- Where Axiom is still slower than `package:http`: web cold start (the wasm
+  runtime and the contract load before the first call) and large uncached
+  lists (the body is copied into the runtime and back, and syntax-checked).
+  Repeated calls answered from the cache are faster than with
+  `dio_cache_interceptor`.
+
+Details: [App size](https://docs.axiomcore.dev/sdks/flutter-app-size),
+[Performance](https://docs.axiomcore.dev/sdks/flutter-performance),
+[Benchmarks](https://docs.axiomcore.dev/sdks/flutter-benchmarks).
+<!-- VERIFY: 0.150.1 benchmark rows from /home/node/fp/bench2/REPORT.md; options from RTSPEED/DARTNATIVE/WEBSPEED reports -->
 
 ## Troubleshooting
 
@@ -436,6 +498,8 @@ methods throw `UnsupportedError`.
 | An endpoint that returns `204 No Content` fails with a decode error | The SDK reports success for an empty body, but the current runtime rejects an empty body when the endpoint declares a typed response. Fixed in the next runtime release; until then, return a body from that endpoint. |
 | Debug console: unsigned contract warning | The contract has no signature. Fine during development. For release, sign it and pass the proof, or set `requireSignedContracts` to fail fast. |
 | Android emulator: connection refused | Use `http://10.0.2.2:<port>`, add the `INTERNET` permission, and allow cleartext HTTP for debug builds. |
+| Android: Gradle fails with `Unsupported class file major version` | Android builds need JDK 17. Install it and run `flutter config --jdk-dir <path>`. |
+| Android: an extension call throws an error naming `axiom_flutter_extensions` | 0.150.1 bundles the lean runtime. Add `axiom_flutter_extensions: ^0.150.1`. |
 | `AxiomVersionMismatch` at start-up | The native runtime and the Dart package come from different releases. Upgrade them together (`flutter pub upgrade axiom_flutter`, then `pod install` / rebuild). |
 
 ## More

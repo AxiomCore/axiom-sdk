@@ -8,12 +8,13 @@ the reference is [Flutter and Dart](https://docs.axiomcore.dev/sdks/flutter).
 
 How these steps were checked (20 Nov 2026, Debian 12 x86_64, Flutter 3.32.0,
 `axiom` 0.156.0, `axiom_flutter` and `axiom_flutter_generator` from branch
-`flutter/perf`): steps 1 to 4 and 6 run as written (backend answers `curl`,
-`axiom pull` succeeds, `flutter analyze` reports no issues, `flutter build web
---release` and `flutter build apk --release --split-per-abi` succeed). The app
-was not run on a device or emulator for this page; the quickstart's device runs
-are recorded in the 0.150.0 release.
-<!-- VERIFY: build results of step 6 on this box, see /home/node/fp/docs2/REPORT.md -->
+`flutter/perf` through `pubspec_overrides.yaml`): steps 1 to 6 were run as
+written. The backend answered `curl`; `axiom pull` succeeded; every Dart block
+on this page analyzes with no issues; `flutter build web --release` and
+`flutter build apk --release --split-per-abi` succeeded (the APK build fails
+with a manifest merger error until step 5 sets `minSdk = 24`). The app was not
+run on a device, emulator or browser for this page; the quickstart's device
+runs are recorded with the 0.150.0 release.
 
 ## 0. Tools
 
