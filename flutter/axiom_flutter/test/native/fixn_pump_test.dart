@@ -35,7 +35,10 @@ void main() {
         ..write('{"ms":$ms}');
       await r.response.close();
     });
-    AxiomRuntimeIo.debugHiddenSymbols = {'axiom_reset_session'};
+    AxiomRuntimeIo.debugHiddenSymbols = {
+      'axiom_reset_session',
+      'axiom_clear_auth_provider',
+    };
     rt = AxiomRuntime();
     // Fixture contract with response validation off (any JSON body).
     final j = jsonDecode(File('../integration_app/assets/axiom/fixture.axiom')
@@ -82,5 +85,10 @@ void main() {
     await done.future.timeout(const Duration(seconds: 5),
         onTimeout: () => fail('request after reset hung: $states'));
     expect(states.any((s) => s.hasData), isTrue, reason: '${states.map((s) => '${s.status} ${s.error}')}');
+  });
+
+  test('F13 without axiom_clear_auth_provider a fresh v1 auth callable is '
+      'registered at start', () {
+    expect((rt as AxiomRuntimeIo).debugV1AuthCallableRegistered, isTrue);
   });
 }

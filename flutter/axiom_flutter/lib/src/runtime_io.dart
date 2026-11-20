@@ -760,6 +760,19 @@ class AxiomRuntimeIo implements AxiomRuntime {
         !_has('axiom_provide_auth_token')) {
       return;
     }
+    _registerV1AuthCallable();
+  }
+
+  /// Registers this generation's v1 auth callable (once).
+  void _registerV1AuthCallable() {
+    if (_authCallable != null) {
+      _authRegistered = true;
+      return;
+    }
+    if (!_has('axiom_register_auth_provider') ||
+        !_has('axiom_provide_auth_token')) {
+      return;
+    }
     // The runtime calls back from a worker thread; a listener callable posts
     // the request to this isolate. It stays registered for the process
     // lifetime (there is no C function to unregister); with no provider the
@@ -773,10 +786,14 @@ class AxiomRuntimeIo implements AxiomRuntime {
     _authRegistered = true;
   }
 
+  /// Host tests only: whether this generation registered a v1 auth callable.
+  bool get debugV1AuthCallableRegistered => _authCallable != null;
+
   bool _authRegistered = false;
 
-  /// v2 callback: namespace and method come from the runtime (strings stay
-  /// valid until axiom_provide_auth_token is called).
+  /// v2 callback: namespace and method come from the runtime. They are
+  /// copied first thing, before any await (F12: the runtime may free them
+  /// after a provider timeout, and a listener runs later than the call).
   void _onAuthRequestedV2(
     int requestId,
     Pointer<Utf8> namespace,
@@ -872,6 +889,11 @@ class AxiomRuntimeIo implements AxiomRuntime {
       _clearAuthProviderFfi();
       _authRegistered = false;
       if (_authProvider != null) setAuthProvider(_authProvider);
+    } else {
+      // No way to unregister (published runtime): replace a v1 callable of
+      // a dead generation right away (F13), instead of waiting for the next
+      // setAuthProvider. With no provider the fallback tokens answer.
+      _registerV1AuthCallable();
     }
 
     final ready = Completer<void>();
