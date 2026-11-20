@@ -372,7 +372,8 @@ Future<void> _runRustEventLoop(List<Object> args) async {
       running = false;
       control.close();
     }
-    if (wake != null && !wake!.isCompleted) wake!.complete();
+    final w = wake;
+    if (w != null && !w.isCompleted) w.complete();
   });
   mainIsolate.addOnExitListener(control.sendPort, response: 'shutdown');
   _dataPort = mainIsolateDataPort;
@@ -403,8 +404,9 @@ Future<void> _runRustEventLoop(List<Object> args) async {
       // Yield so control messages ('start', 'shutdown') are delivered.
       await Future<void>.delayed(Duration.zero);
     } else {
-      wake = Completer<void>();
-      await wake!.future;
+      final w = Completer<void>();
+      wake = w;
+      await w.future;
       wake = null;
     }
   }
