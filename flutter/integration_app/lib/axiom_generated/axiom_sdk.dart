@@ -107,25 +107,6 @@ class FixtureModule {
 
   /// Endpoint ids by contract cache identity.
   static const Map<String, List<int>> cacheIdentities = {
-    'endpoint:1010416358': [1010416358],
-    'endpoint:1096035656': [1096035656],
-    'endpoint:1256260924': [1256260924],
-    'endpoint:1404635741': [1404635741],
-    'endpoint:1421147111': [1421147111],
-    'endpoint:1471516720': [1471516720],
-    'endpoint:1643923642': [1643923642],
-    'endpoint:2446114110': [2446114110],
-    'endpoint:2900873362': [2900873362],
-    'endpoint:3177318534': [3177318534],
-    'endpoint:3182762126': [3182762126],
-    'endpoint:3209564247': [3209564247],
-    'endpoint:3649530469': [3649530469],
-    'endpoint:4017861805': [4017861805],
-    'endpoint:4036857016': [4036857016],
-    'endpoint:631501414': [631501414],
-    'endpoint:78174837': [78174837],
-    'endpoint:837292962': [837292962],
-    'endpoint:929374064': [929374064],
     'fixture.item': [1498157384],
   };
 
@@ -133,8 +114,6 @@ class FixtureModule {
   static const List<String> authMethods = [];
 
   /// `GET /auth/api-key-header`.
-  ///
-  /// Cache identity: `endpoint:1256260924`.
   ///
   /// Typed failures: [models.UnauthorizedFailure]; match with `error.whenAuthApiKeyHeader(...)`.
   AxiomQuery<models.Who> authApiKeyHeader({
@@ -156,8 +135,6 @@ class FixtureModule {
 
   /// `GET /auth/api-key-query`.
   ///
-  /// Cache identity: `endpoint:2900873362`.
-  ///
   /// Typed failures: [models.UnauthorizedFailure]; match with `error.whenAuthApiKeyQuery(...)`.
   AxiomQuery<models.Who> authApiKeyQuery({
     required String apiKey,
@@ -177,8 +154,6 @@ class FixtureModule {
   }
 
   /// `GET /auth/bearer`.
-  ///
-  /// Cache identity: `endpoint:1404635741`.
   AxiomQuery<models.Who> authBearer({AxiomCallOptions? options}) {
     return _runtime.send<models.Who>(
       namespace: _namespace,
@@ -195,8 +170,6 @@ class FixtureModule {
   /// `GET /cache/cache-first`.
   ///
   /// Cache: `cache_first`, ttl 60s. Pass `options: AxiomCallOptions(cacheMode: AxiomCacheMode.refresh)` to bypass it.
-  ///
-  /// Cache identity: `endpoint:3177318534`.
   AxiomQuery<models.Stamp> cacheCacheFirst({
     required String nonce,
     AxiomCallOptions? options,
@@ -217,8 +190,6 @@ class FixtureModule {
   /// `GET /cache/network-first`.
   ///
   /// Cache: `network_first`, ttl 60s. Pass `options: AxiomCallOptions(cacheMode: AxiomCacheMode.refresh)` to bypass it.
-  ///
-  /// Cache identity: `endpoint:1010416358`.
   AxiomQuery<models.Stamp> cacheNetworkFirst({
     required String nonce,
     AxiomCallOptions? options,
@@ -239,8 +210,6 @@ class FixtureModule {
   /// `GET /cache/network-only`.
   ///
   /// Cache: `network_only`, ttl 60s. Pass `options: AxiomCallOptions(cacheMode: AxiomCacheMode.refresh)` to bypass it.
-  ///
-  /// Cache identity: `endpoint:837292962`.
   AxiomQuery<models.Stamp> cacheNetworkOnly({
     required String nonce,
     AxiomCallOptions? options,
@@ -261,8 +230,6 @@ class FixtureModule {
   /// `GET /cache/stale-while-revalidate`.
   ///
   /// Cache: `stale_while_revalidate`, ttl 60s. Pass `options: AxiomCallOptions(cacheMode: AxiomCacheMode.refresh)` to bypass it.
-  ///
-  /// Cache identity: `endpoint:929374064`.
   AxiomQuery<models.Stamp> cacheStale({
     required String nonce,
     AxiomCallOptions? options,
@@ -305,8 +272,6 @@ class FixtureModule {
   }
 
   /// `GET /stream/chunked` (http_stream).
-  ///
-  /// Cache identity: `endpoint:4017861805`.
   AxiomQuery<models.Tick> chunked({String? last, AxiomCallOptions? options}) {
     return _runtime.send<models.Tick>(
       namespace: _namespace,
@@ -339,8 +304,6 @@ class FixtureModule {
 
   /// `POST /claims`.
   ///
-  /// Cache identity: `endpoint:3649530469`.
-  ///
   /// Typed failures: [models.ConflictFailure]; match with `error.whenClaim(...)`.
   AxiomQuery<models.Item> claim({
     required String name,
@@ -364,8 +327,6 @@ class FixtureModule {
   }
 
   /// `POST /items`.
-  ///
-  /// Cache identity: `endpoint:631501414`.
   AxiomQuery<models.Item> createItem({
     required String name,
     required int qty,
@@ -389,8 +350,6 @@ class FixtureModule {
   }
 
   /// `DELETE /items/{id}`.
-  ///
-  /// Cache identity: `endpoint:3209564247`.
   AxiomQuery<models.Deleted> deleteItem({
     required String id,
     String? idempotencyKey,
@@ -413,8 +372,6 @@ class FixtureModule {
   }
 
   /// `GET /echo/{path}`.
-  ///
-  /// Cache identity: `endpoint:1421147111`.
   AxiomQuery<models.Echo> echo({
     required String path,
     required String q,
@@ -446,8 +403,6 @@ class FixtureModule {
   }
 
   /// `GET /types/everything`.
-  ///
-  /// Cache identity: `endpoint:1643923642`.
   AxiomQuery<models.Everything> everything({AxiomCallOptions? options}) {
     return _runtime.send<models.Everything>(
       namespace: _namespace,
@@ -462,8 +417,6 @@ class FixtureModule {
   }
 
   /// `GET /retry`.
-  ///
-  /// Cache identity: `endpoint:2446114110`.
   AxiomQuery<models.Retried> retried({
     required int attempt,
     AxiomCallOptions? options,
@@ -482,8 +435,6 @@ class FixtureModule {
   }
 
   /// `GET /stream/sse` (sse).
-  ///
-  /// Cache identity: `endpoint:78174837`.
   AxiomQuery<models.Tick> sse({
     String? lastEventId,
     AxiomCallOptions? options,
@@ -528,8 +479,6 @@ class FixtureModule {
 
   /// `POST /cache/items/{id}/touch`.
   ///
-  /// Cache identity: `endpoint:4036857016`.
-  ///
   /// On success invalidates: `fixture.item`.
   AxiomQuery<models.Stamp> touchItem({
     required String id,
@@ -558,8 +507,6 @@ class FixtureModule {
   }
 
   /// `PUT /items/{id}`.
-  ///
-  /// Cache identity: `endpoint:3182762126`.
   AxiomQuery<models.Item> updateItem({
     required String id,
     required String name,
@@ -585,8 +532,6 @@ class FixtureModule {
   }
 
   /// `POST /bytes`.
-  ///
-  /// Cache identity: `endpoint:1096035656`.
   AxiomQuery<models.BytesOut> uploadBytes({
     required Uint8List data,
     String? idempotencyKey,
@@ -611,8 +556,6 @@ class FixtureModule {
   }
 
   /// `WS /stream/ws` (websocket).
-  ///
-  /// Cache identity: `endpoint:1471516720`.
   AxiomQuery<models.Ping> wsEcho({
     required models.Ping message,
     AxiomCallOptions? options,
