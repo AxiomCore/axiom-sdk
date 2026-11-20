@@ -29,9 +29,9 @@
     }
   },
   "wasm": {
-    "runtime_commit": "1265a1c",
-    "runtime_branch": "axiom-runtime flutter/h (flutter/parity 4578d68 + host notify + WS send fixes)",
-    "axiom_runtime_js_sha256": "95f381784da46c1ca656172159113512f8cd87e8ab9a175b258b65c3f3890077",
-    "axiom_runtime_bg_wasm_sha256": "4e9e5e5579b6c4a8e03415eb330dd652db65f114aa5f1dea3ba7c36d368eab83"
+    "runtime_commit": "4e1ce85",
+    "runtime_branch": "axiom-runtime flutter/r2 4e1ce85cc930d8218442dd7da526d039de1faeff (= flutter/parity; adds web WS initial message and quiet release console), scripts/build-wasm-flutter.sh",
+    "axiom_runtime_js_sha256": "6d9fb1d7946c5d42943916f021998977e8d7201ac75b553faeeaa98f68c5c550",
+    "axiom_runtime_bg_wasm_sha256": "7a0cc9413f68a2f494c26c342a0bd9d7442189b2aaa618483eaab5c793561d65"
   }
 }
