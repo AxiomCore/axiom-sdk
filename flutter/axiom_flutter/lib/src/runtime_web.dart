@@ -409,10 +409,17 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   Future<void> _ensureLoaded() {
     return _loading ??= () async {
       try {
+        // Cold start: fetch the wasm while the glue script loads (the glue's
+        // init accepts a Promise<Response> and still compiles it with
+        // instantiateStreaming). After a hot restart the glue is present and
+        // returns the already-instantiated exports, so nothing is fetched.
+        final JSAny wasmSource = globalContext.has('wasm_bindgen')
+            ? _assetUrl(_wasmAsset).toJS
+            : web.window.fetch(_assetUrl(_wasmAsset).toJS);
         await _loadGlue();
         final bindgen = globalContext['wasm_bindgen'] as JSFunction;
         // Returns the already-instantiated exports after a hot restart.
-        final arg = JSObject()..['module_or_path'] = _assetUrl(_wasmAsset).toJS;
+        final arg = JSObject()..['module_or_path'] = wasmSource;
         final exports =
             await (bindgen.callAsFunction(null, arg) as JSPromise).toDart;
         _wasmOrNull = exports as WasmExports;
@@ -504,6 +511,17 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   ) async {
     final sw = Stopwatch()..start();
     debug = config.debug;
+    final load =
+        assetLoader ??
+        (String path) async =>
+            (await rootBundle.load(path)).buffer.asUint8List();
+    // Cold start: read the contract assets while the wasm loads. Errors are
+    // delivered where each future is awaited below (ignore() only keeps an
+    // early failure from being reported as unhandled).
+    final contractBytes = <String, Future<Uint8List>>{
+      for (final entry in config.contracts.entries)
+        entry.key: load(entry.value.assetPath)..ignore(),
+    };
     try {
       await _ensureLoaded();
     } catch (e) {
@@ -521,10 +539,6 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     }
     if (_pump == null) _start(config.dbPath);
 
-    final load =
-        assetLoader ??
-        (String path) async =>
-            (await rootBundle.load(path)).buffer.asUint8List();
     final results = <String, AxiomContractLoadResult>{};
     Object? firstError;
     for (final entry in config.contracts.entries) {
@@ -534,7 +548,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       AxiomContractLoadResult r;
       try {
         baseUrl = config.resolveBaseUrl(ns);
-        final bytes = await load(c.assetPath);
+        final bytes = await contractBytes[ns]!;
         r = tryLoadContract(
           namespace: ns,
           baseUrl: baseUrl,
