@@ -8,6 +8,7 @@ import 'dart:typed_data';
 
 import 'package:ansicolor/ansicolor.dart';
 import 'package:ffi/ffi.dart';
+import 'package:flutter/services.dart' show rootBundle;
 
 import 'call_options.dart';
 import 'channel.dart';
@@ -21,6 +22,7 @@ import 'state.dart';
 import 'query.dart';
 import 'query_manager.dart';
 import 'internal/axiom_codec.dart';
+import 'internal/contract_metadata.dart';
 import 'internal/query_key.dart';
 import 'internal/tracing.dart';
 import 'internal/contract_load_status.dart';
@@ -51,6 +53,8 @@ base class AxiomResponseBuffer extends Struct {
 }
 
 typedef AxiomCallback = Void Function(Pointer<AxiomResponseBuffer> response);
+typedef AxiomAuthCallbackNative = Void Function(Uint64 requestId);
+
 typedef _AxiomInitializeNative = Int32 Function(AxiomString);
 typedef _AxiomInitialize = int Function(AxiomString);
 typedef _AxiomLoadContractNative =
@@ -69,10 +73,34 @@ typedef _AxiomLoadContract =
       AxiomString,
       AxiomString,
     );
+typedef _AxiomLoadContractLockedNative =
+    Int32 Function(
+      AxiomString,
+      AxiomString,
+      AxiomBuffer,
+      AxiomString,
+      AxiomString,
+      AxiomString,
+    );
+typedef _AxiomLoadContractLocked =
+    int Function(
+      AxiomString,
+      AxiomString,
+      AxiomBuffer,
+      AxiomString,
+      AxiomString,
+      AxiomString,
+    );
 typedef _AxiomRegisterCallbackNative =
     Void Function(Pointer<NativeFunction<AxiomCallback>>);
 typedef _AxiomRegisterCallback =
     void Function(Pointer<NativeFunction<AxiomCallback>>);
+typedef _AxiomRegisterAuthNative =
+    Void Function(Pointer<NativeFunction<AxiomAuthCallbackNative>>);
+typedef _AxiomRegisterAuth =
+    void Function(Pointer<NativeFunction<AxiomAuthCallbackNative>>);
+typedef _AxiomProvideAuthNative = Void Function(Uint64, AxiomString);
+typedef _AxiomProvideAuth = void Function(int, AxiomString);
 
 // 8 Arguments exactly matching Rust signature
 typedef _AxiomCallNative =
@@ -106,19 +134,96 @@ typedef _AxiomClearAuthTokenNative = Void Function(AxiomString, AxiomString);
 typedef _AxiomClearAuthToken = void Function(AxiomString, AxiomString);
 typedef _AxiomSendStreamMsgNative = Void Function(Uint64, AxiomBuffer);
 typedef _AxiomSendStreamMsg = void Function(int, AxiomBuffer);
-typedef _AxiomProcessResponsesNative = Void Function();
-typedef _AxiomProcessResponses = void Function();
+typedef _AxiomVoidNative = Void Function();
+typedef _AxiomVoid = void Function();
+typedef _AxiomU32Native = Uint32 Function();
+typedef _AxiomU32 = int Function();
+typedef _AxiomCancelNative = Int32 Function(Uint64);
+typedef _AxiomCancel = int Function(int);
 typedef _AxiomFreeResponseBufferNative =
     Void Function(Pointer<AxiomResponseBuffer>);
 typedef _AxiomFreeResponseBuffer = void Function(Pointer<AxiomResponseBuffer>);
+typedef _AxiomFreeBufferNative = Void Function(AxiomBuffer);
+typedef _AxiomFreeBuffer = void Function(AxiomBuffer);
+typedef _AxiomExtLifecycleNative = Int32 Function(Uint32);
+typedef _AxiomExtLifecycle = int Function(int);
+typedef _AxiomExtLoadNative =
+    Int32 Function(
+      AxiomString,
+      AxiomString,
+      AxiomBuffer,
+      AxiomBuffer,
+      AxiomBuffer,
+      AxiomBuffer,
+    );
+typedef _AxiomExtLoad =
+    int Function(
+      AxiomString,
+      AxiomString,
+      AxiomBuffer,
+      AxiomBuffer,
+      AxiomBuffer,
+      AxiomBuffer,
+    );
+typedef _AxiomExtInvokeNative =
+    Int32 Function(
+      AxiomString,
+      AxiomString,
+      AxiomString,
+      AxiomString,
+      AxiomString,
+      Pointer<AxiomBuffer>,
+    );
+typedef _AxiomExtInvoke =
+    int Function(
+      AxiomString,
+      AxiomString,
+      AxiomString,
+      AxiomString,
+      AxiomString,
+      Pointer<AxiomBuffer>,
+    );
+typedef _AxiomExtAuditNative = Int32 Function(Pointer<AxiomBuffer>);
+typedef _AxiomExtAudit = int Function(Pointer<AxiomBuffer>);
 
-final _controllers = HashMap<int, StreamController<AxiomState<Uint8List>>>();
-final _hadError = HashSet<int>();
+/// Book-keeping for one in-flight runtime request.
+class _Call {
+  final StreamController<AxiomState<Uint8List>> controller;
+  final String namespace;
+  final int endpointId;
+  Timer? timeout;
+  bool timedOut = false;
+  _Call(this.controller, this.namespace, this.endpointId);
+}
 
-int _nextRequestId = 1;
-Completer<void>? _initCompleter;
+final _calls = HashMap<int, _Call>();
+
+/// Request ids are unique per process generation (time based) so responses
+/// of a previous generation (Flutter hot restart) can never be routed to a
+/// new request.
+int _nextRequestId = DateTime.now().microsecondsSinceEpoch;
+
+Future<void>? _initFuture;
+bool _initialized = false;
+Isolate? _eventIsolate;
+SendPort? _eventControl;
+ReceivePort? _mainPort;
+Future<AxiomInitResult>? _initResultFuture;
+AxiomInitResult? _initResult;
+
+// Event-loop isolate globals (separate isolate, separate copies).
 SendPort? _dataPort;
 _AxiomFreeResponseBuffer? _freeResponseFfiBackground;
+
+/// Opens the runtime library. `AXIOM_RUNTIME_LIB` (only when set) points at
+/// an explicit library path, used by host tests on Linux/macOS.
+DynamicLibrary _openLibrary() {
+  final override = Platform.environment['AXIOM_RUNTIME_LIB'];
+  if (override != null && override.isNotEmpty) {
+    return DynamicLibrary.open(override);
+  }
+  return AxiomRuntimeIo._openPlatformLibrary();
+}
 
 @pragma('vm:entry-point')
 void _axiomCallbackHandler(Pointer<AxiomResponseBuffer> responsePtr) {
@@ -147,14 +252,26 @@ void _axiomCallbackHandler(Pointer<AxiomResponseBuffer> responsePtr) {
   }
 }
 
+/// Polls `axiom_process_responses` (which blocks up to 100 ms when idle) on
+/// a dedicated isolate. Stops on a `'shutdown'` message or when the main
+/// isolate exits (Flutter hot restart), so a stale loop never competes with
+/// the next generation for responses.
 @pragma('vm:entry-point')
-void _runRustEventLoop(List<Object> args) {
+Future<void> _runRustEventLoop(List<Object> args) async {
   final mainIsolateDataPort = args[0] as SendPort;
-  final shutdownPort = ReceivePort();
-  mainIsolateDataPort.send(shutdownPort.sendPort);
+  final mainIsolate = args[1] as Isolate;
+  final control = ReceivePort();
+  var running = true;
+  control.listen((msg) {
+    if (msg == 'shutdown') {
+      running = false;
+      control.close();
+    }
+  });
+  mainIsolate.addOnExitListener(control.sendPort, response: 'shutdown');
   _dataPort = mainIsolateDataPort;
 
-  final lib = AxiomRuntimeIo._openPlatformLibrary();
+  final lib = _openLibrary();
   _freeResponseFfiBackground = lib
       .lookupFunction<_AxiomFreeResponseBufferNative, _AxiomFreeResponseBuffer>(
         'axiom_free_response_buffer',
@@ -165,22 +282,18 @@ void _runRustEventLoop(List<Object> args) {
       );
   registerCallback(Pointer.fromFunction(_axiomCallbackHandler));
 
-  final processResponses = lib
-      .lookupFunction<_AxiomProcessResponsesNative, _AxiomProcessResponses>(
-        'axiom_process_responses',
-      );
+  final processResponses = lib.lookupFunction<_AxiomVoidNative, _AxiomVoid>(
+    'axiom_process_responses',
+  );
 
-  shutdownPort.listen((msg) {
-    if (msg == 'shutdown') {
-      shutdownPort.close();
-      Isolate.current.kill();
-    }
-  });
+  mainIsolateDataPort.send(control.sendPort);
 
-  while (true) {
+  while (running) {
     processResponses();
-    sleep(const Duration(milliseconds: 5));
+    // Yield so the control port can deliver 'shutdown'.
+    await Future<void>.delayed(Duration.zero);
   }
+  mainIsolateDataPort.send('stopped');
 }
 
 class AxiomRuntimeIo implements AxiomRuntime {
@@ -190,13 +303,17 @@ class AxiomRuntimeIo implements AxiomRuntime {
   static late final DynamicLibrary _lib;
   late final _AxiomInitialize _initFfi;
   late final _AxiomLoadContract _loadContractFfi;
+  late final _AxiomLoadContractLocked? _loadContractLockedFfi;
   late final _AxiomCall _callFfi;
   late final _AxiomSetAuthToken _setAuthFfi;
   late final _AxiomClearAuthToken _clearAuthFfi;
   late final _AxiomSendStreamMsg _sendStreamMsgFfi;
+  late final _AxiomCancel? _cancelFfi;
+  late final _AxiomVoid? _resetSessionFfi;
+  late final _AxiomVoid? _clearCallbackFfi;
 
   AxiomRuntimeIo._internal() {
-    _lib = _openPlatformLibrary();
+    _lib = _openLibrary();
     _initFfi = _lib.lookupFunction<_AxiomInitializeNative, _AxiomInitialize>(
       'axiom_initialize',
     );
@@ -204,6 +321,12 @@ class AxiomRuntimeIo implements AxiomRuntime {
         .lookupFunction<_AxiomLoadContractNative, _AxiomLoadContract>(
           'axiom_load_contract',
         );
+    _loadContractLockedFfi = _has('axiom_load_contract_locked')
+        ? _lib.lookupFunction<
+            _AxiomLoadContractLockedNative,
+            _AxiomLoadContractLocked
+          >('axiom_load_contract_locked')
+        : null;
     _callFfi = _lib.lookupFunction<_AxiomCallNative, _AxiomCall>('axiom_call');
     _setAuthFfi = _lib
         .lookupFunction<_AxiomSetAuthTokenNative, _AxiomSetAuthToken>(
@@ -217,10 +340,46 @@ class AxiomRuntimeIo implements AxiomRuntime {
         .lookupFunction<_AxiomSendStreamMsgNative, _AxiomSendStreamMsg>(
           'axiom_send_stream_message',
         );
+    _cancelFfi = _has('axiom_cancel')
+        ? _lib.lookupFunction<_AxiomCancelNative, _AxiomCancel>('axiom_cancel')
+        : null;
+    _resetSessionFfi = _has('axiom_reset_session')
+        ? _lib.lookupFunction<_AxiomVoidNative, _AxiomVoid>(
+            'axiom_reset_session',
+          )
+        : null;
+    _clearCallbackFfi = _has('axiom_clear_callback')
+        ? _lib.lookupFunction<_AxiomVoidNative, _AxiomVoid>(
+            'axiom_clear_callback',
+          )
+        : null;
+    AxiomContractMetadata.addListener(_applyTokensFor);
+  }
+
+  static bool _has(String symbol) {
+    try {
+      return _lib.providesSymbol(symbol);
+    } catch (_) {
+      return false;
+    }
   }
 
   @override
   bool debug = false;
+
+  final StreamController<AxiomErrorEvent> _errors =
+      StreamController<AxiomErrorEvent>.broadcast();
+
+  // ---------------------------------------------------------------------------
+  // Auth
+  // ---------------------------------------------------------------------------
+
+  /// Explicit per-method tokens set through [setAuthToken].
+  final Map<String, Map<String, String>> _methodTokens = {};
+  final Map<String, String> _namespaceTokens = {};
+  String? _globalToken;
+  AxiomAuthProvider? _authProvider;
+  NativeCallable<AxiomAuthCallbackNative>? _authCallable;
 
   @override
   void setAuthToken({
@@ -228,6 +387,22 @@ class AxiomRuntimeIo implements AxiomRuntime {
     required String methodName,
     required String token,
   }) {
+    (_methodTokens[namespace] ??= {})[methodName] = token;
+    _setNativeToken(namespace, methodName, token);
+  }
+
+  @override
+  void clearAuthToken({required String namespace, required String methodName}) {
+    _methodTokens[namespace]?.remove(methodName);
+    final fallback = _namespaceTokens[namespace] ?? _globalToken;
+    if (fallback != null) {
+      _setNativeToken(namespace, methodName, fallback);
+    } else {
+      _clearNativeToken(namespace, methodName);
+    }
+  }
+
+  void _setNativeToken(String namespace, String methodName, String token) {
     using((Arena arena) {
       _setAuthFfi(
         _toAxiomString(namespace, arena),
@@ -237,13 +412,113 @@ class AxiomRuntimeIo implements AxiomRuntime {
     });
   }
 
-  @override
-  void clearAuthToken({required String namespace, required String methodName}) {
+  void _clearNativeToken(String namespace, String methodName) {
     using((Arena arena) {
       _clearAuthFfi(
         _toAxiomString(namespace, arena),
         _toAxiomString(methodName, arena),
       );
+    });
+  }
+
+  /// Pushes namespace/global tokens to every registered auth method of
+  /// [namespace] that has no explicit per-method token.
+  void _applyTokensFor(String namespace) {
+    final token = _namespaceTokens[namespace] ?? _globalToken;
+    final explicit = _methodTokens[namespace] ?? const {};
+    for (final method in AxiomContractMetadata.authMethodsFor(namespace)) {
+      if (explicit.containsKey(method)) continue;
+      if (token != null) {
+        _setNativeToken(namespace, method, token);
+      } else {
+        _clearNativeToken(namespace, method);
+      }
+    }
+  }
+
+  @override
+  void setNamespaceAuthToken({
+    required String namespace,
+    required String token,
+  }) {
+    _namespaceTokens[namespace] = token;
+    _applyTokensFor(namespace);
+  }
+
+  @override
+  void clearNamespaceAuthToken({required String namespace}) {
+    _namespaceTokens.remove(namespace);
+    _applyTokensFor(namespace);
+  }
+
+  @override
+  void setGlobalAuthToken(String token) {
+    _globalToken = token;
+    for (final ns in AxiomContractMetadata.namespacesWithAuth.toList()) {
+      _applyTokensFor(ns);
+    }
+  }
+
+  @override
+  void clearGlobalAuthToken() {
+    _globalToken = null;
+    for (final ns in AxiomContractMetadata.namespacesWithAuth.toList()) {
+      _applyTokensFor(ns);
+    }
+  }
+
+  @override
+  void setAuthProvider(AxiomAuthProvider? provider) {
+    _authProvider = provider;
+    if (provider == null || _authCallable != null) return;
+    if (!_has('axiom_register_auth_provider') ||
+        !_has('axiom_provide_auth_token')) {
+      return;
+    }
+    // The runtime calls back from a worker thread; a listener callable posts
+    // the request to this isolate. It stays registered for the process
+    // lifetime (there is no C function to unregister); with no provider the
+    // fallback tokens answer.
+    _authCallable = NativeCallable<AxiomAuthCallbackNative>.listener(
+      _onAuthRequested,
+    );
+    _lib.lookupFunction<_AxiomRegisterAuthNative, _AxiomRegisterAuth>(
+      'axiom_register_auth_provider',
+    )(_authCallable!.nativeFunction);
+  }
+
+  /// Answers one runtime token request (`AxiomAuthCallback`).
+  void _onAuthRequested(int requestId) {
+    final call = _calls[requestId];
+    final namespace = call?.namespace ?? '';
+    resolveAuthToken(namespace, '').then(
+      (token) => _provideToken(requestId, token ?? ''),
+      onError: (Object _) => _provideToken(requestId, ''),
+    );
+  }
+
+  /// Token for [namespace]/[methodName]: auth provider first, then the
+  /// per-method, namespace and global tokens set from Dart.
+  Future<String?> resolveAuthToken(String namespace, String methodName) async {
+    final provider = _authProvider;
+    if (provider != null) {
+      final token = await provider(namespace, methodName);
+      if (token != null) return token;
+    }
+    final explicit = _methodTokens[namespace];
+    if (methodName.isNotEmpty && explicit?[methodName] != null) {
+      return explicit![methodName];
+    }
+    return _namespaceTokens[namespace] ??
+        _globalToken ??
+        (explicit != null && explicit.length == 1 ? explicit.values.first : null);
+  }
+
+  void _provideToken(int requestId, String token) {
+    using((Arena arena) {
+      _lib.lookupFunction<_AxiomProvideAuthNative, _AxiomProvideAuth>(
+        'axiom_provide_auth_token',
+      )(requestId, _toAxiomString(token, arena));
     });
   }
 
@@ -259,73 +534,378 @@ class AxiomRuntimeIo implements AxiomRuntime {
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // Init and version handshake
+  // ---------------------------------------------------------------------------
+
   @override
-  Future<void> init([String? dbPath]) async {
-    if (_initCompleter != null) return _initCompleter!.future;
-    _initCompleter = Completer<void>();
+  Future<void> init([String? dbPath]) {
+    return _initFuture ??= _start(dbPath);
+  }
+
+  Future<void> _start(String? dbPath) async {
+    // A previous Dart generation (hot restart) may have left its callback
+    // registered; drop it before the new event loop registers its own.
+    _clearCallbackFfi?.call();
+
+    final ready = Completer<void>();
     final mainIsolatePort = ReceivePort();
+    _mainPort = mainIsolatePort;
 
     mainIsolatePort.listen((message) {
       if (message is SendPort) {
-        _initCompleter!.complete();
+        _eventControl = message;
+        if (!ready.isCompleted) ready.complete();
         return;
       }
-
-      final int requestId = message[0];
-      final int eventTypeValue = message[1];
-      final int errorCodeValue = message[2];
-      final data = message[3] as Uint8List;
-      final error = message[4] as Uint8List;
-
-      final controller = _controllers[requestId];
-      if (controller == null || controller.isClosed) return;
-
-      if (eventTypeValue == EventType.complete) {
-        _hadError.remove(requestId);
-        controller.close();
-        _controllers.remove(requestId);
-        return;
-      }
-
-      if (eventTypeValue == EventType.streamChunk) {
-        controller.add(
-          AxiomState.success(data, AxiomSource.network, isStreaming: true),
-        );
-        return;
-      }
-
-      if (eventTypeValue == EventType.error) {
-        _hadError.add(requestId);
-        AxiomError richError = error.isNotEmpty
-            ? AxiomError.fromJson(jsonDecode(utf8.decode(error)))
-            : AxiomError(
-                stage: ErrorStage.runtime,
-                category: ErrorCategory.unknown,
-                code: UnknownCode(FfiError.name(errorCodeValue)),
-                message: 'Internal error',
-                retryable: false,
-              );
-        controller.add(AxiomState.error(richError));
-        return;
-      }
-
-      if (data.isNotEmpty) {
-        controller.add(
-          AxiomState.success(
-            data,
-            (eventTypeValue == EventType.cacheHit ||
-                    eventTypeValue == EventType.cacheHitAndFetching)
-                ? AxiomSource.cache
-                : AxiomSource.network,
-            isFetching: eventTypeValue == EventType.cacheHitAndFetching,
-          ),
-        );
-      }
+      if (message is! List) return;
+      _onResponse(
+        message[0] as int,
+        message[1] as int,
+        message[2] as int,
+        message[3] as Uint8List,
+        message[4] as Uint8List,
+      );
     });
 
-    await Isolate.spawn(_runRustEventLoop, [mainIsolatePort.sendPort]);
+    _eventIsolate = await Isolate.spawn(_runRustEventLoop, [
+      mainIsolatePort.sendPort,
+      Isolate.current,
+    ], debugName: 'axiom-runtime-events');
     using((Arena arena) => _initFfi(_toAxiomString(dbPath ?? '', arena)));
-    return _initCompleter!.future;
+    await ready.future;
+    _initialized = true;
+  }
+
+  void _onResponse(
+    int requestId,
+    int eventTypeValue,
+    int errorCodeValue,
+    Uint8List data,
+    Uint8List error,
+  ) {
+    final call = _calls[requestId];
+    if (call == null) return;
+    final controller = call.controller;
+    if (controller.isClosed) {
+      _finishCall(requestId);
+      return;
+    }
+
+    if (eventTypeValue == EventType.complete) {
+      _finishCall(requestId);
+      controller.close();
+      return;
+    }
+
+    if (eventTypeValue == EventType.streamChunk) {
+      controller.add(
+        AxiomState.success(data, AxiomSource.network, isStreaming: true),
+      );
+      return;
+    }
+
+    if (eventTypeValue == EventType.error) {
+      var richError = parseRuntimeError(errorCodeValue, error);
+      if (richError.isCancelled && call.timedOut) {
+        richError = AxiomError(
+          stage: ErrorStage.networkReceive,
+          category: ErrorCategory.timeout,
+          code: const NetworkTimeout(),
+          message: 'Request timed out (per-call timeout)',
+          retryable: true,
+        );
+      }
+      _logTransaction('IN', requestId, 'error ${richError.message}');
+      if (!richError.isCancelled) {
+        _reportError(richError, call.namespace, call.endpointId, requestId);
+      }
+      controller.add(AxiomState.error(richError));
+      return;
+    }
+
+    if (data.isNotEmpty) {
+      controller.add(
+        AxiomState.success(
+          data,
+          (eventTypeValue == EventType.cacheHit ||
+                  eventTypeValue == EventType.cacheHitAndFetching)
+              ? AxiomSource.cache
+              : AxiomSource.network,
+          isFetching: eventTypeValue == EventType.cacheHitAndFetching,
+        ),
+      );
+    }
+  }
+
+  void _finishCall(int requestId) {
+    final call = _calls.remove(requestId);
+    call?.timeout?.cancel();
+  }
+
+  void _reportError(
+    AxiomError error,
+    String? namespace,
+    int? endpointId,
+    int? requestId,
+  ) {
+    if (_errors.hasListener) {
+      _errors.add(
+        AxiomErrorEvent(
+          error,
+          namespace: namespace,
+          endpointId: endpointId,
+          requestId: requestId,
+        ),
+      );
+    }
+  }
+
+  /// Builds an [AxiomError] from an error event. Tolerates non-JSON messages
+  /// (cancellation is plain text) and JSON missing fields.
+  static AxiomError parseRuntimeError(int code, Uint8List bytes) {
+    final text = bytes.isEmpty ? '' : utf8.decode(bytes, allowMalformed: true);
+    if (code == FfiError.cancelled) {
+      return AxiomError(
+        stage: ErrorStage.runtime,
+        category: ErrorCategory.runtime,
+        code: const Cancelled(),
+        message: text.isEmpty ? 'Request cancelled' : text,
+        retryable: false,
+      );
+    }
+    if (text.isNotEmpty) {
+      try {
+        final json = jsonDecode(text);
+        if (json is Map<String, dynamic>) {
+          return _withFailure(
+            AxiomError(
+              stage: ErrorStage.fromString('${json['stage'] ?? 'runtime'}'),
+              category: ErrorCategory.fromString(
+                '${json['category'] ?? _categoryFor(code).name}',
+              ),
+              code: json['code'] == null
+                  ? _codeFor(code)
+                  : AxiomErrorCode.fromJson(json['code']),
+              message: '${json['message'] ?? FfiError.name(code)}',
+              retryable: json['retryable'] == true,
+              details: json['details']?.toString(),
+              failureCode: (json['failure_code'] ?? json['failureCode'])
+                  ?.toString(),
+              failurePayload: json['failure_payload'] ?? json['failurePayload'],
+            ),
+          );
+        }
+      } catch (_) {
+        // fall through: plain text
+      }
+    }
+    return AxiomError(
+      stage: ErrorStage.runtime,
+      category: _categoryFor(code),
+      code: _codeFor(code),
+      message: text.isEmpty ? FfiError.name(code) : text,
+      retryable: code == FfiError.networkError || code == FfiError.timeout,
+    );
+  }
+
+  /// Fills [AxiomError.failureCode]/[AxiomError.failurePayload] from a
+  /// contract failure body carried in `details` (`{"error": "<code>", ...}`
+  /// or `{"failure": {"code": ..., "payload": ...}}`), when the runtime did
+  /// not set them.
+  static AxiomError _withFailure(AxiomError e) {
+    if (e.failureCode != null || e.details == null) return e;
+    try {
+      final body = jsonDecode(e.details!);
+      if (body is! Map) return e;
+      String? code;
+      Object? payload;
+      final failure = body['failure'];
+      if (failure is Map) {
+        code = failure['code']?.toString();
+        payload = failure['payload'] ?? failure['data'];
+      } else if (body['failure_code'] != null || body['failureCode'] != null) {
+        code = (body['failure_code'] ?? body['failureCode']).toString();
+        payload = body['failure_payload'] ?? body['failurePayload'];
+      } else if (body['error'] is String &&
+          (body['payload'] != null || body['data'] != null)) {
+        code = body['error'] as String;
+        payload = body['payload'] ?? body['data'];
+      } else if (body['code'] is String &&
+          (body['payload'] != null || body['data'] != null)) {
+        code = body['code'] as String;
+        payload = body['payload'] ?? body['data'];
+      }
+      if (code == null) return e;
+      return AxiomError(
+        stage: e.stage,
+        category: e.category,
+        code: e.code,
+        message: e.message,
+        retryable: e.retryable,
+        details: e.details,
+        failureCode: code,
+        failurePayload: payload,
+      );
+    } catch (_) {
+      return e;
+    }
+  }
+
+  static ErrorCategory _categoryFor(int code) => switch (code) {
+    FfiError.networkError => ErrorCategory.network,
+    FfiError.timeout => ErrorCategory.timeout,
+    FfiError.authError => ErrorCategory.auth,
+    FfiError.serverError => ErrorCategory.server,
+    FfiError.invalidContract ||
+    FfiError.contractNotLoaded ||
+    FfiError.unknownEndpoint => ErrorCategory.contract,
+    FfiError.responseDeserializationFailed => ErrorCategory.serialization,
+    FfiError.requestParsingFailed => ErrorCategory.validation,
+    _ => ErrorCategory.runtime,
+  };
+
+  static AxiomErrorCode _codeFor(int code) => switch (code) {
+    FfiError.timeout => const NetworkTimeout(),
+    FfiError.networkError => const NetworkConnectionFailed(),
+    FfiError.contractNotLoaded => const ContractMissing(),
+    FfiError.invalidContract => const ContractInvalid(),
+    FfiError.unknownEndpoint => const EndpointNotFound(),
+    FfiError.cancelled => const Cancelled(),
+    _ => UnknownCode(FfiError.name(code)),
+  };
+
+  @override
+  bool get isInitialized => _initialized;
+
+  @override
+  AxiomInitResult? get initResult => _initResult;
+
+  AxiomRuntimeInfo? _runtimeInfo;
+
+  @override
+  AxiomRuntimeInfo get runtimeInfo => _runtimeInfo ??= _readRuntimeInfo();
+
+  AxiomRuntimeInfo _readRuntimeInfo() {
+    int read(String symbol) {
+      if (!_has(symbol)) return 0;
+      return _lib.lookupFunction<_AxiomU32Native, _AxiomU32>(symbol)();
+    }
+
+    return AxiomRuntimeInfo(
+      abiVersion: read('axiom_abi_version'),
+      dataAbiVersion: read('axiom_data_abi_version'),
+      contractReaderVersion: read('axiom_contract_reader_version'),
+    );
+  }
+
+  @override
+  Future<AxiomInitResult> initialize(
+    AxiomConfig config, {
+    AxiomAssetLoader? assetLoader,
+  }) {
+    final pending = _initResultFuture;
+    if (pending != null) {
+      return pending.then(
+        (r) => AxiomInitResult(
+          ok: r.ok,
+          error: r.error,
+          runtimeInfo: r.runtimeInfo,
+          contracts: r.contracts,
+          duration: r.duration,
+          alreadyInitialized: true,
+        ),
+      );
+    }
+    final future = _initialize(config, assetLoader);
+    _initResultFuture = future;
+    return future;
+  }
+
+  Future<AxiomInitResult> _initialize(
+    AxiomConfig config,
+    AxiomAssetLoader? assetLoader,
+  ) async {
+    final watch = Stopwatch()..start();
+    debug = config.debug;
+    final info = runtimeInfo;
+    if (!info.isCompatible) {
+      final result = AxiomInitResult(
+        ok: false,
+        error: AxiomVersionMismatch(info),
+        runtimeInfo: info,
+        duration: watch.elapsed,
+      );
+      _initResult = result;
+      return result;
+    }
+    try {
+      await init(config.dbPath);
+    } catch (e) {
+      final result = AxiomInitResult(
+        ok: false,
+        error: e,
+        runtimeInfo: info,
+        duration: watch.elapsed,
+      );
+      _initResult = result;
+      return result;
+    }
+
+    final loader =
+        assetLoader ??
+        (String path) async => (await rootBundle.load(path)).buffer.asUint8List();
+    final contracts = <String, AxiomContractLoadResult>{};
+    Object? firstError;
+    for (final entry in config.contracts.entries) {
+      final ns = entry.key;
+      final c = entry.value;
+      String baseUrl = c.baseUrl;
+      AxiomContractLoadResult r;
+      try {
+        baseUrl = config.resolveBaseUrl(ns);
+        final bytes = await loader(c.assetPath);
+        r = tryLoadContract(
+          namespace: ns,
+          baseUrl: baseUrl,
+          contractBytes: bytes,
+          signature: c.signature,
+          publicKey: c.publicKey,
+          sha256: c.isLocked ? c.sha256 : null,
+        );
+        if (r.ok && config.requireSignedContracts && !r.isSigned) {
+          r = AxiomContractLoadResult(
+            namespace: ns,
+            baseUrl: baseUrl,
+            status: r.status,
+            trust: r.trust,
+            error: StateError(
+              'Contract "$ns" loaded unsigned but requireSignedContracts '
+              'is set',
+            ),
+          );
+        }
+      } catch (e) {
+        r = AxiomContractLoadResult(
+          namespace: ns,
+          baseUrl: baseUrl,
+          status: FfiError.invalidContract,
+          error: e,
+        );
+      }
+      if (r.error != null) firstError ??= r.error;
+      contracts[ns] = r;
+    }
+    final ok = contracts.values.every((r) => r.ok && r.error == null);
+    final result = AxiomInitResult(
+      ok: ok,
+      error: firstError,
+      runtimeInfo: info,
+      contracts: Map.unmodifiable(contracts),
+      duration: watch.elapsed,
+    );
+    _initResult = result;
+    return result;
   }
 
   @override
@@ -337,25 +917,83 @@ class AxiomRuntimeIo implements AxiomRuntime {
     String? publicKey,
     String? sha256,
   }) {
-    if (sha256 != null) {
-      throw UnimplementedError('loadContract(sha256:)');
+    final r = tryLoadContract(
+      namespace: namespace,
+      baseUrl: baseUrl,
+      contractBytes: contractBytes,
+      signature: signature,
+      publicKey: publicKey,
+      sha256: sha256,
+    );
+    requireContractLoadStatus(r.status);
+  }
+
+  @override
+  AxiomContractLoadResult tryLoadContract({
+    required String namespace,
+    required String baseUrl,
+    required Uint8List contractBytes,
+    String? signature,
+    String? publicKey,
+    String? sha256,
+  }) {
+    final locked = sha256 != null && sha256.isNotEmpty;
+    if (locked && _loadContractLockedFfi == null) {
+      return AxiomContractLoadResult(
+        namespace: namespace,
+        baseUrl: baseUrl,
+        status: FfiError.runtimeTooOld,
+        error: StateError('runtime has no axiom_load_contract_locked'),
+      );
     }
-    using((Arena arena) {
+    final status = using((Arena arena) {
       final cPtr = arena<Uint8>(contractBytes.length);
       cPtr.asTypedList(contractBytes.length).setAll(0, contractBytes);
       final buf = arena<AxiomBuffer>()
         ..ref.ptr = cPtr
         ..ref.len = contractBytes.length;
-      final status = _loadContractFfi(
+      if (locked) {
+        return _loadContractLockedFfi!(
+          _toAxiomString(namespace, arena),
+          _toAxiomString(baseUrl, arena),
+          buf.ref,
+          _toAxiomString(signature ?? '', arena),
+          _toAxiomString(publicKey ?? '', arena),
+          _toAxiomString(sha256.toLowerCase(), arena),
+        );
+      }
+      return _loadContractFfi(
         _toAxiomString(namespace, arena),
         _toAxiomString(baseUrl, arena),
         buf.ref,
         _toAxiomString(signature ?? '', arena),
         _toAxiomString(publicKey ?? '', arena),
       );
-      requireContractLoadStatus(status);
     });
+    final ok = status == FfiError.success || status == FfiError.successUnverified;
+    return AxiomContractLoadResult(
+      namespace: namespace,
+      baseUrl: baseUrl,
+      status: status,
+      trust: !ok
+          ? null
+          : status == FfiError.successUnverified
+          ? AxiomContractTrust.unsigned
+          : locked
+          ? AxiomContractTrust.locked
+          : AxiomContractTrust.signed,
+      error: ok
+          ? null
+          : StateError(
+              'Axiom contract load failed for "$namespace" '
+              '(status $status, ${FfiError.name(status)})',
+            ),
+    );
   }
+
+  // ---------------------------------------------------------------------------
+  // Calls
+  // ---------------------------------------------------------------------------
 
   @override
   AxiomStreamResponse callStream({
@@ -371,8 +1009,13 @@ class AxiomRuntimeIo implements AxiomRuntime {
   }) {
     final requestId = _nextRequestId++;
     final controller = StreamController<AxiomState<Uint8List>>.broadcast();
-    _controllers[requestId] = controller;
+    final call = _Call(controller, namespace, endpointId);
+    _calls[requestId] = call;
     controller.add(AxiomState.loading());
+
+    final effectiveHeaders = options != null
+        ? options.mergeHeaders(headers)
+        : headers;
 
     var finalPath = path;
     pathParams?.forEach(
@@ -382,8 +1025,9 @@ class AxiomRuntimeIo implements AxiomRuntime {
     if (queryParams != null && queryParams.isNotEmpty) {
       final filteredParams = <String, String>{};
       for (final entry in queryParams.entries) {
-        if (entry.value != null)
+        if (entry.value != null) {
           filteredParams[entry.key] = entry.value.toString();
+        }
       }
       if (filteredParams.isNotEmpty) {
         finalPath +=
@@ -393,8 +1037,8 @@ class AxiomRuntimeIo implements AxiomRuntime {
     }
 
     final traceparent = AxiomTracing.generateTraceparent();
-    final headersJson = headers != null && headers.isNotEmpty
-        ? jsonEncode(headers)
+    final headersJson = effectiveHeaders != null && effectiveHeaders.isNotEmpty
+        ? jsonEncode(effectiveHeaders)
         : '';
 
     _logTransaction('OUT', requestId, {
@@ -404,35 +1048,51 @@ class AxiomRuntimeIo implements AxiomRuntime {
       'p': finalPath,
     });
 
-    final arena = Arena();
-    final bPtr = arena<Uint8>(requestBytes.length);
-    bPtr.asTypedList(requestBytes.length).setAll(0, requestBytes);
-    final b = arena<AxiomBuffer>()
-      ..ref.ptr = bPtr
-      ..ref.len = requestBytes.length;
-
-    final callStatus = _callFfi(
-      requestId,
-      _toAxiomString(namespace, arena),
-      endpointId,
-      _toAxiomString(method, arena),
-      _toAxiomString(finalPath, arena),
-      _toAxiomString(traceparent, arena),
-      _toAxiomString(headersJson, arena), // Passed to Native Rust successfully
-      b.ref,
-    );
-    Future.microtask(() => arena.releaseAll());
+    final callStatus = using((Arena arena) {
+      final bPtr = arena<Uint8>(requestBytes.length);
+      bPtr.asTypedList(requestBytes.length).setAll(0, requestBytes);
+      final b = arena<AxiomBuffer>()
+        ..ref.ptr = bPtr
+        ..ref.len = requestBytes.length;
+      // axiom_call copies every argument before returning.
+      return _callFfi(
+        requestId,
+        _toAxiomString(namespace, arena),
+        endpointId,
+        _toAxiomString(method, arena),
+        _toAxiomString(finalPath, arena),
+        _toAxiomString(traceparent, arena),
+        _toAxiomString(headersJson, arena),
+        b.ref,
+      );
+    });
 
     if (callStatus != 0) {
-      controller.addError(
-        StateError(
-          'Axiom request was rejected before dispatch (status $callStatus).',
-        ),
+      final err = AxiomError(
+        stage: ErrorStage.requestBuild,
+        category: ErrorCategory.runtime,
+        code: _initialized
+            ? UnknownCode(FfiError.name(callStatus))
+            : const NotInitialized(),
+        message:
+            'Axiom request was rejected before dispatch (status $callStatus).',
+        retryable: false,
       );
-      controller.close();
+      _calls.remove(requestId);
+      _reportError(err, namespace, endpointId, requestId);
+      // Deliver after the caller attached its listener.
+      scheduleMicrotask(() {
+        controller.add(AxiomState.error(err));
+        controller.close();
+      });
+    } else if (options?.timeout != null) {
+      call.timeout = Timer(options!.timeout!, () {
+        if (!_calls.containsKey(requestId)) return;
+        call.timedOut = true;
+        if (!cancel(requestId)) call.timedOut = false;
+      });
     }
 
-    controller.onCancel = () => _controllers.remove(requestId);
     return AxiomStreamResponse(requestId, controller.stream);
   }
 
@@ -455,26 +1115,30 @@ class AxiomRuntimeIo implements AxiomRuntime {
       args: args,
     );
 
-    // ✨ FIX: Return AxiomActiveStream by calling the QueryManager's new wrapper logic
     return AxiomQuery(key, (customHeaders) {
       final mergedHeaders = {...?headers, ...customHeaders};
-
-      // We wrap the rawStream in a new AxiomActiveStream for AxiomQuery
       return AxiomQueryManager().watchRaw<T>(
         key,
-        () => _rawStream(
+        null,
+        namespace: namespace,
+        endpointId: endpointId,
+        cancel: cancel,
+        create: (force) => _rawStream(
           namespace: namespace,
           endpointId: endpointId,
           method: method,
           path: path,
-          headers: mergedHeaders,
+          headers: force
+              ? {...mergedHeaders, axiomCacheModeHeader: 'refresh'}
+              : mergedHeaders,
           pathParams: pathParams,
           queryParams: queryParams,
           body: body,
           decoder: decoder,
+          options: options,
         ),
       );
-    });
+    }, runtime: this);
   }
 
   @override
@@ -494,20 +1158,26 @@ class AxiomRuntimeIo implements AxiomRuntime {
     final key =
         '${namespace}_${endpointId}_mut_${DateTime.now().microsecondsSinceEpoch}';
 
-    return AxiomQuery(key, (customHeaders) {
-      final mergedHeaders = {...?headers, ...customHeaders};
-      return _rawStream(
-        namespace: namespace,
-        endpointId: endpointId,
-        method: method,
-        path: path,
-        headers: mergedHeaders,
-        pathParams: pathParams,
-        queryParams: queryParams,
-        body: body,
-        decoder: decoder,
-      );
-    }, isMutation: true);
+    return AxiomQuery(
+      key,
+      (customHeaders) {
+        final mergedHeaders = {...?headers, ...customHeaders};
+        return _rawStream(
+          namespace: namespace,
+          endpointId: endpointId,
+          method: method,
+          path: path,
+          headers: mergedHeaders,
+          pathParams: pathParams,
+          queryParams: queryParams,
+          body: body,
+          decoder: decoder,
+          options: options,
+        );
+      },
+      isMutation: true,
+      runtime: this,
+    );
   }
 
   AxiomActiveStream<T> _rawStream<T>({
@@ -531,7 +1201,9 @@ class AxiomRuntimeIo implements AxiomRuntime {
       pathParams: pathParams,
       queryParams: queryParams,
       requestBytes: AxiomCodec.encodeBody(body, headers),
+      options: options,
     );
+    final requestId = response.requestId;
 
     final mappedStream = response.stream.map((state) {
       if (state.hasError) return state.map((_) => null as T);
@@ -544,26 +1216,413 @@ class AxiomRuntimeIo implements AxiomRuntime {
             isStreaming: state.isStreaming,
           );
         } catch (e) {
-          return AxiomState<T>.error(
-            AxiomError(
-              stage: ErrorStage.deserialize,
-              category: ErrorCategory.serialization,
-              code: const CodecError(),
-              message: e.toString(),
-              retryable: false,
-            ),
+          final err = AxiomError(
+            stage: ErrorStage.deserialize,
+            category: ErrorCategory.serialization,
+            code: const CodecError(),
+            message: e.toString(),
+            retryable: false,
           );
+          _reportError(err, namespace, endpointId, requestId);
+          return AxiomState<T>.error(err);
         }
       }
       return state.map((_) => null as T);
     });
 
-    return AxiomActiveStream<T>(response.requestId, mappedStream);
+    return AxiomActiveStream<T>(requestId, mappedStream);
   }
+
+  @override
+  AxiomChannel<R, S> openChannel<R, S>({
+    required String namespace,
+    required int endpointId,
+    required String path,
+    String method = 'GET',
+    Map<String, String>? headers,
+    Map<String, dynamic>? pathParams,
+    Map<String, dynamic>? queryParams,
+    required R Function(dynamic json) decoder,
+    AxiomReconnectPolicy reconnect = AxiomReconnectPolicy.none,
+    AxiomCallOptions? options,
+  }) {
+    late AxiomChannel<R, S> channel;
+    final out = StreamController<AxiomState<R>>.broadcast();
+    StreamSubscription<AxiomState<R>>? sub;
+    var attempt = 0;
+
+    void connect() {
+      final active = _rawStream<R>(
+        namespace: namespace,
+        endpointId: endpointId,
+        method: method,
+        path: path,
+        headers: headers,
+        pathParams: pathParams,
+        queryParams: queryParams,
+        decoder: decoder,
+        options: options,
+      );
+      channel.updateRequestId(active.requestId);
+      sub = active.stream.listen(
+        (state) {
+          if (state.hasData) attempt = 0;
+          if (state.hasError && state.error!.isCancelled && channel.isClosed) {
+            return;
+          }
+          if (!out.isClosed) out.add(state);
+        },
+        onDone: () {
+          if (channel.isClosed || out.isClosed) {
+            out.close();
+            return;
+          }
+          final canRetry =
+              reconnect.enabled &&
+              (reconnect.maxAttempts == null ||
+                  attempt < reconnect.maxAttempts!);
+          if (!canRetry) {
+            out.close();
+            return;
+          }
+          attempt++;
+          Timer(reconnect.delayFor(attempt), () {
+            if (channel.isClosed || out.isClosed) {
+              if (!out.isClosed) out.close();
+              return;
+            }
+            connect();
+          });
+        },
+      );
+    }
+
+    channel = AxiomChannel<R, S>(0, out.stream, this, reconnect: reconnect);
+    out.onCancel = () {
+      if (!channel.isClosed) channel.close();
+      sub?.cancel();
+    };
+    connect();
+    return channel;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cancellation, session, shutdown
+  // ---------------------------------------------------------------------------
+
+  @override
+  bool cancel(int requestId) {
+    final fn = _cancelFfi;
+    if (fn == null || requestId == 0) return false;
+    try {
+      return fn(requestId) == FfiError.success;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Closes every Dart-side call stream with a [Cancelled] error (used when
+  /// the runtime drops requests without emitting events).
+  void _closeAllCalls(String message) {
+    final pending = Map.of(_calls);
+    _calls.clear();
+    for (final c in pending.values) {
+      c.timeout?.cancel();
+      if (c.controller.isClosed) continue;
+      c.controller.add(
+        AxiomState.error(
+          AxiomError(
+            stage: ErrorStage.runtime,
+            category: ErrorCategory.runtime,
+            code: const Cancelled(),
+            message: message,
+            retryable: false,
+          ),
+        ),
+      );
+      c.controller.close();
+    }
+  }
+
+  @override
+  Future<void> resetSession() async {
+    // axiom_reset_session aborts in-flight tasks and drains queued events
+    // without delivering a Cancelled/Complete pair, so close streams here.
+    _resetSessionFfi?.call();
+    _closeAllCalls('Request cancelled by resetSession');
+    AxiomQueryManager().clear();
+    for (final entry in _methodTokens.entries) {
+      for (final method in entry.value.keys) {
+        _clearNativeToken(entry.key, method);
+      }
+    }
+    final hadFallback = _namespaceTokens.isNotEmpty || _globalToken != null;
+    _methodTokens.clear();
+    _namespaceTokens.clear();
+    _globalToken = null;
+    if (hadFallback) {
+      for (final ns in AxiomContractMetadata.namespacesWithAuth.toList()) {
+        _applyTokensFor(ns);
+      }
+    }
+    _authProvider = null;
+  }
+
+  @override
+  Future<void> shutdown() async {
+    final starting = _initFuture;
+    if (starting == null) {
+      _initResultFuture = null;
+      _initResult = null;
+      return;
+    }
+    try {
+      await starting;
+    } catch (_) {}
+    for (final id in _calls.keys.toList()) {
+      cancel(id);
+    }
+    // After this returns no callback runs and queued responses are freed
+    // by the runtime instead of being delivered.
+    _clearCallbackFfi?.call();
+    _closeAllCalls('Request cancelled by shutdown');
+    AxiomQueryManager().clear();
+
+    final isolate = _eventIsolate;
+    final port = _mainPort;
+    if (isolate != null) {
+      final exited = ReceivePort();
+      isolate.addOnExitListener(exited.sendPort);
+      _eventControl?.send('shutdown');
+      try {
+        await exited.first.timeout(const Duration(seconds: 2));
+      } on TimeoutException {
+        isolate.kill(priority: Isolate.immediate);
+      }
+      exited.close();
+    }
+    port?.close();
+    _eventIsolate = null;
+    _eventControl = null;
+    _mainPort = null;
+    _initFuture = null;
+    _initialized = false;
+    _initResultFuture = null;
+    _initResult = null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cache control
+  // ---------------------------------------------------------------------------
+
+  @override
+  void invalidate({
+    required String namespace,
+    String? cacheIdentity,
+    int? endpointId,
+    Map<String, dynamic>? args,
+  }) {
+    final manager = AxiomQueryManager();
+    if (endpointId != null && args != null) {
+      manager.invalidateWhere(
+        namespace: namespace,
+        key: AxiomQueryKey.build(
+          endpoint: '${namespace}_$endpointId',
+          args: args,
+        ),
+      );
+      return;
+    }
+    if (endpointId != null) {
+      manager.invalidateWhere(namespace: namespace, endpointIds: {endpointId});
+      return;
+    }
+    if (cacheIdentity != null) {
+      // No runtime export invalidates by identity; refetch the endpoints the
+      // generator registered for it (all of the namespace when unknown).
+      final ids = AxiomContractMetadata.endpointsForIdentity(
+        namespace,
+        cacheIdentity,
+      );
+      manager.invalidateWhere(namespace: namespace, endpointIds: ids);
+      return;
+    }
+    manager.invalidateWhere(namespace: namespace);
+  }
+
+  @override
+  void setQueryData<T>({
+    required String namespace,
+    required int endpointId,
+    Map<String, dynamic> args = const {},
+    required T data,
+  }) {
+    AxiomQueryManager().setData(
+      AxiomQueryKey.build(endpoint: '${namespace}_$endpointId', args: args),
+      data,
+    );
+  }
+
+  @override
+  T? getCachedQueryData<T>({
+    required String namespace,
+    required int endpointId,
+    Map<String, dynamic> args = const {},
+  }) {
+    final value = AxiomQueryManager().dataFor(
+      AxiomQueryKey.build(endpoint: '${namespace}_$endpointId', args: args),
+    );
+    return value is T ? value : null;
+  }
+
+  @override
+  Future<void> clearCache([String? namespace]) async {
+    AxiomQueryManager().clearNamespace(namespace, refetch: true);
+  }
+
+  @override
+  Future<void> purgeCache([String? namespace]) async {
+    AxiomQueryManager().clearNamespace(namespace, refetch: false);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Errors
+  // ---------------------------------------------------------------------------
+
+  @override
+  Stream<AxiomErrorEvent> get onError => _errors.stream;
+
+  // ---------------------------------------------------------------------------
+  // Extensions
+  // ---------------------------------------------------------------------------
+
+  void _requireSymbol(String symbol) {
+    if (!_has(symbol)) {
+      throw AxiomExtensionException(
+        symbol,
+        FfiError.runtimeTooOld,
+        'runtime library has no $symbol',
+      );
+    }
+  }
+
+  AxiomBuffer _toBuffer(Uint8List bytes, Arena arena) {
+    final ptr = arena<Uint8>(bytes.isEmpty ? 1 : bytes.length);
+    ptr.asTypedList(bytes.length).setAll(0, bytes);
+    return arena<AxiomBuffer>().ref
+      ..ptr = ptr
+      ..len = bytes.length;
+  }
+
+  /// Copies and frees a runtime-owned output buffer.
+  Object? _takeJson(Pointer<AxiomBuffer> out) {
+    final buf = out.ref;
+    if (buf.ptr == nullptr || buf.len == 0) return null;
+    final text = utf8.decode(buf.ptr.asTypedList(buf.len), allowMalformed: true);
+    _lib.lookupFunction<_AxiomFreeBufferNative, _AxiomFreeBuffer>(
+      'axiom_free_buffer',
+    )(buf);
+    try {
+      return jsonDecode(text);
+    } catch (_) {
+      return text;
+    }
+  }
+
+  @override
+  Future<void> loadExtension(AxiomExtensionPackage package) async {
+    _requireSymbol('axiom_extension_load_locked');
+    final fn = _lib.lookupFunction<_AxiomExtLoadNative, _AxiomExtLoad>('axiom_extension_load_locked');
+    final status = using(
+      (Arena arena) => fn(
+        _toAxiomString(package.target, arena),
+        _toAxiomString(package.configJson, arena),
+        _toBuffer(package.packageBytes, arena),
+        _toBuffer(package.moduleBytes, arena),
+        _toBuffer(package.authorityBytes, arena),
+        _toBuffer(package.packageLockBytes, arena),
+      ),
+    );
+    if (status != FfiError.success) {
+      throw AxiomExtensionException(
+        'loadExtension',
+        status,
+        FfiError.name(status),
+      );
+    }
+  }
+
+  @override
+  Future<Object?> invokeExtension(AxiomExtensionCall call) async {
+    _requireSymbol('axiom_extension_invoke');
+    final fn = _lib.lookupFunction<_AxiomExtInvokeNative, _AxiomExtInvoke>('axiom_extension_invoke');
+    return using((Arena arena) {
+      final out = arena<AxiomBuffer>();
+      out.ref
+        ..ptr = nullptr
+        ..len = 0;
+      final status = fn(
+        _toAxiomString(call.extension, arena),
+        _toAxiomString(call.export, arena),
+        _toAxiomString(call.interfaceSha256, arena),
+        _toAxiomString(call.abiSymbol, arena),
+        _toAxiomString(jsonEncode(call.input), arena),
+        out,
+      );
+      final result = _takeJson(out);
+      if (status != FfiError.success) {
+        final message = result is Map && result['error'] != null
+            ? '${result['error']}'
+            : FfiError.name(status);
+        throw AxiomExtensionException('invokeExtension', status, message);
+      }
+      return result;
+    });
+  }
+
+  @override
+  void extensionLifecycle(AxiomLifecycleEvent event) {
+    _requireSymbol('axiom_extension_lifecycle');
+    final fn = _lib.lookupFunction<_AxiomExtLifecycleNative, _AxiomExtLifecycle>('axiom_extension_lifecycle');
+    final status = fn(event.code);
+    if (status != FfiError.success) {
+      throw AxiomExtensionException(
+        'extensionLifecycle',
+        status,
+        FfiError.name(status),
+      );
+    }
+  }
+
+  @override
+  Future<Object?> extensionAudit() async {
+    _requireSymbol('axiom_extension_audit');
+    final fn = _lib.lookupFunction<_AxiomExtAuditNative, _AxiomExtAudit>('axiom_extension_audit');
+    return using((Arena arena) {
+      final out = arena<AxiomBuffer>();
+      out.ref
+        ..ptr = nullptr
+        ..len = 0;
+      final status = fn(out);
+      final result = _takeJson(out);
+      if (status != FfiError.success) {
+        throw AxiomExtensionException(
+          'extensionAudit',
+          status,
+          result is Map ? '${result['error']}' : FfiError.name(status),
+        );
+      }
+      return result;
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
 
   AxiomString _toAxiomString(String s, Arena arena) {
     final units = utf8.encode(s);
-    final ptr = arena<Uint8>(units.length);
+    final ptr = arena<Uint8>(units.isEmpty ? 1 : units.length);
     ptr.asTypedList(units.length).setAll(0, units);
     return arena<AxiomString>().ref
       ..ptr = ptr
@@ -600,128 +1659,4 @@ class AxiomRuntimeIo implements AxiomRuntime {
       publicKey: publicKey,
     );
   }
-
-  // ---------------------------------------------------------------------------
-  // Parity API (unit f1): signatures frozen, bodies implemented by later units.
-  // ---------------------------------------------------------------------------
-
-  @override
-  Future<AxiomInitResult> initialize(
-    AxiomConfig config, {
-    AxiomAssetLoader? assetLoader,
-  }) => throw UnimplementedError('initialize');
-
-  @override
-  bool get isInitialized => throw UnimplementedError('isInitialized');
-
-  @override
-  AxiomInitResult? get initResult => throw UnimplementedError('initResult');
-
-  @override
-  AxiomRuntimeInfo get runtimeInfo => throw UnimplementedError('runtimeInfo');
-
-  @override
-  AxiomContractLoadResult tryLoadContract({
-    required String namespace,
-    required String baseUrl,
-    required Uint8List contractBytes,
-    String? signature,
-    String? publicKey,
-    String? sha256,
-  }) => throw UnimplementedError('tryLoadContract');
-
-  @override
-  AxiomChannel<R, S> openChannel<R, S>({
-    required String namespace,
-    required int endpointId,
-    required String path,
-    String method = 'GET',
-    Map<String, String>? headers,
-    Map<String, dynamic>? pathParams,
-    Map<String, dynamic>? queryParams,
-    required R Function(dynamic json) decoder,
-    AxiomReconnectPolicy reconnect = AxiomReconnectPolicy.none,
-    AxiomCallOptions? options,
-  }) => throw UnimplementedError('openChannel');
-
-  @override
-  void setNamespaceAuthToken({
-    required String namespace,
-    required String token,
-  }) => throw UnimplementedError('setNamespaceAuthToken');
-
-  @override
-  void clearNamespaceAuthToken({required String namespace}) =>
-      throw UnimplementedError('clearNamespaceAuthToken');
-
-  @override
-  void setGlobalAuthToken(String token) =>
-      throw UnimplementedError('setGlobalAuthToken');
-
-  @override
-  void clearGlobalAuthToken() =>
-      throw UnimplementedError('clearGlobalAuthToken');
-
-  @override
-  void setAuthProvider(AxiomAuthProvider? provider) =>
-      throw UnimplementedError('setAuthProvider');
-
-  @override
-  bool cancel(int requestId) => throw UnimplementedError('cancel');
-
-  @override
-  Future<void> resetSession() => throw UnimplementedError('resetSession');
-
-  @override
-  Future<void> shutdown() => throw UnimplementedError('shutdown');
-
-  @override
-  void invalidate({
-    required String namespace,
-    String? cacheIdentity,
-    int? endpointId,
-    Map<String, dynamic>? args,
-  }) => throw UnimplementedError('invalidate');
-
-  @override
-  void setQueryData<T>({
-    required String namespace,
-    required int endpointId,
-    Map<String, dynamic> args = const {},
-    required T data,
-  }) => throw UnimplementedError('setQueryData');
-
-  @override
-  T? getCachedQueryData<T>({
-    required String namespace,
-    required int endpointId,
-    Map<String, dynamic> args = const {},
-  }) => throw UnimplementedError('getCachedQueryData');
-
-  @override
-  Future<void> clearCache([String? namespace]) =>
-      throw UnimplementedError('clearCache');
-
-  @override
-  Future<void> purgeCache([String? namespace]) =>
-      throw UnimplementedError('purgeCache');
-
-  @override
-  Stream<AxiomErrorEvent> get onError => throw UnimplementedError('onError');
-
-  @override
-  Future<void> loadExtension(AxiomExtensionPackage package) =>
-      throw UnimplementedError('loadExtension');
-
-  @override
-  Future<Object?> invokeExtension(AxiomExtensionCall call) =>
-      throw UnimplementedError('invokeExtension');
-
-  @override
-  void extensionLifecycle(AxiomLifecycleEvent event) =>
-      throw UnimplementedError('extensionLifecycle');
-
-  @override
-  Future<Object?> extensionAudit() =>
-      throw UnimplementedError('extensionAudit');
 }
