@@ -9,6 +9,7 @@ import 'dart:typed_data';
 import 'package:ansicolor/ansicolor.dart';
 import 'package:ffi/ffi.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:path_provider/path_provider.dart' as path_provider;
 
 import 'call_options.dart';
 import 'channel.dart';
@@ -734,9 +735,26 @@ class AxiomRuntimeIo implements AxiomRuntime {
       mainIsolatePort.sendPort,
       Isolate.current,
     ], debugName: 'axiom-runtime-events');
-    using((Arena arena) => _initFfi(_toAxiomString(dbPath ?? '', arena)));
+    final resolvedDb = await _resolveDbPath(dbPath);
+    using((Arena arena) => _initFfi(_toAxiomString(resolvedDb, arena)));
     await ready.future;
     _initialized = true;
+  }
+
+  /// The runtime only creates its response cache and auth store when given a
+  /// database path, so default to `<app support>/axiom` (a temp directory
+  /// when path_provider is unavailable, e.g. host tests).
+  /// `AXIOM_DB_PATH` (environment, only when set) overrides the default.
+  static Future<String> _resolveDbPath(String? dbPath) async {
+    if (dbPath != null && dbPath.isNotEmpty) return dbPath;
+    final env = Platform.environment['AXIOM_DB_PATH'];
+    if (env != null && env.isNotEmpty) return env;
+    try {
+      final dir = await path_provider.getApplicationSupportDirectory();
+      return '${dir.path}${Platform.pathSeparator}axiom';
+    } catch (_) {
+      return '${Directory.systemTemp.path}${Platform.pathSeparator}axiom_runtime_$pid';
+    }
   }
 
   void _onResponse(
@@ -1322,6 +1340,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
         namespace: namespace,
         endpointId: endpointId,
         cancel: cancel,
+        forceRefresh: options?.cacheMode == AxiomCacheMode.refresh,
         create: (force) => _rawStream(
           namespace: namespace,
           endpointId: endpointId,
@@ -1557,16 +1576,23 @@ class AxiomRuntimeIo implements AxiomRuntime {
         _clearNativeToken(entry.key, method);
       }
     }
-    final hadFallback = _namespaceTokens.isNotEmpty || _globalToken != null;
     _methodTokens.clear();
     _namespaceTokens.clear();
     _globalToken = null;
-    if (hadFallback) {
-      for (final ns in AxiomContractMetadata.namespacesWithAuth.toList()) {
-        _applyTokensFor(ns);
+    // Also drop tokens the runtime stored itself (answers of the auth
+    // provider): every namespace / registered method is cleared natively.
+    final clearNs = _clearNamespaceTokensFfi;
+    if (clearNs != null) {
+      for (final ns in _loadedNamespaces) {
+        using((Arena arena) => clearNs(_toAxiomString(ns, arena)));
       }
     }
-    _authProvider = null;
+    for (final ns in AxiomContractMetadata.namespacesWithAuth.toList()) {
+      for (final m in AxiomContractMetadata.authMethodsFor(ns)) {
+        _clearNativeToken(ns, m);
+      }
+    }
+    setAuthProvider(null);
   }
 
   @override

@@ -305,9 +305,13 @@ class AxiomQueryManager {
     bool Function(int requestId)? cancel,
     String? namespace,
     int? endpointId,
+    bool forceRefresh = false,
   }) {
     final existing = _activeQueries[key];
     if (existing is ActiveQuery<T>) {
+      // A later call for the same key asked to bypass the cache: its next
+      // fetch (now, if someone listens and nothing is in flight) is forced.
+      if (forceRefresh) existing._forceNext = true;
       return AxiomActiveStream<T>(existing.currentReqId ?? 0, existing.stream);
     }
     if (existing != null) {
@@ -327,6 +331,7 @@ class AxiomQueryManager {
       final seed = _seeded.remove(key);
       if (seed is T) query.setData(seed);
     }
+    if (forceRefresh) query._forceNext = true;
     _activeQueries[key] = query;
     return AxiomActiveStream<T>(query.currentReqId ?? 0, query.stream);
   }
