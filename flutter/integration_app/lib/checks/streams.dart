@@ -6,15 +6,20 @@ import 'ctx.dart';
 final streamChecks = <CheckDef>[
   CheckDef('stream.sse', 'streams', (c) async {
     c.api.axiom.setAuthToken('sse', fixtureBearerToken);
-    final r = await data(c.api.sse());
-    expectEq(r.id, 't1', 'frame id');
-    expectEq(r.seq, 1, 'frame seq');
+    try {
+      final r = await data(c.api.sse());
+      expectEq(r.id, 't1', 'frame id');
+      expectEq(r.seq, 1, 'frame seq');
+    } finally {
+      c.api.axiom.clearAuthToken('sse');
+    }
   }),
   CheckDef('stream.chunked_ndjson', 'streams', (c) async {
     final r = await data(c.api.chunked());
     expectEq(r.seq, 1, 'frame seq');
   }),
   CheckDef('stream.websocket_echo', 'streams', (c) async {
+    skipBearerWsOnWeb();
     final api = await c.wsApi();
     // Guarded endpoint, no contract auth metadata: global token -> header.
     c.sdk.runtime.setGlobalAuthToken(fixtureBearerToken);

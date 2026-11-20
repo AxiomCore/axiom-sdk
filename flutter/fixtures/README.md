@@ -26,6 +26,12 @@ Test credentials (fixture only, never use elsewhere):
 CORS allows `http://127.0.0.1:8792`, `http://localhost:8792`, `http://127.0.0.1:8802` and
 `http://localhost:8802` (the web runner's origins).
 
+Hanging server (cancel / timeout / reset checks): `python3 -I tool/hang.py [port]`
+(127.0.0.1:8806 by default, or `$HANG_PORT`). It reads each request and never answers it, and it
+answers CORS preflights, so the same URL works natively and in browsers (managed Acore code has
+no clock or sleep, so the backend cannot delay a response). The app gets it with
+`--dart-define=FIXTURE_HANG_URL=http://127.0.0.1:8806`.
+
 ## Endpoints
 
 | Name | Method and path | Feature | Notes |

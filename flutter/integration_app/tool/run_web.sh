@@ -14,6 +14,9 @@
 #   H2_EMPTY_BASE_URL=url   server answering every request with an empty 204 (+ CORS), for
 #                           h2.empty_success_reaches_listeners (skipped when unset)
 #   CHROME_PROFILE=dir      Chrome --user-data-dir (default: a new temp dir)
+#   FIXTURE_HANG_URL=url    hanging server for the cancel/timeout/reset checks. Unset: this
+#                           script starts ../fixtures/tool/hang.py on 127.0.0.1:${HANG_PORT:-8806}
+#                           and stops it on exit. HANG=0: do not start one (those checks SKIP).
 set -euo pipefail
 APP="$(cd "$(dirname "$0")/.." && pwd)"
 WEB_PORT="${WEB_PORT:-8792}"
@@ -29,9 +32,18 @@ CSP="${CSP:-0}"
 WASM="${WASM:-0}"
 RECEIPT="${RECEIPT:-$APP/receipt-web.json}"
 cd "$APP"
+HANG_PID=
+if [ -z "${FIXTURE_HANG_URL:-}" ] && [ "${HANG:-1}" != "0" ]; then
+  HANG_PORT="${HANG_PORT:-8806}"
+  mkdir -p "$APP/build"
+  python3 -I "$APP/../fixtures/tool/hang.py" "$HANG_PORT" >"$APP/build/hang.log" 2>&1 &
+  HANG_PID=$!
+  FIXTURE_HANG_URL="http://127.0.0.1:$HANG_PORT"
+fi
 if [ "${SKIP_BUILD:-0}" != "1" ]; then
   args=(--"$MODE" --dart-define=FIXTURE_BASE_URL="$BASE" --base-href "$BASE_HREF")
   [ -n "$WS_BASE" ] && args+=(--dart-define=FIXTURE_WS_BASE_URL="$WS_BASE")
+  [ -n "${FIXTURE_HANG_URL:-}" ] && args+=(--dart-define=FIXTURE_HANG_URL="$FIXTURE_HANG_URL")
   [ -n "${H2_EMPTY_BASE_URL:-}" ] && args+=(--dart-define=H2_EMPTY_BASE_URL="$H2_EMPTY_BASE_URL")
   [ "$CSP" = "1" ] && args+=(--no-web-resources-cdn --csp)
   [ "$WASM" = "1" ] && args+=(--wasm)
@@ -67,7 +79,7 @@ class H(http.server.SimpleHTTPRequestHandler):
 http.server.ThreadingHTTPServer(("127.0.0.1", port), functools.partial(H, directory=root)).serve_forever()
 PY
 SERVER=$!
-trap 'kill $SERVER 2>/dev/null || true; kill $CHROME_PID 2>/dev/null || true' EXIT
+trap 'kill $SERVER 2>/dev/null || true; kill $CHROME_PID 2>/dev/null || true; [ -n "$HANG_PID" ] && kill $HANG_PID 2>/dev/null || true' EXIT
 sleep 1
 "$CHROME" --headless=new --no-sandbox --use-mock-keychain --password-store=basic \
   --disable-gpu --no-first-run --user-data-dir="$PROFILE" \

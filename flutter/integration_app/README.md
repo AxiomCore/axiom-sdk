@@ -21,7 +21,12 @@ Checks for API that the SDK does not have yet exist and report `SKIP pending: <u
 
 ## Run
 
-Start the backend first: `../fixtures/backend/run.sh` (127.0.0.1:8791).
+Start the backend first: `../fixtures/backend/run.sh` (127.0.0.1:8791), and the hanging server
+for the cancel / timeout / reset checks (`b.cancel_*`, `b.call_options`, `b.reset_session`,
+`c.call_options_timeout`): `python3 -I ../fixtures/tool/hang.py` (127.0.0.1:8806; it accepts
+requests and never answers). Pass `--dart-define=FIXTURE_HANG_URL=http://127.0.0.1:8806`
+(Android emulator: `http://10.0.2.2:8806`); without it those checks SKIP with that reason.
+`tool/run_web.sh` starts and stops the hanging server itself.
 
 | Target | Command |
 | --- | --- |
@@ -34,7 +39,8 @@ The base URL comes from `--dart-define=FIXTURE_BASE_URL=...` (default `http://12
 For a physical device, run the backend on a reachable address (`run.sh` binds 127.0.0.1; edit
 `--host` there) and pass that URL.
 
-Platform setup already done: macOS `com.apple.security.network.client` in both entitlements,
+Platform setup already done: macOS `com.apple.security.network.client` in both entitlements
+(and `com.apple.security.network.server` in both, so checks may listen on loopback in Release),
 macOS 11.0 and iOS 13.0 deployment targets (Podfiles and `project.pbxproj`),
 `NSAllowsLocalNetworking` for plain HTTP to localhost, Android `INTERNET` permission and
 cleartext traffic in the debug manifest.

@@ -82,6 +82,14 @@ abstract final class AxiomGeneratedCodec {
     return a == b;
   }
 
+  /// True when [v] is, or contains, an enum value this client does not know.
+  static bool hasUnknown(Object? v) => switch (v) {
+    AxiomGeneratedEnum() => v.isUnknown,
+    List() => v.any(hasUnknown),
+    Map() => v.keys.any(hasUnknown) || v.values.any(hasUnknown),
+    _ => false,
+  };
+
   static int deepHash(Object? v) => switch (v) {
     List() => Object.hashAll(v.map(deepHash)),
     Map() => Object.hashAllUnordered(
@@ -115,6 +123,12 @@ abstract final class AxiomGeneratedCodec {
     }
     return (null, null);
   }
+}
+
+/// Implemented by every generated enum.
+abstract interface class AxiomGeneratedEnum {
+  /// True for a wire value this client version does not know.
+  bool get isUnknown;
 }
 
 class Item {

@@ -96,17 +96,25 @@ final dChecks = <CheckDef>[
       })),
   CheckDef('gen.sse_stream', 'streams', (c) => _pendingAware(() async {
         c.api.axiom.setAuthToken('sse', fixtureBearerToken);
-        final t = await c.api.sseStream().first.timeout(const Duration(seconds: 10));
-        expectEq(t.id, 't1', 'frame id');
-        expectEq(t.seq, 1, 'frame seq');
+        try {
+          final t = await c.api.sseStream().first.timeout(const Duration(seconds: 10));
+          expectEq(t.id, 't1', 'frame id');
+          expectEq(t.seq, 1, 'frame seq');
+        } finally {
+          c.api.axiom.clearAuthToken('sse');
+        }
       })),
   CheckDef('gen.chunked_stream', 'streams', (c) => _pendingAware(() async {
         final t = await c.api.chunkedStream().first.timeout(const Duration(seconds: 10));
         expectEq(t.seq, 1, 'frame seq');
       })),
   CheckDef('gen.ws_channel', 'streams', (c) => _pendingAware(() async {
-        c.api.axiom.setAuthToken('wsEcho', fixtureBearerToken);
-        final channel = c.api.wsEchoChannel();
+        // Same server, token and Origin as stream.websocket_echo.
+        skipBearerWsOnWeb();
+        final api = await c.wsApi();
+        c.setWsToken();
+        final channel = api.wsEchoChannel(
+            options: const AxiomCallOptions(headers: Ctx.wsHeaders));
         try {
           final reply = channel.stream
               .firstWhere((s) => s.data != null || s.error != null)
@@ -117,6 +125,7 @@ final dChecks = <CheckDef>[
           expectEq(s.data?.text, 'typed', 'echo text');
         } finally {
           await channel.close();
+          resetAuthState(c);
         }
       })),
   CheckDef('gen.validators', 'generator', (c) async {

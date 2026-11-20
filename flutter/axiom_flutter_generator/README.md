@@ -128,9 +128,17 @@ or that clashes with a reserved word or a generated member (`toJson`,
 never renamed. Two contract types or namespaces that map to the same Dart
 class name stop generation with an error.
 
-`int64` fields map to `int`. On the web `jsonDecode` rounds integers above
-2^53 (snowflake IDs, for example) without an error, so send such values as
-strings in the contract.
+`int64` fields map to `int`, decoded from a JSON number or a JSON string
+(`"9007199254740993"`). Native and dart2wasm builds hold every Int64 exactly.
+dart2js holds integers exactly only up to 2^53-1 (snowflake IDs, for example,
+are larger): the browser's JSON parser has already rounded a larger JSON
+number, and a larger JSON string cannot be held exactly in a JavaScript
+number. The generated decoder never returns such a value silently: each one
+increments `AxiomGeneratedCodec.unsafeIntegerCount` and calls
+`AxiomGeneratedCodec.onUnsafeInteger(wire, decoded)` if set. Set
+`AxiomGeneratedCodec.strictIntegers = true` to get a `FormatException`
+instead. For exact large IDs on the web, compile with `--wasm` or declare the
+field as `String`.
 
 The generated files analyze cleanly with `flutter_lints`. You can still
 exclude them from analysis:

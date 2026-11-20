@@ -34,6 +34,51 @@ def table(head, rows):
     return "\n".join(out)
 
 
+LABELS = {"axiom": "Axiom", "dio": "dio + retrofit", "http": "package:http", "web_socket_channel": "web_socket_channel",
+          "dio_cache_interceptor": "dio + dio_cache_interceptor", "axiom_generated": "Axiom generated models",
+          "json_serializable": "json_serializable", "manual_fromJson": "manual fromJson", "json_only": "jsonDecode only"}
+CASES = {"small_get_item": "getItem (~110 B)", "small_create_item": "createItem (POST)",
+         "large_list_1000": "listItems 1 000 items (91 KB)", "large_list_10000": "listItems 10 000 items (938 KB)",
+         "repeat_list_1000": "cache hit, 1 000 items, repeat call"}
+
+
+def describe(key):
+    p = key.split()
+    if p[0] == "cold":
+        return (f"Cold start, {'time to first data' if p[1] == 'first_data' else 'runtime/client init'} (median of 5 launches)",
+                LABELS.get(p[2], p[2]))
+    if p[0] in ("latency", "cache"):
+        return f"{CASES.get(p[1], p[1])}, {p[3]}", LABELS.get(p[2], p[2])
+    if p[0] == "decode":
+        return f"Decode only, {int(p[1]):,} items, p50 (main isolate, no network)", LABELS.get(p[2], p[2])
+    if p[0] == "ws":
+        return "WebSocket echo, 1 000 sequential round trips", LABELS.get(p[2], p[2])
+    return key, ""
+
+
+def web_stats_md(r, ws):
+    nruns = len(r.get("web_runs", [])) or 3
+    md = [f"#### App benchmarks: web, headless Chrome, release build, {nruns} full runs (not a physical device)", "",
+          f"Each value is the median of the {nruns} run medians; spread = (max - min) / median of the run medians. "
+          f"Only metrics with spread <= 10% are listed ({ws['stable_count']} of {ws['total']}). "
+          "Time: lower is better; round trips/s: higher is better.", ""]
+    rows = []
+    for k, v in ws["metrics"].items():
+        if not v["stable"]:
+            continue
+        what, client = describe(k)
+        unit = v["unit"]
+        val = f"{v['median']:,.0f}/s" if unit == "/s" else (f"{v['median']:.0f} ms" if v["median"] >= 100 else f"{v['median']:.2f} ms")
+        rows.append([what, client, val, f"{v['spread_pct']:.1f}%", " / ".join(f"{x:g}" for x in v["runs"])])
+    md += [table(["Measurement", "Client", "Median", "Spread", "Run medians"], rows), ""]
+    ns = [(k, v) for k, v in ws["metrics"].items() if not v["stable"]]
+    if ns:
+        md += ["Not stable (spread above 10%, not published as a number): " + "; ".join(
+            f"{' '.join(describe(k))} ({v['spread_pct']:.0f}%)" if v.get("spread_pct") is not None else f"{' '.join(describe(k))} (n/a)"
+            for k, v in ns) + ".", ""]
+    return md
+
+
 def render(r):
     m = r.get("machine", {})
     md = [f"### {r.get('label')} ({r.get('date')})", "",
@@ -44,7 +89,10 @@ def render(r):
     for n in r.get("notes", []):
         md.append(f"- {n}")
     md.append("")
-    w = r.get("web")
+    ws = r.get("web_stats")
+    if ws:
+        md += web_stats_md(r, ws)
+    w = None if ws else r.get("web")
     if w:
         md += [f"#### App benchmarks: web, headless Chrome, {w.get('mode')} build (not a physical device)", ""]
         if w.get("cold"):
@@ -72,7 +120,7 @@ def render(r):
                      x.get("note", "")] for x in w["ws"]]
             md += ["WebSocket echo, sequential round trips (1 000 messages):", "",
                    table(["Client", "Status", "Round trips", "Mean RTT", "Note"], rows), ""]
-    rep = r.get("reproducibility")
+    rep = None if ws else r.get("reproducibility")
     if rep:
         rows = [[x["metric"], f(x["run1_ms"], " ms", 2), f(x["run2_ms"], " ms", 2), f"{x['diff_pct']:+d}%"]
                 for x in rep["rows"]]
@@ -108,10 +156,29 @@ def render(r):
     s = r.get("size")
     if s:
         if s.get("apk"):
-            rows = [[abi, mb(s["apk"]["baseline"].get(abi)), mb(s["apk"]["axiom"].get(abi)),
-                     kb(s.get("apk_delta", {}).get(abi))] for abi in s["apk"].get("axiom", {})]
-            md += ["#### Android APK size (`flutter build apk --release --split-per-abi`)", "",
-                   table(["ABI", "Baseline (dio + http)", "With Axiom SDK", "Delta"], rows), ""]
+            bd = s.get("apk_breakdown")
+            if bd:
+                rows = []
+                for abi in s["apk"]["axiom"]:
+                    b, x = bd["baseline"][abi], bd["axiom"][abi]
+                    part = lambda k: x[k]["in_apk"] - b[k]["in_apk"]
+                    rows.append([abi, mb(s["apk"]["baseline"][abi]), mb(s["apk"]["axiom"][abi]), kb(s["apk_delta"][abi]),
+                                 kb(part("libaxiom_runtime.so")), kb(part("libapp.so (Dart AOT)")),
+                                 kb(part("axiom web runtime assets (wasm+js)")), kb(part("contract asset")),
+                                 kb(s.get("apk_delta_wasm_opt_out", {}).get(abi))])
+                md += ["#### Android APK size (`flutter build apk --release --split-per-abi`)", "",
+                       table(["ABI", "Baseline (dio + http)", "With Axiom SDK", "Delta", "of which libaxiom_runtime.so",
+                              "Dart AOT (libapp.so)", "web runtime assets (wasm + JS glue)", "contract asset",
+                              "Delta with wasm opt-out"], rows), "",
+                       "Sizes are bytes inside the APK (the .so files are stored uncompressed, page-aligned; the wasm "
+                       "is compressed). The web runtime assets are shipped in Android builds because Flutter 3.32 has "
+                       "no per-platform assets; the opt-out in `flutter/axiom_flutter/doc/wasm-size.md` removes them "
+                       "(last column). The remainder of the delta is APK metadata/alignment.", ""]
+            else:
+                rows = [[abi, mb(s["apk"]["baseline"].get(abi)), mb(s["apk"]["axiom"].get(abi)),
+                         kb(s.get("apk_delta", {}).get(abi))] for abi in s["apk"].get("axiom", {})]
+                md += ["#### Android APK size (`flutter build apk --release --split-per-abi`)", "",
+                       table(["ABI", "Baseline (dio + http)", "With Axiom SDK", "Delta"], rows), ""]
             if s.get("apk_note"):
                 md += [s["apk_note"], ""]
         if s.get("web"):
@@ -122,6 +189,11 @@ def render(r):
             for k, v in x.items():
                 if k.startswith("axiom_asset:"):
                     rows.append([k.split(":", 1)[1], "–", kb(v), kb(v)])
+            if "js_wasm_bytes" in x:
+                rows.append(["all JS + wasm (incl. CanvasKit)", mb(b["js_wasm_bytes"]), mb(x["js_wasm_bytes"]),
+                             kb(x["js_wasm_bytes"] - b["js_wasm_bytes"])])
+                rows.append(["all JS + wasm, gzip -9", mb(b["js_wasm_gzip"]), mb(x["js_wasm_gzip"]),
+                             kb(x["js_wasm_gzip"] - b["js_wasm_gzip"])])
             rows.append(["build/web total", mb(b["total_bytes"]), mb(x["total_bytes"]), mb(x["total_bytes"] - b["total_bytes"])])
             md += ["#### Web bundle size (`flutter build web --release`)", "",
                    table(["File", "Baseline", "With Axiom SDK", "Delta"], rows), ""]
