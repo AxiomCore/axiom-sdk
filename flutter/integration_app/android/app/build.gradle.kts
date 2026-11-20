@@ -29,6 +29,20 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // `flutter build --target-platform android-arm64` only drops other ABIs of
+        // libflutter.so; also drop the other ABIs of plugin libraries
+        // (libaxiom_runtime.so). Not with --split-per-abi (AGP rejects both).
+        val abiByPlatform = mapOf(
+            "android-arm64" to "arm64-v8a",
+            "android-arm" to "armeabi-v7a",
+            "android-x64" to "x86_64",
+        )
+        val targetAbis = (project.findProperty("target-platform") as String?)
+            ?.split(",")?.mapNotNull { abiByPlatform[it.trim()] }.orEmpty()
+        if (targetAbis.isNotEmpty() && project.findProperty("split-per-abi") != "true") {
+            ndk { abiFilters += targetAbis }
+        }
     }
 
     buildTypes {
