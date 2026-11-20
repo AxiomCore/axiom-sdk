@@ -88,8 +88,10 @@ abstract final class AxiomGeneratedCodec {
 
   static String bytesToJson(Uint8List v) => base64Encode(v);
 
+  /// jsonDecode already returns `Map<String, dynamic>`: use it directly (a
+  /// `cast` view re-checks every key and value on each read).
   static Map<String, dynamic> asObject(Object? v) =>
-      (v as Map).cast<String, dynamic>();
+      v is Map<String, dynamic> ? v : (v as Map).cast<String, dynamic>();
 
   static List<T> asList<T>(Object? v, T Function(Object?) item) => [
     for (final e in v as List) item(e),
