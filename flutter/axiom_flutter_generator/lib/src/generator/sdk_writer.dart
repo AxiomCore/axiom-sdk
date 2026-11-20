@@ -234,8 +234,33 @@ class SdkWriter {
     b.writeln();
   }
 
-  String _moduleClass(ContractInput c) => '${GeneratorUtils.pascalCase(c.namespace)}Module';
-  String _prop(ContractInput c) => GeneratorUtils.identifier(c.namespace, avoid: {'runtime', 'initResult'});
+  String _moduleClass(ContractInput c) => _names.$1[c.namespace]!;
+  String _prop(ContractInput c) => _names.$2[c.namespace]!;
+
+  /// Module class and AxiomSdk property per namespace. Two namespaces that
+  /// map to the same class name are an error; property names get a suffix.
+  late final (Map<String, String>, Map<String, String>) _names = () {
+    final classes = <String, String>{};
+    final props = <String, String>{};
+    final usedProps = <String>{'runtime', 'initResult', 'create', 'fromRuntime'};
+    final owner = <String, String>{};
+    for (final c in contracts) {
+      final cls = '${GeneratorUtils.pascalCase(c.namespace)}Module';
+      for (final t in [cls, '${cls}AxiomNamespace']) {
+        final prev = owner[t];
+        if (prev != null || t == 'AxiomSdk' || t == 'AxiomDefaultConfig') {
+          throw GeneratorException(
+            'Namespaces "${prev ?? t}" and "${c.namespace}" both map to the Dart class "$t". '
+            'Pull one of them with another --name.',
+          );
+        }
+        owner[t] = c.namespace;
+      }
+      classes[c.namespace] = cls;
+      props[c.namespace] = GeneratorUtils.uniqueIdentifier(c.namespace, usedProps);
+    }
+    return (classes, props);
+  }();
 
   // ---------------------------------------------------------------------------
 
@@ -263,21 +288,55 @@ class SdkWriter {
     }
     raw.sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
 
-    final used = <String>{'axiom', 'cacheIdentities', 'endpointIds', 'authMethods', 'invalidateIdentity'};
+    // Module members: fixed ones, then per endpoint `name`, plus `nameStream`
+    // / `nameChannel` for streaming endpoints (endpoints are sorted, so `foo`
+    // claims `fooStream` before a `foo_stream` endpoint is named).
+    final used = <String>{
+      'axiom', 'cacheIdentities', 'endpointIds', 'authMethods', 'invalidateIdentity',
+    };
+    final names = <String, String>{};
+    String? helperSuffix(Map<String, dynamic> ep) {
+      final st = ep['streaming'] is Map ? (ep['streaming'] as Map)['type'] : null;
+      return st == 'sse' || st == 'http_stream' ? 'Stream' : st == 'websocket' ? 'Channel' : null;
+    }
+    // Endpoints whose name is already an identifier (`getUser`) go first,
+    // so `get_user` becomes `getUser2`, not the other way round.
+    bool exact(Map<String, dynamic> ep) =>
+        GeneratorUtils.identifier(ep['name'] as String, avoid: GeneratorUtils.objectMembers) == ep['name'];
+    for (final ep in [...raw.where(exact), ...raw.where((e) => !exact(e))]) {
+      final name = ep['name'] as String;
+      final suffix = helperSuffix(ep);
+      final base = GeneratorUtils.identifier(name, avoid: GeneratorUtils.objectMembers);
+      var dartName = base;
+      var n = 2;
+      while (used.contains(dartName) || (suffix != null && used.contains('$dartName$suffix'))) {
+        dartName = '$base${n++}';
+      }
+      used.add(dartName);
+      if (suffix != null) used.add('$dartName$suffix');
+      names[name] = dartName;
+    }
+    // Locals and top-level names the generated method bodies refer to.
+    const paramAvoid = {
+      'options', 'idempotencyKey', 'reconnect', 'headers', 'query', 'response',
+      'extra', 'e', 'k', 'v', 'json', 'models', 'jsonEncode', 'utf8', 'identical',
+    };
     final out = <_Endpoint>[];
     for (final ep in raw) {
       final name = ep['name'] as String;
-      var dartName = GeneratorUtils.identifier(name, avoid: used);
-      used.add(dartName);
+      final dartName = names[name]!;
       final op = ops[name] ?? const {};
-      final paramAvoid = {'options', 'idempotencyKey', 'reconnect'};
       final params = <_Param>[];
-      for (final p in (ep['parameters'] as List? ?? const [])) {
-        final pm = (p as Map).cast<String, dynamic>();
-        var dart = GeneratorUtils.identifier(pm['name'] as String, avoid: paramAvoid);
-        while (params.any((x) => x.dart == dart)) {
-          dart = '${dart}2';
-        }
+      final rawParams = [
+        for (final p in (ep['parameters'] as List? ?? const [])) (p as Map).cast<String, dynamic>(),
+      ];
+      final paramNames = GeneratorUtils.uniqueNames(
+        [for (final pm in rawParams) pm['name'] as String],
+        <String>{},
+        avoid: paramAvoid,
+      );
+      for (final (i, pm) in rawParams.indexed) {
+        final dart = paramNames[i];
         params.add(
           _Param(
             pm['name'] as String,

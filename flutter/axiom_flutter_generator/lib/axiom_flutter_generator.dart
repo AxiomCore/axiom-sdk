@@ -5,19 +5,14 @@ library;
 import 'src/generator/model_writer.dart';
 import 'src/generator/schema.dart';
 import 'src/generator/sdk_writer.dart';
+import 'src/generator/utils.dart';
 
 export 'src/generator/sdk_writer.dart' show ContractInput;
+export 'src/generator/utils.dart' show GeneratorException;
 
 /// Version written into every generated file header.
 const String generatorVersion = '0.147.5';
 
-/// Thrown for contract/config problems the user must fix.
-class GeneratorException implements Exception {
-  final String message;
-  GeneratorException(this.message);
-  @override
-  String toString() => message;
-}
 
 /// Generates `axiom_sdk.dart` and `models.dart` for [contracts].
 ///
