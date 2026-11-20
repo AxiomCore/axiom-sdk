@@ -12,8 +12,9 @@
     "sha256": null
   },
   "wasm": {
-    "runtime_commit": null,
-    "axiom_runtime_js_sha256": null,
-    "axiom_runtime_bg_wasm_sha256": null
+    "runtime_commit": "85934e544ef08ede418cd76dc5c3c98e3a7c9de8",
+    "runtime_branch": "axiom-runtime flutter/f4 (flutter/parity a67a62d + wasm exports)",
+    "axiom_runtime_js_sha256": "e74b0dc93f1dddfc72ef42c16a486d4d9683a9bb7123a2ac11564f4c1411e8da",
+    "axiom_runtime_bg_wasm_sha256": "bd57be2892cbfeecf11ece2fb8fe279f3848c082485cd08ddf974ab727f6215e"
   }
 }

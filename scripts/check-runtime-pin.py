@@ -71,6 +71,17 @@ def main():
     check(bool(checksum) and checksum.group(1) == apple["sha256"],
           "swift/Package.swift checksum matches apple.sha256")
 
+    wasm = pin.get("wasm") or {}
+    wasm_dir = ROOT / "flutter/axiom_flutter/lib/assets/wasm"
+    for key, name in (("axiom_runtime_js_sha256", "axiom_runtime.js"),
+                      ("axiom_runtime_bg_wasm_sha256", "axiom_runtime_bg.wasm")):
+        expected = wasm.get(key)
+        if expected is None:
+            print(f"skip wasm.{key} is not pinned yet")
+            continue
+        actual = hashlib.sha256((wasm_dir / name).read_bytes()).hexdigest()
+        check(actual == expected, f"bundled {name} matches wasm.{key}")
+
     if args.download:
         print(f"downloading {apple['url']}")
         digest = hashlib.sha256()
