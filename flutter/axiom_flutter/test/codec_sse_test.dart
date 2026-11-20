@@ -22,4 +22,26 @@ void main() {
     expect(out.map(utf8.decode), ['{"a":1}', '2']);
     expect(p.feed(Uint8List(0), flush: true).map(utf8.decode), ['3']);
   });
+  test('F5: UTF-8 character split across chunks is not corrupted', () {
+    final p = AxiomSseParser();
+    final bytes = utf8.encode('data: héllo 😀\n\n');
+    final out = <Uint8List>[];
+    // Feed one byte at a time: every multi-byte character is split.
+    for (final b in bytes) {
+      out.addAll(p.feed(Uint8List.fromList([b])));
+    }
+    expect(out.map(utf8.decode), ['héllo 😀']);
+  });
+  test('F5: CRLF split across chunks keeps one multi-line event', () {
+    final p = AxiomSseParser();
+    Uint8List b(String s) => Uint8List.fromList(utf8.encode(s));
+    expect(p.feed(b('data: a\r')), isEmpty);
+    expect(p.feed(b('\ndata: b\r\n\r')), isEmpty);
+    expect(p.feed(b('\n')).map(utf8.decode), ['a\nb']);
+    // A lone CR line ending still works, also at the end of a stream.
+    final q = AxiomSseParser();
+    expect(q.feed(b('data: x\r\r')), isEmpty);
+    expect(q.feed(b('data: y\r')).map(utf8.decode), ['x']);
+    expect(q.feed(Uint8List(0), flush: true).map(utf8.decode), ['y']);
+  });
 }
