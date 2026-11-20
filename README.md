@@ -135,7 +135,11 @@ the [examples repository](https://github.com/AxiomCore/examples#flutter-examples
 - [Sandboxed extensions](flutter/axiom_flutter/README.md#extensions) (Android, iOS, macOS)
 - Generated models with enums, unions, validators and value equality ([generator](flutter/axiom_flutter_generator/README.md))
 
-### Benchmarks
+### Benchmarks (0.150.0 table)
+
+This is the 0.150.0 table. The 0.150.1 re-measurement of the merged code was
+not ready when this README was written; size changes in 0.150.1 are under
+[Size in 0.150.1](#size-in-01501).
 
 <!-- BENCHMARKS:START -->
 Measured 2026-11-20 on a 4 vCPU Linux container: release web build in headless
