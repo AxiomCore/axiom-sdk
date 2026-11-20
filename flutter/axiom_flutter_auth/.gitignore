@@ -3,3 +3,6 @@ build/
 pubspec.lock
 .flutter-plugins
 .flutter-plugins-dependencies
+
+# Local development override of axiom_flutter (see README, "Developing this package")
+pubspec_overrides.yaml

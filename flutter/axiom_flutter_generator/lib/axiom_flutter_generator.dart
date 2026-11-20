@@ -11,7 +11,7 @@ export 'src/generator/sdk_writer.dart' show ContractInput;
 export 'src/generator/utils.dart' show GeneratorException;
 
 /// Version written into every generated file header.
-const String generatorVersion = '0.147.5';
+const String generatorVersion = '0.150.0';
 
 /// Generates `axiom_sdk.dart` and `models.dart` for [contracts].
 ///

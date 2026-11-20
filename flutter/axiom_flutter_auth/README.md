@@ -5,6 +5,14 @@ Managed Axiom project authentication for Flutter. It is the Dart port of
 on Android, iOS, macOS and web. It also plugs into `axiom_flutter`, so every
 Axiom call carries a fresh access token.
 
+## Install
+
+```sh
+flutter pub add axiom_flutter:^0.150.0 axiom_flutter_auth:^0.150.0
+```
+
+Both packages are released together with the same version number.
+
 ## Quickstart
 
 ```dart
@@ -153,3 +161,20 @@ newer one, build the amalgamation with
 `gcc -O2 -fPIC -shared sqlite3.c -o libsqlite3.so.0`. On a machine that is not
 registered with Axiom Cloud, the scripts set a loopback `AXIOM_CLOUD_URL`; the
 emulator itself makes no cloud call.
+
+## Developing this package
+
+The published pubspec depends on `axiom_flutter: ^0.150.0`. To work against the
+`axiom_flutter` sources in this repository, create a `pubspec_overrides.yaml`
+next to `pubspec.yaml` (it is git-ignored and listed in `.pubignore`, so it is
+never committed or published):
+
+```yaml
+dependency_overrides:
+  axiom_flutter:
+    path: ../axiom_flutter
+```
+
+Then run `flutter pub get`. `dart pub publish --dry-run` ignores the override
+and validates the version constraint. The example app in `example/` carries its
+own `dependency_overrides` and needs nothing extra.

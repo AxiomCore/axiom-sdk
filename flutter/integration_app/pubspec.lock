@@ -31,21 +31,21 @@ packages:
       path: "../axiom_flutter"
       relative: true
     source: path
-    version: "0.147.5"
+    version: "0.150.0"
   axiom_flutter_auth:
     dependency: "direct main"
     description:
       path: "../axiom_flutter_auth"
       relative: true
     source: path
-    version: "0.1.0"
+    version: "0.150.0"
   axiom_flutter_generator:
     dependency: "direct dev"
     description:
       path: "../axiom_flutter_generator"
       relative: true
     source: path
-    version: "0.147.5"
+    version: "0.150.0"
   boolean_selector:
     dependency: transitive
     description:

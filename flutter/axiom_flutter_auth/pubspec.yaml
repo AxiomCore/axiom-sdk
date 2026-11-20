@@ -1,6 +1,6 @@
 name: axiom_flutter_auth
 description: "Managed Axiom project authentication for Flutter (auth-surfaces/v1 client): sign-in, refresh with rotation, secure session storage, PKCE redirects, MFA and step-up, wired into axiom_flutter."
-version: 0.1.0
+version: 0.150.0
 homepage: https://github.com/AxiomCore/axiom-sdk
 repository: https://github.com/AxiomCore/axiom-sdk
 issue_tracker: https://github.com/AxiomCore/axiom-sdk/issues
@@ -12,8 +12,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  axiom_flutter:
-    path: ../axiom_flutter
+  axiom_flutter: ^0.150.0
   http: ^1.2.0
   crypto: ^3.0.3
   flutter_secure_storage: ^10.0.0

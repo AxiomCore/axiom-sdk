@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// axiom_flutter_generator 0.147.5
+// axiom_flutter_generator 0.150.0
 // rpc: rpc-obs-test 1.0.0 variant default schema 6373ae1b80de
 
 import 'dart:convert';
