@@ -36,6 +36,9 @@ dependencies:
   cupertino_icons: ^1.0.8
   axiom_flutter:
     path: ../axiom_flutter
+  axiom_flutter_auth: # unit f
+    path: ../axiom_flutter_auth
+  http: ^1.2.0 # unit f
 
 dev_dependencies:
   axiom_flutter_generator:
