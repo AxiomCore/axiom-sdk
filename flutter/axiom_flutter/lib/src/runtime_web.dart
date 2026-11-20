@@ -346,7 +346,11 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   AxiomRuntimeWeb._internal();
 
   final _requests = <int, _Request>{};
-  int _nextRequestId = 1;
+  // Seeded from the clock: after a hot restart the wasm instance (and its
+  // in-flight requests) survive while Dart state restarts, so ids must not
+  // start at 1 again. Stays below 2^53 (ids cross JS as numbers).
+  int _nextRequestId =
+      (DateTime.now().millisecondsSinceEpoch % 100000000) * 10000 + 1;
   WasmExports? _wasmOrNull;
   Future<void>? _loading;
   Timer? _pump;

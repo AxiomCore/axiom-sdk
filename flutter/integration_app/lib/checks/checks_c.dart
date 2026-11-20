@@ -7,6 +7,8 @@ import 'dart:typed_data';
 import 'package:axiom_flutter/axiom_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
+import 'checks_c_mem_stub.dart'
+    if (dart.library.js_interop) 'checks_c_mem_web.dart';
 import 'ctx.dart';
 
 const _ns = 'fixture';
@@ -246,6 +248,28 @@ final checksC = <CheckDef>[
     } on UnsupportedError catch (e) {
       expectThat('$e'.contains('not supported on web'), 'message: $e');
     }
+  }),
+  CheckDef('c.wasm_memory_no_leak', 'runtime', (c) async {
+    if (!kIsWeb) skip('native platform');
+    final q = 'x' * 1000; // ~1 KB echoed back per response (fixture limit)
+    Future<void> one(int i) async {
+      final s = await _raw(c,
+          endpointId: _echoId, path: '/echo/leak', query: {'q': q, 'limit': i});
+      if (!s.any((x) => x.hasData)) {
+        throw CheckFailure('no data: ${s.map((x) => x.error)}');
+      }
+    }
+    Future<void> burst(int n) async {
+      for (var i = 0; i < n; i += 20) {
+        await Future.wait([for (var k = 0; k < 20; k++) one(i + k)]);
+      }
+    }
+    await burst(40); // warm-up: let the allocator reach steady state
+    final before = await wasmMemoryBytes();
+    if (before == null) skip('wasm memory not reachable');
+    await burst(400); // ~400 KB of response buffers if they leaked
+    final grown = (await wasmMemoryBytes())! - before;
+    expectThat(grown < 192 * 1024, 'wasm memory grew by $grown bytes over 400 calls');
   }),
   CheckDef('c.reset_session', 'runtime', (c) async {
     final rt = _rt(c);
