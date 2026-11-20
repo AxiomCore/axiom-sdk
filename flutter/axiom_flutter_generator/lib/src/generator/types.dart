@@ -123,8 +123,13 @@ class TypeMapper {
   };
 
   /// Expression decoding the JSON value [x] (non-null) into [t].
+  ///
+  /// Types known statically decode inline (`x as String`), not through a
+  /// helper call, and a nullable value is read once (see [decodeNullable]).
   String decode(TypeNode t, String x) => switch (t) {
     JsonType() => x,
+    PrimType(kind: 'string') => '($x as String)',
+    PrimType(kind: 'bool') => '($x as bool)',
     ListType(:final item) => '$codec.asList($x, ${decodeFn(item)})',
     MapType(:final key, :final value) =>
       _isStringKey(key)
@@ -134,8 +139,9 @@ class TypeMapper {
   };
 
   /// Decoding of a nullable value.
-  String decodeNullable(TypeNode t, String x) =>
-      t is JsonType ? x : '$x == null ? null : ${decode(t, x)}';
+  String decodeNullable(TypeNode t, String x) => t is JsonType
+      ? x
+      : 'switch ($x) { null => null, final v => ${decode(t, 'v')} }';
 
   bool _isStringKey(TypeNode key) =>
       key is PrimType && key.kind == 'string' || key is JsonType;

@@ -93,9 +93,11 @@ abstract final class AxiomGeneratedCodec {
   static Map<String, dynamic> asObject(Object? v) =>
       v is Map<String, dynamic> ? v : (v as Map).cast<String, dynamic>();
 
-  static List<T> asList<T>(Object? v, T Function(Object?) item) => [
-    for (final e in v as List) item(e),
-  ];
+  /// Built with its final length known (no regrowth while decoding).
+  static List<T> asList<T>(Object? v, T Function(Object?) item) {
+    final l = v as List;
+    return List<T>.generate(l.length, (i) => item(l[i]));
+  }
 
   static Map<String, T> asMap<T>(Object? v, T Function(Object?) value) => {
     for (final e in (v as Map).entries) e.key as String: value(e.value),
@@ -440,10 +442,7 @@ class Account {
 
   factory Account.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
-    return Account(
-      email: AxiomGeneratedCodec.asString(map['email']),
-      id: AxiomGeneratedCodec.asString(map['id']),
-    );
+    return Account(email: (map['email'] as String), id: (map['id'] as String));
   }
 
   final String email;
@@ -472,7 +471,7 @@ class Circle {
   factory Circle.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
     return Circle(
-      kind: AxiomGeneratedCodec.asString(map['kind']),
+      kind: (map['kind'] as String),
       radius: AxiomGeneratedCodec.asDouble(map['radius']),
     );
   }
@@ -515,21 +514,24 @@ class Drawing {
   factory Drawing.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
     final out = Drawing(
-      blob: map['blob'] == null
-          ? null
-          : AxiomGeneratedCodec.asBytes(map['blob']),
+      blob: switch (map['blob']) {
+        null => null,
+        final v => AxiomGeneratedCodec.asBytes(v),
+      },
       byName: AxiomGeneratedCodec.asMap(
         map['byName'],
         (e) => AxiomGeneratedCodec.asList(e, Square.fromJson),
       ),
       created: AxiomGeneratedCodec.asDateTime(map['created']),
       either: DrawingEither.fromJson(map['either']),
-      layers: map['layers'] == null
-          ? null
-          : AxiomGeneratedCodec.asList(map['layers'], Circle.fromJson),
-      maybeStatus: map['maybeStatus'] == null
-          ? null
-          : DrawingMaybeStatus.fromJson(map['maybeStatus']),
+      layers: switch (map['layers']) {
+        null => null,
+        final v => AxiomGeneratedCodec.asList(v, Circle.fromJson),
+      },
+      maybeStatus: switch (map['maybeStatus']) {
+        null => null,
+        final v => DrawingMaybeStatus.fromJson(v),
+      },
       shape: DrawingShape.fromJson(map['shape']),
       status: DrawingStatus.fromJson(map['status']),
     );
@@ -661,12 +663,13 @@ class SignupIn {
     final map = AxiomGeneratedCodec.asObject(json);
     return SignupIn(
       age: AxiomGeneratedCodec.asInt(map['age']),
-      code: AxiomGeneratedCodec.asString(map['code']),
-      email: AxiomGeneratedCodec.asString(map['email']),
-      name: AxiomGeneratedCodec.asString(map['name']),
-      score: map['score'] == null
-          ? null
-          : AxiomGeneratedCodec.asDouble(map['score']),
+      code: (map['code'] as String),
+      email: (map['email'] as String),
+      name: (map['name'] as String),
+      score: switch (map['score']) {
+        null => null,
+        final v => AxiomGeneratedCodec.asDouble(v),
+      },
     );
   }
 
@@ -778,7 +781,7 @@ class Square {
   factory Square.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
     return Square(
-      kind: AxiomGeneratedCodec.asString(map['kind']),
+      kind: (map['kind'] as String),
       side: AxiomGeneratedCodec.asDouble(map['side']),
     );
   }
