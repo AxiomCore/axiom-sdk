@@ -28,3 +28,14 @@ receipts/
 # needs a running `axiom auth emulate`.
 tool/
 test/emulator_test.dart
+
+# Example platform folders: the example's Dart code ships, its generated
+# platform projects do not (release-plane package inspection).
+example/android/
+example/ios/
+example/macos/
+example/linux/
+example/windows/
+example/web/
+example/build/
+example/.dart_tool/

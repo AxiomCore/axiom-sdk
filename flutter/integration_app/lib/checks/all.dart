@@ -10,6 +10,7 @@ import 'checks_fixg.dart';
 import 'checks_g.dart';
 import 'checks_h.dart';
 import 'checks_h2.dart';
+import 'checks_webspeed.dart';
 import 'ctx.dart';
 import 'failures.dart';
 import 'streams.dart';
@@ -32,6 +33,7 @@ final List<CheckDef> allChecks = [
   ...checksH,
   ...checksFixn,
   ...checksFixg,
+  ...checksWebspeed,
   ...checksH2, // h2.failed_initialize_is_retryable restarts the runtime
   ...checksB, // keep last: ends with b.shutdown_restart
 ];

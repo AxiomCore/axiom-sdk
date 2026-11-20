@@ -5,6 +5,8 @@
 //   all (default)  latency,cache,decode,ws   (cold start needs a fresh process, see below)
 //   cold:axiom | cold:dio | cold:http        one cold start measurement; run each in its own launch
 //   latency | cache | decode | ws
+//   parallel | offline | jank | ttfi | clients   (bench_extra.dart; `extra` = all five)
+// BENCH_PROTO=h2 (web: ?proto=h2) points every client at the HTTPS/HTTP-2 listener.
 // Other defines: BENCH_BASE_URL (default http://127.0.0.1:8851), BENCH_CALLS (default 200).
 import 'dart:async';
 import 'dart:convert';
@@ -24,6 +26,8 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'axiom_generated/axiom_sdk.dart';
 import 'axiom_generated/models.dart' as ax;
 import 'bench_axiom_setup.dart';
+import 'bench_web_stub.dart' if (dart.library.js_interop) 'bench_web.dart';
+import 'bench_extra.dart';
 
 export 'bench_axiom_setup.dart' show benchBaseUrl;
 
@@ -31,12 +35,54 @@ const String _benchDefine = String.fromEnvironment('BENCH', defaultValue: 'all')
 
 /// On web `?bench=` in the page URL overrides the define, so one build serves every run.
 String get benchSelection {
+  if (benchSelectionOverride != null) return benchSelectionOverride!;
   if (kIsWeb) {
     final q = Uri.base.queryParameters['bench'];
     if (q != null && q.isNotEmpty) return q;
   }
   return _benchDefine;
 }
+const String _protoDefine = String.fromEnvironment('BENCH_PROTO', defaultValue: 'h1');
+
+/// VM harness overrides (the flutter_tester process has no --dart-define for these).
+String? benchProtoOverride;
+String? benchSelectionOverride;
+const String _h2Define = String.fromEnvironment('BENCH_H2_URL');
+
+/// h1 (default): every client calls BENCH_BASE_URL (plain HTTP/1.1). h2: every client calls the
+/// HTTPS listener (BENCH_H2_URL, default: BENCH_BASE_URL with https and port + 2). On web
+/// `?proto=h2` in the page URL overrides the define.
+String get benchProto {
+  if (benchProtoOverride != null) return benchProtoOverride!;
+  if (kIsWeb) {
+    final q = Uri.base.queryParameters['proto'];
+    if (q != null && q.isNotEmpty) return q;
+  }
+  return _protoDefine;
+}
+
+String get activeBaseUrl {
+  if (benchProto != 'h2') return benchBaseUrl;
+  if (_h2Define.isNotEmpty) return _h2Define;
+  final u = Uri.parse(benchBaseUrl);
+  return u.replace(scheme: 'https', port: u.port + 2).toString().replaceFirst(RegExp(r'/$'), '');
+}
+
+/// Set by the VM harness (test/vm_bench_test.dart): loads the contract from a file instead of
+/// the Flutter asset bundle.
+AxiomAssetLoader? benchAssetLoader;
+
+/// The bench SDK on [activeBaseUrl] (same config as createBenchSdk, base URL overridden for h2).
+Future<AxiomSdk> createActiveSdk() => benchProto == 'h2' || benchAssetLoader != null
+    ? AxiomSdk.create(
+        config: const AxiomConfig(contracts: {
+          'bench': AxiomContractConfig(baseUrl: benchBaseUrl, assetPath: 'assets/axiom/bench.axiom'),
+        }),
+        baseUrlOverrides: {'bench': activeBaseUrl},
+        assetLoader: benchAssetLoader,
+      )
+    : createBenchSdk();
+
 const int benchCalls = int.fromEnvironment('BENCH_CALLS', defaultValue: 200);
 
 String get platformName {
@@ -108,7 +154,7 @@ Future<AxiomState<T>> settleFresh<T>(AxiomQuery<T> q) async {
   }
 }
 
-Dio newDio() => Dio(BaseOptions(baseUrl: benchBaseUrl));
+Dio newDio() => Dio(BaseOptions(baseUrl: activeBaseUrl));
 
 class BenchRunner {
   BenchRunner(this.emit, this.mainStart);
@@ -118,7 +164,7 @@ class BenchRunner {
   final Stopwatch mainStart;
 
   Map<String, Object?> _base(String bench) =>
-      {'bench': bench, 'platform': platformName, 'mode': buildMode};
+      {'bench': bench, 'platform': platformName, 'mode': buildMode, 'proto': benchProto};
 
   Future<void> run() async {
     final sel = benchSelection.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toSet();
@@ -133,16 +179,42 @@ class BenchRunner {
       }
     }
 
+    // Web A/B (unit webspeed): `&fast=0` turns the C3.1 fast start off.
+    if (kIsWeb && Uri.base.queryParameters['fast'] == '0') benchSetFastStart(false);
     for (final c in ['axiom', 'dio', 'http']) {
       if (sel.contains('cold:$c')) await step('cold:$c', () => cold(c));
     }
     AxiomSdk? sdk;
-    Future<AxiomSdk> getSdk() async => sdk ??= await createBenchSdk();
+    Future<AxiomSdk> getSdk() async => sdk ??= await createActiveSdk();
     if (all || sel.contains('latency')) await step('latency', () async => latency(await getSdk()));
     if (all || sel.contains('cache')) await step('cache', () async => cache(await getSdk()));
     if (all || sel.contains('decode')) await step('decode', decode);
+    if (sel.contains('webspeed')) await step('webspeed', () async => webspeedAb(await getSdk()));
     if (all || sel.contains('ws')) await step('ws', () async => ws(await getSdk()));
-    emit({..._base('done'), 'ran': ran, 'base_url': benchBaseUrl, 'calls': benchCalls});
+    // bench2 scenarios (bench_extra.dart); `extra` selects all five.
+    final extraAll = sel.contains('extra');
+    ExtraBench extra(AxiomSdk s) => ExtraBench(
+        emit: emit, base: _base, stats: stats, baseUrl: activeBaseUrl, isH2: benchProto == 'h2', calls: benchCalls);
+    for (final name in const ['parallel', 'offline', 'jank', 'ttfi', 'clients']) {
+      if (!(extraAll || sel.contains(name))) continue;
+      await step(name, () async {
+        final s = await getSdk();
+        final x = extra(s);
+        switch (name) {
+          case 'parallel':
+            await x.parallel(s);
+          case 'offline':
+            await x.offline(s);
+          case 'jank':
+            await x.jank(s);
+          case 'ttfi':
+            await x.ttfi(s);
+          case 'clients':
+            await x.clients(s);
+        }
+      });
+    }
+    emit({..._base('done'), 'ran': ran, 'base_url': activeBaseUrl, 'calls': benchCalls});
   }
 
   // ---- cold start: runtime init + contract load + first call, from main() entry ----
@@ -152,15 +224,15 @@ class BenchRunner {
     double? initMs;
     switch (client) {
       case 'axiom':
-        final sdk = await createBenchSdk();
+        final sdk = await createActiveSdk();
         initMs = _ms(sw);
         items = (await axData(sdk.bench.listItems(n: 1))).items.length;
       case 'dio':
-        final api = rf.BenchApi(newDio(), baseUrl: benchBaseUrl);
+        final api = rf.BenchApi(newDio(), baseUrl: activeBaseUrl);
         initMs = _ms(sw);
         items = (await api.listItems(1)).items.length;
       default:
-        final api = hc.HttpBenchApi(benchBaseUrl);
+        final api = hc.HttpBenchApi(activeBaseUrl);
         initMs = _ms(sw);
         items = (await api.listItems(1)).items.length;
     }
@@ -168,6 +240,8 @@ class BenchRunner {
     emit({
       ..._base('cold'),
       'client': client,
+      'fast_start': Uri.base.queryParameters['fast'] != '0',
+      'fast_start_calls': benchFastStartCount(),
       'status': items == 1 ? 'ok' : 'error',
       'first_data_ms': _r(_ms(sw)),
       'init_ms': _r(initMs),
@@ -176,10 +250,57 @@ class BenchRunner {
     });
   }
 
+  // ---- web C1.1 A/B in one page: body hand-over on vs off, interleaved ----
+  // Rounds of [batch] calls per arm, arm order alternating, so box load hits
+  // every arm alike. http is a third arm for reference.
+  Future<void> webspeedAb(AxiomSdk sdk) async {
+    final httpApi = hc.HttpBenchApi(benchBaseUrl);
+    const batch = 20, rounds = 10, warmup = 20;
+    for (final n in [1000, 10000]) {
+      final arms = <String, List<double>>{'c11_on': [], 'c11_off': [], 'http': []};
+      Future<void> call(String arm) async {
+        final sw = Stopwatch()..start();
+        final got = arm == 'http'
+            ? (await httpApi.listItems(n)).items.length
+            : (await axFresh(sdk.bench.listItems(n: n))).items.length;
+        sw.stop();
+        if (got != n) throw StateError('$arm: $got of $n');
+        arms[arm]!.add(_ms(sw));
+      }
+      benchSetExternalBodies(true);
+      for (var i = 0; i < warmup; i++) {
+        await call('c11_on');
+      }
+      arms['c11_on']!.clear();
+      final ext0 = benchExternalCount();
+      for (var r = 0; r < rounds; r++) {
+        final order = r.isEven ? ['c11_on', 'c11_off', 'http'] : ['http', 'c11_off', 'c11_on'];
+        for (final arm in order) {
+          if (arm != 'http') benchSetExternalBodies(arm == 'c11_on');
+          for (var i = 0; i < batch; i++) {
+            await call(arm);
+          }
+        }
+      }
+      benchSetExternalBodies(true);
+      for (final a in arms.entries) {
+        emit({
+          ..._base('webspeed'),
+          'case': 'large_list_$n',
+          'client': a.key,
+          'status': 'ok',
+          'external_bodies': benchExternalCount() - ext0,
+          ...stats(a.value),
+        });
+      }
+    }
+    httpApi.close();
+  }
+
   // ---- per-call latency ----
   Future<void> latency(AxiomSdk sdk) async {
-    final dioApi = rf.BenchApi(newDio(), baseUrl: benchBaseUrl);
-    final httpApi = hc.HttpBenchApi(benchBaseUrl);
+    final dioApi = rf.BenchApi(newDio(), baseUrl: activeBaseUrl);
+    final httpApi = hc.HttpBenchApi(activeBaseUrl);
     final cases = <String, Map<String, Future<int> Function(int i)>>{
       'small_get_item': {
         'axiom': (i) async => (await axFresh(sdk.bench.getItem(id: '${i % 50 + 1}'))).qty,
@@ -261,7 +382,7 @@ class BenchRunner {
         ..interceptors.add(DioCacheInterceptor(
           options: CacheOptions(store: MemCacheStore(), policy: CachePolicy.forceCache),
         ));
-      final api = rf.BenchApi(dio, baseUrl: benchBaseUrl);
+      final api = rf.BenchApi(dio, baseUrl: activeBaseUrl);
       final first = Stopwatch()..start();
       await api.cachedItems(n);
       first.stop();
@@ -287,7 +408,7 @@ class BenchRunner {
   // ---- decode: bytes -> typed models, no network ----
   Future<void> decode() async {
     for (final n in const [1000, 10000]) {
-      final res = await http.get(Uri.parse('$benchBaseUrl/items?n=$n'));
+      final res = await http.get(Uri.parse('$activeBaseUrl/items?n=$n'));
       final bytes = res.bodyBytes;
       final reps = n >= 10000 ? 20 : 50;
       final decoders = <String, int Function()>{
@@ -327,7 +448,7 @@ class BenchRunner {
   // ---- WebSocket round trips ----
   Future<void> ws(AxiomSdk sdk) async {
     const msgs = 1000;
-    final wsUrl = '${benchBaseUrl.replaceFirst('http', 'ws')}/ws';
+    final wsUrl = '${activeBaseUrl.replaceFirst('http', 'ws')}/ws';
     // web_socket_channel: send one message, await its echo, repeat.
     {
       final ch = WebSocketChannel.connect(Uri.parse(wsUrl));

@@ -25,6 +25,7 @@ import 'query.dart';
 import 'query_manager.dart';
 import 'internal/auth_headers.dart';
 import 'internal/axiom_codec.dart';
+import 'internal/object_cache.dart';
 import 'internal/sse.dart';
 import 'internal/contract_metadata.dart';
 import 'internal/query_key.dart';
@@ -264,6 +265,10 @@ class _Call {
   /// An auth error arrived and [retryAuth] runs when its Complete arrives.
   bool authRetryPending = false;
 
+  /// Network success held until its Complete reports how it was validated
+  /// (runtimes with `axiom_set_validation_policy` only).
+  AxiomState<Uint8List>? pendingSuccess;
+
   /// WebSocket call (method `WS`).
   bool isWebSocket = false;
 
@@ -329,9 +334,13 @@ void _axiomCallbackHandler(Pointer<AxiomResponseBuffer> responsePtr) {
       }
     }
     // Native ownership ends in this callback. Send owned Dart bytes, never addresses.
-    final data = response.data.ptr == nullptr || response.data.len == 0
+    // One copy into a transfer buffer; the main isolate receives it without
+    // a second copy (a plain Uint8List would be copied again by send).
+    final Object data = response.data.ptr == nullptr || response.data.len == 0
         ? Uint8List(0)
-        : Uint8List.fromList(response.data.ptr.asTypedList(response.data.len));
+        : TransferableTypedData.fromList([
+            response.data.ptr.asTypedList(response.data.len),
+          ]);
     final error =
         response.errorMessage.ptr == nullptr || response.errorMessage.len == 0
         ? Uint8List(0)
@@ -545,6 +554,8 @@ class AxiomRuntimeIo implements AxiomRuntime {
     'axiom_clear_namespace_auth_tokens',
     'axiom_register_auth_provider_v2',
     'axiom_set_namespace_auth_token',
+    'axiom_set_validation_policy',
+    'axiom_call_timings',
   };
 
   /// Host tests only: `AXIOM_RUNTIME_ABI=published` (only when set) hides the
@@ -943,7 +954,10 @@ class AxiomRuntimeIo implements AxiomRuntime {
         message[0] as int,
         message[1] as int,
         message[2] as int,
-        message[3] as Uint8List,
+        switch (message[3]) {
+          final TransferableTypedData t => t.materialize().asUint8List(),
+          final other => other as Uint8List,
+        },
         message[4] as Uint8List,
       );
     });
@@ -961,6 +975,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
     final status = using(
       (Arena arena) => _initFfi(_toAxiomString(resolvedDb, arena)),
     );
+    if (status == FfiError.success) _applyValidationPolicyDefine();
     if (status != FfiError.success) {
       _eventControl?.send('shutdown');
       try {
@@ -1012,6 +1027,16 @@ class AxiomRuntimeIo implements AxiomRuntime {
     if (controller.isClosed) {
       _finishCall(requestId);
       return;
+    }
+
+    final held = call.pendingSuccess;
+    if (held != null) {
+      call.pendingSuccess = null;
+      controller.add(
+        eventTypeValue == EventType.complete
+            ? held.withValidation(AxiomValidationMode.fromCompleteData(data))
+            : held,
+      );
     }
 
     if (eventTypeValue == EventType.complete) {
@@ -1102,6 +1127,12 @@ class AxiomRuntimeIo implements AxiomRuntime {
     // A successful empty body (204, void endpoints) is still a success:
     // emit it (null data downstream) as web does, or mutations never settle.
     if (data.isNotEmpty || eventTypeValue == EventType.networkSuccess) {
+      if (eventTypeValue == EventType.networkSuccess &&
+          call.sseParser == null &&
+          _reportsValidation) {
+        call.pendingSuccess = AxiomState.success(data, AxiomSource.network);
+        return;
+      }
       controller.add(
         AxiomState.success(
           data,
@@ -1325,6 +1356,11 @@ class AxiomRuntimeIo implements AxiomRuntime {
   ) async {
     final watch = Stopwatch()..start();
     debug = config.debug;
+    decodeIsolateThreshold = config.decodeIsolateThreshold;
+    _configValidation = config.validation;
+    objectCache
+      ..maxEntries = config.objectCacheMaxEntries
+      ..maxBytes = config.objectCacheMaxBytes;
     final info = runtimeInfo;
     if (!info.isCompatible) {
       final result = AxiomInitResult(
@@ -1582,7 +1618,9 @@ class AxiomRuntimeIo implements AxiomRuntime {
 
       final withOptions = _callWithOptionsFfi;
       final timeout = options?.timeout;
-      final nativeTimeout = withOptions != null && timeout != null;
+      final validation = options?.validation;
+      final nativeTimeout =
+          withOptions != null && (timeout != null || validation != null);
       final callStatus = using((Arena arena) {
         final bPtr = arena<Uint8>(requestBytes.length);
         bPtr.asTypedList(requestBytes.length).setAll(0, requestBytes);
@@ -1603,11 +1641,13 @@ class AxiomRuntimeIo implements AxiomRuntime {
             _toAxiomString(
               jsonEncode({
                 // timeoutMs 0 means "no timeout" to the runtime: round up.
-                'timeoutMs': (timeout.inMicroseconds + 999) ~/ 1000 < 1
-                    ? 1
-                    : (timeout.inMicroseconds + 999) ~/ 1000,
+                if (timeout != null)
+                  'timeoutMs': (timeout.inMicroseconds + 999) ~/ 1000 < 1
+                      ? 1
+                      : (timeout.inMicroseconds + 999) ~/ 1000,
                 if (options!.cacheMode == AxiomCacheMode.refresh)
                   'cacheMode': 'refresh',
+                if (validation != null) 'validation': validation.name,
               }),
               arena,
             ),
@@ -1752,6 +1792,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
           cancel: cancel,
           forceRefresh: options?.cacheMode == AxiomCacheMode.refresh,
           create: (force) => _rawStream(
+            objectCacheKey: keyFor(customHeaders),
             namespace: namespace,
             endpointId: endpointId,
             method: method,
@@ -1811,7 +1852,15 @@ class AxiomRuntimeIo implements AxiomRuntime {
     );
   }
 
+  /// Bodies of at least this many bytes decode on a background isolate
+  /// (C1.3, see [AxiomConfig.decodeIsolateThreshold]); null/0 = inline.
+  int? decodeIsolateThreshold = 256 * 1024;
+
+  /// Decoded models by query key, reused only for identical bodies (C2.1).
+  final AxiomObjectCache objectCache = AxiomObjectCache();
+
   AxiomActiveStream<T> _rawStream<T>({
+    String? objectCacheKey,
     required String namespace,
     required int endpointId,
     required String method,
@@ -1836,26 +1885,52 @@ class AxiomRuntimeIo implements AxiomRuntime {
     );
     final requestId = response.requestId;
 
-    final mappedStream = response.stream.map((state) {
+    AxiomState<T> failed(Object e) {
+      final err = AxiomError(
+        stage: ErrorStage.deserialize,
+        category: ErrorCategory.serialization,
+        code: const CodecError(),
+        message: e.toString(),
+        retryable: false,
+      );
+      _reportError(err, namespace, endpointId, requestId);
+      return AxiomState<T>.error(err);
+    }
+
+    final mappedStream = response.stream.asyncMap<AxiomState<T>>((state) {
       if (state.hasError) return state.map((_) => null as T);
-      if (state.data != null) {
+      final bytes = state.data;
+      if (bytes != null) {
+        AxiomState<T> ok(T value) => AxiomState<T>.success(
+          value,
+          state.source,
+          isFetching: state.isFetching,
+          isStreaming: state.isStreaming,
+          validation: state.validation,
+        );
+        final cacheKey = state.isStreaming || objectCache.maxEntries <= 0
+            ? null
+            : objectCacheKey;
+        if (cacheKey != null) {
+          final hit = objectCache.lookup<T>(cacheKey, bytes, decoder);
+          if (hit != null) return ok(hit);
+        }
+        final threshold = decodeIsolateThreshold;
+        if (threshold != null &&
+            threshold > 0 &&
+            bytes.length >= threshold &&
+            !state.isStreaming) {
+          return decodeOffIsolate<T>(bytes, decoder).then((value) {
+            if (cacheKey != null) objectCache.store(cacheKey, bytes, decoder, value);
+            return ok(value);
+          }, onError: (Object e) => failed(e));
+        }
         try {
-          return AxiomState<T>.success(
-            AxiomCodec.decode(state.data!, decoder),
-            state.source,
-            isFetching: state.isFetching,
-            isStreaming: state.isStreaming,
-          );
+          final value = AxiomCodec.decode(bytes, decoder);
+          if (cacheKey != null) objectCache.store(cacheKey, bytes, decoder, value);
+          return ok(value);
         } catch (e) {
-          final err = AxiomError(
-            stage: ErrorStage.deserialize,
-            category: ErrorCategory.serialization,
-            code: const CodecError(),
-            message: e.toString(),
-            retryable: false,
-          );
-          _reportError(err, namespace, endpointId, requestId);
-          return AxiomState<T>.error(err);
+          return failed(e);
         }
       }
       return state.map((_) => null as T);
@@ -2038,6 +2113,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
     // Without axiom_reset_session the old requests keep running natively:
     // keep pumping until their Completes arrive (ids stay tracked).
     _closeAllCalls('Request cancelled by resetSession');
+    objectCache.removeWhere();
     // Let the Cancelled events reach query listeners before disposing.
     await Future<void>.delayed(Duration.zero);
     AxiomQueryManager().clear();
@@ -2121,6 +2197,8 @@ class AxiomRuntimeIo implements AxiomRuntime {
     int? endpointId,
     Map<String, dynamic>? args,
   }) {
+    // Entries are byte-verified, so this only frees memory early.
+    objectCache.removeWhere('${namespace}_');
     final manager = AxiomQueryManager();
     if (endpointId != null && args != null) {
       manager.invalidateWhere(
@@ -2190,6 +2268,49 @@ class AxiomRuntimeIo implements AxiomRuntime {
   final Set<String> _purgedNs = {};
   final Set<String> _refreshedAfterPurge = {};
 
+  /// [AxiomConfig.validation] set at the last initialize.
+  AxiomValidationPolicy? _configValidation;
+
+  /// Runtimes with `axiom_set_validation_policy` (0.150.1+) mark sampled or
+  /// unvalidated responses in the Complete event's data.
+  late final bool _reportsValidation = _has('axiom_set_validation_policy');
+
+  /// [AxiomConfig.validation] (preferred) or
+  /// `--dart-define=AXIOM_VALIDATION_POLICY=<json>` (e.g. `{"mode":"full"}`)
+  /// sets the runtime's global response validation policy. Runtimes without
+  /// `axiom_set_validation_policy` (published Apple 0.148.6) always validate
+  /// fully, so the define is ignored there.
+  void _applyValidationPolicyDefine() {
+    const define = String.fromEnvironment('AXIOM_VALIDATION_POLICY');
+    final configured = _configValidation;
+    final policy = configured != null
+        ? jsonEncode({'mode': configured.name})
+        : define;
+    if (policy.isEmpty) return;
+    if (!_has('axiom_set_validation_policy')) {
+      if (configured != null) {
+        if (debug) {
+          // ignore: avoid_print
+          print(
+            '[axiom] AxiomConfig.validation ignored: this runtime has no '
+            'axiom_set_validation_policy (it validates fully)',
+          );
+        }
+      }
+      return;
+    }
+    final setPolicy = _lib
+        .lookupFunction<_AxiomStr2StatusNative, _AxiomStr2Status>(
+          'axiom_set_validation_policy',
+        );
+    using(
+      (Arena arena) => setPolicy(
+        _toAxiomString('', arena),
+        _toAxiomString(policy, arena),
+      ),
+    );
+  }
+
   bool _clearNativeCache(String? namespace) {
     final native = _cacheClearNamespaceFfi;
     if (native == null) {
@@ -2211,12 +2332,14 @@ class AxiomRuntimeIo implements AxiomRuntime {
   @override
   Future<void> clearCache([String? namespace]) async {
     _clearNativeCache(namespace);
+    objectCache.removeWhere(namespace == null ? null : '${namespace}_');
     AxiomQueryManager().clearNamespace(namespace, refetch: true);
   }
 
   @override
   Future<void> purgeCache([String? namespace]) async {
     _clearNativeCache(namespace);
+    objectCache.removeWhere(namespace == null ? null : '${namespace}_');
     AxiomQueryManager().clearNamespace(namespace, refetch: false);
   }
 
@@ -2267,6 +2390,65 @@ class AxiomRuntimeIo implements AxiomRuntime {
     }
   }
 
+  /// Message used when a lean runtime (built without executable extensions)
+  /// is asked to load or invoke an extension.
+  static const String extensionsNeedAddonMessage =
+      'Executable extensions need the axiom_flutter_extensions package: the '
+      'runtime bundled with axiom_flutter is the lean build without '
+      'executable extensions. Add axiom_flutter_extensions to pubspec.yaml.';
+
+  /// Same condition off Android (only reachable with a lean host library,
+  /// e.g. `AXIOM_RUNTIME_LIB` in tests): iOS and macOS bundle the full
+  /// runtime, and the add-on only carries Android libraries.
+  static const String extensionsNotCompiledMessage =
+      'Executable extensions are not compiled into this runtime library '
+      '(lean build); load a full runtime build.';
+
+  bool? _extensionsCompiled;
+
+  /// False when the loaded runtime reports that executable extensions are
+  /// not compiled in (lean build: `axiom_extension_audit` says
+  /// `"compiled": false`). Older runtimes do not report it: treated as true.
+  bool _runtimeHasExtensions() {
+    final cached = _extensionsCompiled;
+    if (cached != null) return cached;
+    var compiled = true;
+    if (_has('axiom_extension_audit')) {
+      try {
+        final fn = _lib.lookupFunction<_AxiomExtAuditNative, _AxiomExtAudit>(
+          'axiom_extension_audit',
+        );
+        compiled = using((Arena arena) {
+          final out = arena<AxiomBuffer>();
+          out.ref
+            ..ptr = nullptr
+            ..len = 0;
+          fn(out);
+          final result = _takeJson(out);
+          return !(result is Map && result['compiled'] == false);
+        });
+      } catch (_) {
+        compiled = true;
+      }
+    }
+    return _extensionsCompiled = compiled;
+  }
+
+  Never _throwExtensionError(String operation, int status, String? message) {
+    final notCompiled =
+        (message != null && message.contains('not compiled')) ||
+        !_runtimeHasExtensions();
+    throw AxiomExtensionException(
+      operation,
+      status,
+      notCompiled
+          ? (Platform.isAndroid
+                ? extensionsNeedAddonMessage
+                : extensionsNotCompiledMessage)
+          : message,
+    );
+  }
+
   @override
   Future<void> loadExtension(AxiomExtensionPackage package) async {
     _requireSymbol('axiom_extension_load_locked');
@@ -2284,11 +2466,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
       ),
     );
     if (status != FfiError.success) {
-      throw AxiomExtensionException(
-        'loadExtension',
-        status,
-        FfiError.name(status),
-      );
+      _throwExtensionError('loadExtension', status, FfiError.name(status));
     }
   }
 
@@ -2316,7 +2494,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
         final message = result is Map && result['error'] != null
             ? '${result['error']}'
             : FfiError.name(status);
-        throw AxiomExtensionException('invokeExtension', status, message);
+        _throwExtensionError('invokeExtension', status, message);
       }
       return result;
     });
@@ -2388,9 +2566,18 @@ class AxiomRuntimeIo implements AxiomRuntime {
 
   static DynamicLibrary _openPlatformLibrary() {
     if (Platform.isIOS || Platform.isMacOS) return DynamicLibrary.process();
+    // Android: the plugin ships the lean runtime as jniLibs/<abi>/
+    // libaxiom_runtime.so; the axiom_flutter_extensions add-on ships the full
+    // runtime (executable extensions) as libaxiom_runtime_full.so and removes
+    // the lean one from the app. Prefer the full library when it is present.
+    if (Platform.isAndroid) {
+      try {
+        return DynamicLibrary.open('libaxiom_runtime_full.so');
+      } on ArgumentError {
+        // No add-on: fall through to the lean runtime.
+      }
+    }
     try {
-      // Android: the plugin ships it in jniLibs/<abi>/, so the loader finds it
-      // by name in the app's native library directory.
       return DynamicLibrary.open('libaxiom_runtime.so');
     } on ArgumentError catch (e) {
       throw StateError(

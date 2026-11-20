@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'errors.dart';
 
 /// Where in the request pipeline an error happened.
@@ -310,6 +312,47 @@ enum AxiomSource {
   network,
 }
 
+/// How the runtime validated the response body behind [AxiomState.data].
+enum AxiomValidationMode {
+  /// Every item was validated (or the endpoint has no validator).
+  full,
+
+  /// Only a sample of large lists was validated (policy `auto` for bodies of
+  /// 64 KiB or more, or policy `sample`).
+  sampled,
+
+  /// Response validation was off for this call.
+  off,
+
+  /// The runtime does not report it (published Apple runtime 0.148.6), or
+  /// the data did not come from a network response.
+  unknown;
+
+  /// Parses the `data` of a runtime Complete event: empty means
+  /// [full]; `{"v":1,"validation":"sample"|"off"}` (or the stage-timer JSON
+  /// with the same field) means [sampled] or [off].
+  static AxiomValidationMode fromCompleteData(List<int> data) {
+    if (data.isEmpty) return full;
+    try {
+      final j = jsonDecode(utf8.decode(data));
+      if (j is Map) {
+        switch (j['validation']) {
+          case 'sample':
+            return sampled;
+          case 'off':
+            return off;
+          case null:
+          case 'full':
+          case 'syntax':
+          case 'none':
+            return full;
+        }
+      }
+    } catch (_) {}
+    return unknown;
+  }
+}
+
 /// One state of a query, mutation or stream: status, data, error and
 /// where the data came from.
 class AxiomState<T> {
@@ -334,6 +377,11 @@ class AxiomState<T> {
   /// True while a streaming response is open.
   final bool isStreaming;
 
+  /// How the response behind [data] was validated by the runtime.
+  /// [AxiomValidationMode.unknown] for cache data, streams and runtimes that
+  /// do not report it.
+  final AxiomValidationMode validation;
+
   /// Creates a state.
   const AxiomState({
     required this.status,
@@ -343,6 +391,7 @@ class AxiomState<T> {
     this.isFetching = false,
     this.isMutating = false,
     this.isStreaming = false,
+    this.validation = AxiomValidationMode.unknown,
   });
 
   /// Returns a state with [data] mapped by [mapper].
@@ -355,8 +404,21 @@ class AxiomState<T> {
       isFetching: isFetching,
       isMutating: isMutating,
       isStreaming: isStreaming,
+      validation: validation,
     );
   }
+
+  /// Returns a copy with [validation] replaced.
+  AxiomState<T> withValidation(AxiomValidationMode validation) => AxiomState<T>(
+    status: status,
+    data: data,
+    error: error,
+    source: source,
+    isFetching: isFetching,
+    isMutating: isMutating,
+    isStreaming: isStreaming,
+    validation: validation,
+  );
 
   /// A state before any request.
   factory AxiomState.idle() => const AxiomState(status: AxiomStatus.idle);
@@ -375,12 +437,14 @@ class AxiomState<T> {
     AxiomSource source, {
     bool isFetching = false,
     bool isStreaming = false,
+    AxiomValidationMode validation = AxiomValidationMode.unknown,
   }) => AxiomState(
     status: AxiomStatus.success,
     data: data,
     source: source,
     isFetching: isFetching,
     isStreaming: isStreaming,
+    validation: validation,
   );
 
   /// A state with [error]. [previousData] keeps the last value visible.

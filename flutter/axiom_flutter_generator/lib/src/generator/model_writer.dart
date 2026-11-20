@@ -179,12 +179,16 @@ abstract final class AxiomGeneratedCodec {
 
   static String bytesToJson(Uint8List v) => base64Encode(v);
 
+  /// jsonDecode already returns `Map<String, dynamic>`: use it directly (a
+  /// `cast` view re-checks every key and value on each read).
   static Map<String, dynamic> asObject(Object? v) =>
-      (v as Map).cast<String, dynamic>();
+      v is Map<String, dynamic> ? v : (v as Map).cast<String, dynamic>();
 
-  static List<T> asList<T>(Object? v, T Function(Object?) item) => [
-    for (final e in v as List) item(e),
-  ];
+  /// Built with its final length known (no regrowth while decoding).
+  static List<T> asList<T>(Object? v, T Function(Object?) item) {
+    final l = v as List;
+    return List<T>.generate(l.length, (i) => item(l[i]));
+  }
 
   static Map<String, T> asMap<T>(Object? v, T Function(Object?) value) => {
     for (final e in (v as Map).entries) e.key as String: value(e.value),

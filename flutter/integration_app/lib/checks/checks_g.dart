@@ -397,6 +397,19 @@ final List<CheckDef> checksG = [
     expectEq(s.data?.text, 'first', 'echo text');
   }),
   CheckDef('g.observability_trace_export', 'observability', (c) async {
+    // The lean runtime (Android and web default since 0.150.1) is built
+    // without the telemetry exporter; only the full runtime exports spans.
+    if (gIsWeb) skip('lean runtime (web): no telemetry exporter');
+    try {
+      final audit = await c.sdk.runtime.extensionAudit();
+      if (audit is Map && audit['compiled'] == false) {
+        skip('lean runtime: no telemetry exporter (full runtime: axiom_flutter_extensions)');
+      }
+    } on CheckSkipped {
+      rethrow;
+    } catch (_) {
+      // Older runtimes without the audit field: treat as full.
+    }
     await _observedCall(c);
     // Batch exporter: allow a few export intervals.
     final until = DateTime.now().add(const Duration(seconds: 25));

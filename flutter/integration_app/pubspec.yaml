@@ -34,8 +34,10 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-  axiom_flutter: ^0.150.0
-  axiom_flutter_auth: ^0.150.0 # unit f
+  axiom_flutter: ^0.150.1
+  # Lean runtime by default. For the full runtime (executable extensions) build
+  # with: android/build-variant.sh ext <flutter build apk args>
+  axiom_flutter_auth: ^0.150.1 # unit f
   http: ^1.2.0 # unit f
 
 # Local development: resolve the Axiom packages from this repository.
@@ -48,7 +50,7 @@ dependency_overrides:
     path: ../axiom_flutter_generator
 
 dev_dependencies:
-  axiom_flutter_generator: ^0.150.0
+  axiom_flutter_generator: ^0.150.1
   flutter_test:
     sdk: flutter
 

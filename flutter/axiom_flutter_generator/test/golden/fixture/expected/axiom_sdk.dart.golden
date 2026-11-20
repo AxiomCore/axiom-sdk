@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// axiom_flutter_generator 0.150.0
+// axiom_flutter_generator 0.150.1
 // fixture: dev.axiomcore.fixture 1.0.0 variant default schema aa69c58ec8f5
 
 import 'dart:convert';

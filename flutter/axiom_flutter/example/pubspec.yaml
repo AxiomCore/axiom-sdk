@@ -9,7 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  axiom_flutter: ^0.150.0
+  axiom_flutter: ^0.150.1
 
 # Local development: resolve the Axiom packages from this repository.
 dependency_overrides:
@@ -22,7 +22,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
-  axiom_flutter_generator: ^0.150.0
+  axiom_flutter_generator: ^0.150.1
 
 flutter:
   uses-material-design: true

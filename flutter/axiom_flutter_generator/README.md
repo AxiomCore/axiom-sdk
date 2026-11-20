@@ -12,7 +12,7 @@ builder, and you do not write any configuration for it by hand.
 
 ```yaml
 dev_dependencies:
-  axiom_flutter_generator: ^0.150.0
+  axiom_flutter_generator: ^0.150.1
 ```
 
 Keep it on the same minor version as `axiom_flutter`.

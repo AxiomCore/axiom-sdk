@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// axiom_flutter_generator 0.150.0
+// axiom_flutter_generator 0.150.1
 // collisions: collisions 0.0.1
 
 import 'dart:convert';
@@ -88,12 +88,16 @@ abstract final class AxiomGeneratedCodec {
 
   static String bytesToJson(Uint8List v) => base64Encode(v);
 
+  /// jsonDecode already returns `Map<String, dynamic>`: use it directly (a
+  /// `cast` view re-checks every key and value on each read).
   static Map<String, dynamic> asObject(Object? v) =>
-      (v as Map).cast<String, dynamic>();
+      v is Map<String, dynamic> ? v : (v as Map).cast<String, dynamic>();
 
-  static List<T> asList<T>(Object? v, T Function(Object?) item) => [
-    for (final e in v as List) item(e),
-  ];
+  /// Built with its final length known (no regrowth while decoding).
+  static List<T> asList<T>(Object? v, T Function(Object?) item) {
+    final l = v as List;
+    return List<T>.generate(l.length, (i) => item(l[i]));
+  }
 
   static Map<String, T> asMap<T>(Object? v, T Function(Object?) value) => {
     for (final e in (v as Map).entries) e.key as String: value(e.value),
@@ -314,10 +318,11 @@ class Form {
   factory Form.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
     return Form(
-      all2: map['All'] == null
-          ? null
-          : AxiomGeneratedCodec.asString(map['All']),
-      all: AxiomGeneratedCodec.asString(map['all']),
+      all2: switch (map['All']) {
+        null => null,
+        final v => (v as String),
+      },
+      all: (map['all'] as String),
     );
   }
 
@@ -390,30 +395,37 @@ class Todo {
   factory Todo.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
     final out = Todo(
-      byStatus: map['by_status'] == null
-          ? null
-          : AxiomGeneratedCodec.asMap(map['by_status'], Status.fromJson),
-      $class: AxiomGeneratedCodec.asString(map['class']),
-      $copyWith: AxiomGeneratedCodec.asString(map['copy_with']),
-      $hashCode: AxiomGeneratedCodec.asString(map['hashCode']),
+      byStatus: switch (map['by_status']) {
+        null => null,
+        final v => AxiomGeneratedCodec.asMap(v, Status.fromJson),
+      },
+      $class: (map['class'] as String),
+      $copyWith: (map['copy_with'] as String),
+      $hashCode: (map['hashCode'] as String),
       $hashCode2: AxiomGeneratedCodec.asInt(map['hash_code']),
-      $identical: map['identical'] == null
-          ? null
-          : AxiomGeneratedCodec.asString(map['identical']),
+      $identical: switch (map['identical']) {
+        null => null,
+        final v => (v as String),
+      },
       level: TodoLevel2.fromJson(map['level']),
-      level2: map['level_'] == null ? null : TodoLevel3.fromJson(map['level_']),
-      $other: AxiomGeneratedCodec.asString(map['other']),
-      prevStatus: map['prev_status'] == null
-          ? null
-          : Status.fromJson(map['prev_status']),
+      level2: switch (map['level_']) {
+        null => null,
+        final v => TodoLevel3.fromJson(v),
+      },
+      $other: (map['other'] as String),
+      prevStatus: switch (map['prev_status']) {
+        null => null,
+        final v => Status.fromJson(v),
+      },
       status: Status.fromJson(map['status']),
       tags: AxiomGeneratedCodec.asList(map['tags'], Status.fromJson),
-      $toJson: AxiomGeneratedCodec.asString(map['toJson']),
-      userId2: map['user-id'] == null
-          ? null
-          : AxiomGeneratedCodec.asString(map['user-id']),
-      userId: AxiomGeneratedCodec.asString(map['userId']),
-      userId3: AxiomGeneratedCodec.asString(map['user_id']),
+      $toJson: (map['toJson'] as String),
+      userId2: switch (map['user-id']) {
+        null => null,
+        final v => (v as String),
+      },
+      userId: (map['userId'] as String),
+      userId3: (map['user_id'] as String),
     );
     _keepRaw(out, map, {
       'by_status': out.byStatus,
@@ -601,7 +613,7 @@ class TodoLevel {
 
   factory TodoLevel.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
-    return TodoLevel(x: AxiomGeneratedCodec.asString(map['x']));
+    return TodoLevel(x: (map['x'] as String));
   }
 
   final String x;

@@ -51,3 +51,33 @@ android {
         }
     }
 }
+
+// The web runtime (lib/assets/wasm: axiom_runtime_bg.wasm + JS glue, ~0.96 MB
+// compressed per APK) is a package asset because Flutter 3.32 has no
+// per-platform assets, but Android never loads it (it uses
+// libaxiom_runtime.so). Remove it from the app's merged Flutter assets after
+// Flutter copies them. Keep it with `axiom.keepWebAssets=true` in the app's
+// android/gradle.properties.
+def axiomKeepWebAssets = (rootProject.findProperty("axiom.keepWebAssets") ?: "false").toString().toBoolean()
+if (!axiomKeepWebAssets) {
+    gradle.projectsEvaluated {
+        rootProject.allprojects { p ->
+            p.tasks.matching { it.name.startsWith("copyFlutterAssets") }.configureEach { t ->
+                // Configuration-cache safe: the output FileCollection is
+                // captured at configuration time; the action uses only
+                // java.io.File (no Project or Task access at execution).
+                def outs = t.outputs.files
+                t.doLast {
+                    outs.files.each { File out ->
+                        if (!out.isDirectory()) return
+                        out.eachFileRecurse(groovy.io.FileType.FILES) { File f ->
+                            if (f.path.replace('\\', '/').contains("/packages/axiom_flutter/lib/assets/wasm/")) {
+                                f.delete()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

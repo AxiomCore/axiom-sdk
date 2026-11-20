@@ -3,3 +3,5 @@ description: Local server behind all three benchmark clients (Axiom, dio/retrofi
 publish_to: none
 environment:
   sdk: ^3.8.0
+dependencies:
+  http2: ^3.2.0

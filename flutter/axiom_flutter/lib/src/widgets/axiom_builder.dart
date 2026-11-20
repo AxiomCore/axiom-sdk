@@ -90,12 +90,14 @@ class _AxiomBuilderState<T, R> extends State<AxiomBuilder<T, R>> {
             transformedData,
             rawState.source,
             isFetching: rawState.isFetching,
+            validation: rawState.validation,
           );
         } else {
           newState = AxiomState.success(
             rawState.data as R,
             rawState.source,
             isFetching: rawState.isFetching,
+            validation: rawState.validation,
           );
         }
       } else if (rawState.hasError) {

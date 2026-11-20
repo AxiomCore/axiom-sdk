@@ -1,6 +1,6 @@
 name: axiom_flutter
 description: "Flutter client runtime for AxiomCore contracts: typed queries, mutations, streams, caching, auth and cancellation on Android, iOS, macOS and web."
-version: 0.150.0
+version: 0.150.1
 homepage: https://github.com/AxiomCore/axiom-sdk
 repository: https://github.com/AxiomCore/axiom-sdk
 issue_tracker: https://github.com/AxiomCore/axiom-sdk/issues
@@ -51,9 +51,9 @@ flutter:
       macos:
         pluginClass: AxiomFlutterPlugin
 
-  # Web runtime (wasm + JS glue). Flutter 3.32 has no per-platform assets, so
-  # native builds carry them too (~0.96 MB per Android APK): see
-  # doc/wasm-size.md for the app-side opt-out.
+  # Web runtime (wasm + JS glue). Flutter 3.32 has no per-platform assets;
+  # android/build.gradle removes them from Android builds, iOS/macOS carry
+  # them unless the app opts out: see doc/wasm-size.md.
   assets:
     - lib/assets/wasm/axiom_runtime.js
     - lib/assets/wasm/axiom_runtime_bg.wasm

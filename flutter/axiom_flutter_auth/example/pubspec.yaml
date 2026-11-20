@@ -30,8 +30,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  axiom_flutter_auth: ^0.150.0
-  axiom_flutter: ^0.150.0
+  axiom_flutter_auth: ^0.150.1
+  axiom_flutter: ^0.150.1
   web: ^1.1.0
 
   # The following adds the Cupertino Icons font to your application.

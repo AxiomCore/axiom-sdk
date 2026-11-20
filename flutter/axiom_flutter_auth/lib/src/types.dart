@@ -299,8 +299,9 @@ class RefreshRecord {
         e is! String ||
         i is! String ||
         a is! String ||
-        s is! String)
+        s is! String) {
       return null;
+    }
     return RefreshRecord(
       refreshToken: r,
       refreshExpiresAt: e,

@@ -317,8 +317,9 @@ _Claims? _decodeClaims(String token) {
 bool validReturnTo(Object? value) {
   if (value is! String || value.isEmpty) return false;
   if (value[0] != '/' ||
-      (value.length > 1 && (value[1] == '/' || value[1] == r'\')))
+      (value.length > 1 && (value[1] == '/' || value[1] == r'\'))) {
     return false;
+  }
   if (value.contains(r'\')) return false;
   if (RegExp(r'[\u0000-\u001f\u007f]').hasMatch(value)) return false;
   return Uri.tryParse(value) != null;
@@ -337,8 +338,9 @@ int? _parseRetryAfter(String? header, int now) {
 StepUpChallenge? parseStepUpChallenge(http.BaseResponse response) {
   final header = response.headers['www-authenticate'];
   if (header == null ||
-      !RegExp(r'^\s*Bearer\b', caseSensitive: false).hasMatch(header))
+      !RegExp(r'^\s*Bearer\b', caseSensitive: false).hasMatch(header)) {
     return null;
+  }
   final params = <String, String>{};
   for (final m in RegExp(
     r'([A-Za-z_]+)\s*=\s*(?:"([^"]*)"|([^\s,]+))',
@@ -374,8 +376,9 @@ RuntimeAuthRefusal? runtimeAuthRefusal(Object? body) {
   final error = _rec(_rec(value)?['error']);
   if (error == null) return null;
   final code = error['code'];
-  if (code == 'authorization_changed')
+  if (code == 'authorization_changed') {
     return const RuntimeAuthRefusal('authorization_changed');
+  }
   if (code != 'step_up_required') return null;
   final message = error['message'];
   final m = message is String
@@ -400,10 +403,12 @@ class AxiomAuth {
       _clock = options.clock ?? (() => DateTime.now().millisecondsSinceEpoch),
       _timer = options.timerFactory ?? Timer.new {
     final u = Uri.tryParse(issuer);
-    if (u == null || !u.hasScheme || u.host.isEmpty)
+    if (u == null || !u.hasScheme || u.host.isEmpty) {
       throw ArgumentError.value(issuer, 'issuer', 'malformed');
-    if (options.redirectUri != null)
+    }
+    if (options.redirectUri != null) {
       _redirect = Uri.parse(options.redirectUri!);
+    }
     for (final o in options.apiOrigins) {
       final p = Uri.tryParse(o);
       final loop =
@@ -713,8 +718,9 @@ class AxiomAuth {
 
   _Pending? _livePending(String? kind) {
     if (_pending != null && _clock() >= _pending!.expiresAt) _pending = null;
-    if (_pending == null || (kind != null && _pending!.kind != kind))
+    if (_pending == null || (kind != null && _pending!.kind != kind)) {
       return null;
+    }
     return _pending;
   }
 
@@ -733,8 +739,9 @@ class AxiomAuth {
     String? captchaToken,
   ) {
     if (captchaToken != null) {
-      if (captchaToken.isEmpty || captchaToken.length > 4096)
+      if (captchaToken.isEmpty || captchaToken.length > 4096) {
         throw AxiomAuthError('invalid_request', 0);
+      }
       body['captcha_token'] = captchaToken;
     }
     return body;
@@ -949,14 +956,16 @@ class AxiomAuth {
     );
 
     try {
-      if (_held == null || _generation != gen)
+      if (_held == null || _generation != gen) {
         throw AxiomAuthError('invalid_refresh', 0);
+      }
       final presented = _held!;
       final data = await request(presented);
       if (_generation == gen && identical(_held, presented)) {
         final next = _heldFrom(data, reauth ? null : presented);
-        if (next.sessionId != presented.sessionId)
+        if (next.sessionId != presented.sessionId) {
           throw AxiomAuthError('unavailable', 0);
+        }
         _held = next;
         _retryNotBefore = 0;
         _pushToken(next.accessToken);
@@ -1030,8 +1039,9 @@ class AxiomAuth {
     if (h == null ||
         h.accessToken == null ||
         h.claims == null ||
-        _clock() >= h.claims!.exp * 1000)
+        _clock() >= h.claims!.exp * 1000) {
       return null;
+    }
     return h.accessToken;
   }
 
@@ -1176,8 +1186,9 @@ class AxiomAuth {
     final link = fragment['axiom_link'];
     final reset = fragment['axiom_reset'];
     final invitation = fragment['axiom_invitation'];
-    if (!viaQuery && link == null && reset == null && invitation == null)
+    if (!viaQuery && link == null && reset == null && invitation == null) {
       return const RedirectResult(handled: false);
+    }
 
     if (url == null || url.toString() == browser.currentUrl()) {
       final q = Map.of(query)
@@ -1206,8 +1217,9 @@ class AxiomAuth {
     }
 
     final tx = _takeTransaction(viaQuery ? query['state'] : fragment['state']);
-    if (tx == null || tx.redirectUri != _o.redirectUri)
+    if (tx == null || tx.redirectUri != _o.redirectUri) {
       throw AxiomAuthError('state_mismatch', 0);
+    }
     final returnTo = validReturnTo(tx.returnTo) ? tx.returnTo : null;
 
     String path;
@@ -1251,8 +1263,9 @@ class AxiomAuth {
         );
       }
       final code = query['code'];
-      if (code == null || code.isEmpty)
+      if (code == null || code.isEmpty) {
         throw AxiomAuthError('invalid_grant', 0);
+      }
       path = '/v1/token/authorization-code';
       body = _withAudience({
         'code': code,
@@ -1364,8 +1377,9 @@ class AxiomAuth {
 
   ({String challenge, Object? options}) _ceremony(Object? data) {
     final d = _rec(data);
-    if (d == null || d['challenge'] is! String || _rec(d['options']) == null)
+    if (d == null || d['challenge'] is! String || _rec(d['options']) == null) {
       throw AxiomAuthError('unavailable', 0);
+    }
     return (challenge: d['challenge'] as String, options: d['options']);
   }
 
@@ -1439,8 +1453,9 @@ class AxiomAuth {
       await _establish(d);
       return const SignUpResult(status: 'signed_in');
     }
-    if (d == null || d['challenge_id'] is! String)
+    if (d == null || d['challenge_id'] is! String) {
       throw AxiomAuthError('unavailable', 0);
+    }
     return SignUpResult(
       status: 'verification_sent',
       challenge: d['challenge_id'] as String,
@@ -1482,8 +1497,9 @@ class AxiomAuth {
         _captcha({'email': email}, captchaToken),
       ),
     );
-    if (d == null || d['challenge_id'] is! String)
+    if (d == null || d['challenge_id'] is! String) {
       throw AxiomAuthError('unavailable', 0);
+    }
     return EmailCodeChallenge(
       challenge: d['challenge_id'] as String,
       resendAfterSeconds: d['resend_after'] is num
@@ -1553,8 +1569,9 @@ class AxiomAuth {
   /// Hosted sign-in page (`/sign-in`) with PKCE, through the launcher.
   /// [screen] is `sign_in` or `sign_up`.
   Future<PublicSession> signInHosted({String? returnTo, String? screen}) async {
-    if (screen != null && screen != 'sign_in' && screen != 'sign_up')
+    if (screen != null && screen != 'sign_in' && screen != 'sign_up') {
       throw AxiomAuthError('invalid_request', 0);
+    }
     final t = _beginTransaction('hosted', null, returnTo);
     return _runRedirect(
       _startUrl('/sign-in', t.tx, t.challenge, {
@@ -1579,8 +1596,9 @@ class AxiomAuth {
       // A stored record not yet restored is revoked, not merely forgotten.
       try {
         final stored = await _storage.get(_storageKey);
-        if (stored != null && stored.issuer == issuer)
+        if (stored != null && stored.issuer == issuer) {
           refreshToken = stored.refreshToken;
+        }
       } catch (_) {}
     }
     _pending = null;
@@ -1669,8 +1687,9 @@ class AxiomAuth {
     try {
       data = await _firstFactor('/v1/invitations/accept', _withAudience(body));
     } catch (e) {
-      if (e is! AxiomAuthError || e.code != 'weak_password')
+      if (e is! AxiomAuthError || e.code != 'weak_password') {
         _invitationToken = null;
+      }
       rethrow;
     }
     _invitationToken = null;
@@ -1680,8 +1699,9 @@ class AxiomAuth {
   Future<PublicSession> selectTenant(String? tenant) => refresh(tenant: tenant);
 
   bool _tokenOrigin(Uri url) {
-    if (!url.hasScheme)
+    if (!url.hasScheme) {
       return browser.isWeb; // relative URL on web: the page origin
+    }
     String origin;
     try {
       origin = url.origin;
@@ -1715,8 +1735,9 @@ class AxiomAuth {
     }
 
     final response = await client.send(build(first, replayable));
-    if (response.statusCode != 401 || first == null || !replayable)
+    if (response.statusCode != 401 || first == null || !replayable) {
       return response;
+    }
     final buffered = await http.Response.fromStream(response);
     final changed =
         RegExp(
@@ -1922,8 +1943,9 @@ class AxiomAuth {
 
   Future<FactorList> listFactors() async {
     final d = _rec(await _plain('GET', '/v1/factors', null, await _bearer()));
-    if (d == null || d['factors'] is! List)
+    if (d == null || d['factors'] is! List) {
       throw AxiomAuthError('unavailable', 0);
+    }
     return FactorList(
       factors: (d['factors'] as List)
           .map(Factor.tryParse)
@@ -2030,8 +2052,9 @@ class AxiomAuth {
         await _bearer(),
       ),
     );
-    if (d == null || d['challenge_id'] is! String)
+    if (d == null || d['challenge_id'] is! String) {
       throw AxiomAuthError('unavailable', 0);
+    }
     return d['challenge_id'] as String;
   }
 
@@ -2054,8 +2077,9 @@ class AxiomAuth {
 
   Future<List<Consent>> listConsents() async {
     final d = _rec(await _plain('GET', '/v1/consents', null, await _bearer()));
-    if (d == null || d['consents'] is! List)
+    if (d == null || d['consents'] is! List) {
       throw AxiomAuthError('unavailable', 0);
+    }
     final out = <Consent>[];
     for (final c in d['consents'] as List) {
       final r = _rec(c);
@@ -2073,8 +2097,9 @@ class AxiomAuth {
   }
 
   Future<void> revokeConsent(String clientId) async {
-    if (!RegExp(r'^axcl_[A-Za-z0-9_-]{22}$').hasMatch(clientId))
+    if (!RegExp(r'^axcl_[A-Za-z0-9_-]{22}$').hasMatch(clientId)) {
       throw AxiomAuthError('invalid_request', 0);
+    }
     await _plain('DELETE', '/v1/consents/$clientId', null, await _bearer());
   }
 

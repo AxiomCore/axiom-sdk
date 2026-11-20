@@ -303,7 +303,9 @@ final checksC = <CheckDef>[
         await Future.wait([for (var k = 0; k < 20; k++) one(i + k)]);
       }
     }
-    await burst(40); // warm-up: let the allocator reach steady state
+    // warm-up: let the allocator reach steady state and fill the runtime's
+    // bounded per-call stage-timer ring (last 256 calls, 0.150.1).
+    await burst(300);
     final before = await wasmMemoryBytes();
     if (before == null) skip('wasm memory not reachable');
     await burst(400); // ~400 KB of response buffers if they leaked

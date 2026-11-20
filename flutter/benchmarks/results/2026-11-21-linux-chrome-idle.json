@@ -1,0 +1,4548 @@
+{
+  "date": "2026-11-20",
+  "label": "linux-chrome-idle",
+  "machine": {
+    "cpu": "",
+    "cores": 4,
+    "ram_gb": 32.0,
+    "os": "Debian GNU/Linux 12 (bookworm) (kernel 4.19.0-gvisor)",
+    "chrome": "Google Chrome 158.0.8127.36",
+    "virtualised": "gVisor sandbox / container (shared host)"
+  },
+  "flutter": "Flutter 3.32.0 \u2022 channel stable \u2022 https://github.com/flutter/flutter.git",
+  "dart": "Dart SDK version: 3.8.0 (stable) (Wed May 14 09:07:14 2025 -0700) on \"linux_x64\"",
+  "axiom_cli": "axiom 0.156.0",
+  "sdk_commit": "6a48226 (axiom-sdk flutter/perf, BENCH_GO)",
+  "notes": [
+    "Web numbers: headless Chrome on a 4 vCPU Linux container (no GPU), release build (dart2js), server on 127.0.0.1. Not a physical device.",
+    "All three clients call the same local Dart server (api/server); see README for method."
+  ],
+  "web_runs": [
+    {
+      "file": "results/raw-web-2026-11-21-run1.jsonl",
+      "cold": {
+        "axiom": {
+          "runs": 5,
+          "first_data_ms": [
+            260.6,
+            259.399,
+            253.7,
+            259.201,
+            266.699
+          ],
+          "median_ms": 259.4,
+          "init_median_ms": 247.4,
+          "method": "fresh launch; timer starts after runApp, before client construction; one listItems(n:1)"
+        },
+        "dio": {
+          "runs": 5,
+          "first_data_ms": [
+            220.801,
+            216.4,
+            229.1,
+            218,
+            219.4
+          ],
+          "median_ms": 219.4,
+          "init_median_ms": 0.3,
+          "method": "fresh launch; timer starts after runApp, before client construction; one listItems(n:1)"
+        },
+        "http": {
+          "runs": 5,
+          "first_data_ms": [
+            221,
+            212.7,
+            247.5,
+            215,
+            214.2
+          ],
+          "median_ms": 215,
+          "init_median_ms": 0,
+          "method": "fresh launch; timer starts after runApp, before client construction; one listItems(n:1)"
+        }
+      },
+      "latency": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_get_item",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 3,
+          "p95_ms": 4,
+          "mean_ms": 3.123,
+          "min_ms": 2.1,
+          "max_ms": 10.699
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_get_item",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 2,
+          "p95_ms": 2.5,
+          "mean_ms": 2.08,
+          "min_ms": 1.7,
+          "max_ms": 2.801
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_get_item",
+          "client": "http",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 1.901,
+          "p95_ms": 2.301,
+          "mean_ms": 1.982,
+          "min_ms": 1.599,
+          "max_ms": 2.799
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_create_item",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 2.101,
+          "p95_ms": 2.5,
+          "mean_ms": 2.188,
+          "min_ms": 1.899,
+          "max_ms": 3.099
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_create_item",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 2.2,
+          "p95_ms": 2.699,
+          "mean_ms": 2.248,
+          "min_ms": 1.799,
+          "max_ms": 3.4
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_create_item",
+          "client": "http",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 1.9,
+          "p95_ms": 2.4,
+          "mean_ms": 1.938,
+          "min_ms": 1.5,
+          "max_ms": 2.699
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_1000",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 3.5,
+          "p95_ms": 4.299,
+          "mean_ms": 3.625,
+          "min_ms": 3,
+          "max_ms": 6.601
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_1000",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 3.4,
+          "p95_ms": 7.101,
+          "mean_ms": 3.773,
+          "min_ms": 3,
+          "max_ms": 9.699
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_1000",
+          "client": "http",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 3,
+          "p95_ms": 3.9,
+          "mean_ms": 3.171,
+          "min_ms": 2.599,
+          "max_ms": 9.399
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_10000",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 15.299,
+          "p95_ms": 17.101,
+          "mean_ms": 15.507,
+          "min_ms": 14,
+          "max_ms": 23.901
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_10000",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 18.9,
+          "p95_ms": 25,
+          "mean_ms": 19.78,
+          "min_ms": 15.601,
+          "max_ms": 32
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_10000",
+          "client": "http",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 13.1,
+          "p95_ms": 15.099,
+          "mean_ms": 13.424,
+          "min_ms": 11.901,
+          "max_ms": 24.699
+        }
+      ],
+      "cache": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "client": "axiom",
+          "case": "repeat_list_1000",
+          "status": "ok",
+          "sources": {
+            "cache": 50
+          },
+          "first_call_ms": 22.399,
+          "samples": 50,
+          "p50_ms": 3.599,
+          "p95_ms": 4.599,
+          "mean_ms": 3.77,
+          "min_ms": 3.201,
+          "max_ms": 8.101
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "client": "dio_cache_interceptor",
+          "case": "repeat_list_1000",
+          "status": "ok",
+          "store": "MemCacheStore, CachePolicy.forceCache",
+          "first_call_ms": 26,
+          "samples": 50,
+          "p50_ms": 24.1,
+          "p95_ms": 25.699,
+          "mean_ms": 23.906,
+          "min_ms": 7.6,
+          "max_ms": 27.9
+        }
+      ],
+      "decode": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 1000,
+          "bytes": 90825,
+          "decoder": "json_only",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 50,
+          "p50_ms": 0.4,
+          "p95_ms": 0.601,
+          "mean_ms": 0.452,
+          "min_ms": 0.199,
+          "max_ms": 1.599
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 1000,
+          "bytes": 90825,
+          "decoder": "axiom_generated",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 50,
+          "p50_ms": 1,
+          "p95_ms": 1.701,
+          "mean_ms": 1.032,
+          "min_ms": 0.699,
+          "max_ms": 2.099
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 1000,
+          "bytes": 90825,
+          "decoder": "json_serializable",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 50,
+          "p50_ms": 1.4,
+          "p95_ms": 2.299,
+          "mean_ms": 1.538,
+          "min_ms": 1.1,
+          "max_ms": 3.4
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 1000,
+          "bytes": 90825,
+          "decoder": "manual_fromJson",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 50,
+          "p50_ms": 1,
+          "p95_ms": 2.299,
+          "mean_ms": 1.092,
+          "min_ms": 0.699,
+          "max_ms": 3
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 10000,
+          "bytes": 937929,
+          "decoder": "json_only",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 20,
+          "p50_ms": 4.6,
+          "p95_ms": 5.701,
+          "mean_ms": 4.72,
+          "min_ms": 3.699,
+          "max_ms": 6.199
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 10000,
+          "bytes": 937929,
+          "decoder": "axiom_generated",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 20,
+          "p50_ms": 8.799,
+          "p95_ms": 11.5,
+          "mean_ms": 9.24,
+          "min_ms": 8.4,
+          "max_ms": 14.1
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 10000,
+          "bytes": 937929,
+          "decoder": "json_serializable",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 20,
+          "p50_ms": 13.401,
+          "p95_ms": 15.199,
+          "mean_ms": 13.625,
+          "min_ms": 12.5,
+          "max_ms": 16
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 10000,
+          "bytes": 937929,
+          "decoder": "manual_fromJson",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 20,
+          "p50_ms": 9.799,
+          "p95_ms": 12.301,
+          "mean_ms": 10.225,
+          "min_ms": 8.399,
+          "max_ms": 12.799
+        }
+      ],
+      "ws": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "client": "web_socket_channel",
+          "status": "ok",
+          "messages": 1000,
+          "round_trips_per_s": 4051.864,
+          "mean_rtt_ms": 0.247
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "client": "axiom",
+          "status": "ok",
+          "messages": 1000,
+          "round_trips_per_s": 3615.329,
+          "mean_rtt_ms": 0.277
+        }
+      ],
+      "errors": [],
+      "parallel": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "parallel20_get_item",
+          "client": "axiom",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 34.5,
+          "p95_ms": 72.5,
+          "mean_ms": 43.665,
+          "min_ms": 25.199,
+          "max_ms": 83.299
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "parallel20_get_item",
+          "client": "dio",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 23.701,
+          "p95_ms": 41.5,
+          "mean_ms": 28.51,
+          "min_ms": 20.3,
+          "max_ms": 48.199
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "parallel20_get_item",
+          "client": "http",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 21.199,
+          "p95_ms": 40.601,
+          "mean_ms": 25.795,
+          "min_ms": 19.901,
+          "max_ms": 42.5
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "parallel20_list_1000",
+          "client": "axiom",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 40.299,
+          "p95_ms": 60.799,
+          "mean_ms": 44.47,
+          "min_ms": 37.301,
+          "max_ms": 76.101
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "parallel20_list_1000",
+          "client": "dio",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 46.601,
+          "p95_ms": 59,
+          "mean_ms": 49.96,
+          "min_ms": 42.4,
+          "max_ms": 77.5
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "parallel20_list_1000",
+          "client": "dio_compute",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 43,
+          "p95_ms": 46,
+          "mean_ms": 43.55,
+          "min_ms": 41.599,
+          "max_ms": 47.701
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "parallel20_list_1000",
+          "client": "http",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 35.1,
+          "p95_ms": 38.101,
+          "mean_ms": 36.41,
+          "min_ms": 33.399,
+          "max_ms": 52.699
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "parallel20_get_item",
+          "client": "axiom",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 33.5,
+          "p95_ms": 60,
+          "mean_ms": 37.185,
+          "min_ms": 27,
+          "max_ms": 60.799
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "parallel20_get_item",
+          "client": "dio",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 17.2,
+          "p95_ms": 44.601,
+          "mean_ms": 23.595,
+          "min_ms": 14.899,
+          "max_ms": 46.299
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "parallel20_get_item",
+          "client": "http",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 16.599,
+          "p95_ms": 44.599,
+          "mean_ms": 23.215,
+          "min_ms": 14.699,
+          "max_ms": 47.4
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "parallel20_list_1000",
+          "client": "axiom",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 63.5,
+          "p95_ms": 83,
+          "mean_ms": 68.89,
+          "min_ms": 55.801,
+          "max_ms": 114.701
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "parallel20_list_1000",
+          "client": "dio",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 104.201,
+          "p95_ms": 146.8,
+          "mean_ms": 105.335,
+          "min_ms": 50.199,
+          "max_ms": 151.399
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "parallel20_list_1000",
+          "client": "dio_compute",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 61.3,
+          "p95_ms": 81.9,
+          "mean_ms": 64.965,
+          "min_ms": 48,
+          "max_ms": 94.899
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "parallel20_list_1000",
+          "client": "http",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 56.299,
+          "p95_ms": 65.601,
+          "mean_ms": 54.205,
+          "min_ms": 42.799,
+          "max_ms": 66.201
+        }
+      ],
+      "offline": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "cached_repeat_list_1000",
+          "client": "axiom",
+          "status": "ok",
+          "policy": "contract cacheFirst ttl 10m",
+          "samples": 20,
+          "p50_ms": 3.5,
+          "p95_ms": 5.6,
+          "mean_ms": 3.86,
+          "min_ms": 3.199,
+          "max_ms": 6.301
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "offline_first_data_list_1000",
+          "client": "axiom",
+          "status": "ok",
+          "method": "server drops every data connection without a response; time to typed data",
+          "samples": 20,
+          "p50_ms": 3.4,
+          "p95_ms": 3.9,
+          "mean_ms": 3.485,
+          "min_ms": 3.2,
+          "max_ms": 4.201
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "cached_repeat_list_1000",
+          "client": "dio_cache_interceptor",
+          "status": "ok",
+          "policy": "refreshForceCache (network first, cache stored)",
+          "samples": 20,
+          "p50_ms": 4.701,
+          "p95_ms": 6.199,
+          "mean_ms": 5,
+          "min_ms": 4.399,
+          "max_ms": 6.701
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "offline_first_data_list_1000",
+          "client": "dio_cache_interceptor",
+          "status": "ok",
+          "method": "server drops every data connection without a response; time to typed data",
+          "samples": 20,
+          "p50_ms": 5.5,
+          "p95_ms": 9.199,
+          "mean_ms": 6.04,
+          "min_ms": 4.5,
+          "max_ms": 9.5
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "cached_repeat_list_1000",
+          "client": "http",
+          "status": "ok",
+          "policy": "no cache (network call)",
+          "samples": 20,
+          "p50_ms": 3.6,
+          "p95_ms": 4.8,
+          "mean_ms": 3.82,
+          "min_ms": 2.9,
+          "max_ms": 5.799
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "offline_first_data_list_1000",
+          "client": "http",
+          "status": "no_data",
+          "method": "server drops every data connection without a response; time to typed data",
+          "note": "ClientException: Failed to fetch, uri=http://127.0.0.1:8771/items?n=1000"
+        }
+      ],
+      "jank": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "idle",
+          "status": "ok",
+          "method": "1 ms periodic timer on the UI isolate during fetch + decode to typed models; p50_ms/p95_ms/max_ms are over the per-call longest gap between ticks",
+          "samples": 10,
+          "p50_ms": 4.401,
+          "p95_ms": 5.099,
+          "mean_ms": 4.5,
+          "min_ms": 4.399,
+          "max_ms": 5.099,
+          "longest_stall_ms": 5.099,
+          "wall_p50_ms": 100.9,
+          "stall_over_16ms_p50_ms": 0,
+          "gaps_over_16ms_total": 0
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "axiom",
+          "status": "ok",
+          "method": "1 ms periodic timer on the UI isolate during fetch + decode to typed models; p50_ms/p95_ms/max_ms are over the per-call longest gap between ticks",
+          "samples": 10,
+          "p50_ms": 11.699,
+          "p95_ms": 14,
+          "mean_ms": 11.81,
+          "min_ms": 10.9,
+          "max_ms": 14,
+          "longest_stall_ms": 14,
+          "wall_p50_ms": 15.5,
+          "stall_over_16ms_p50_ms": 0,
+          "gaps_over_16ms_total": 0
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "dio",
+          "status": "ok",
+          "method": "1 ms periodic timer on the UI isolate during fetch + decode to typed models; p50_ms/p95_ms/max_ms are over the per-call longest gap between ticks",
+          "samples": 10,
+          "p50_ms": 15.5,
+          "p95_ms": 20.6,
+          "mean_ms": 15.95,
+          "min_ms": 12.101,
+          "max_ms": 20.6,
+          "longest_stall_ms": 20.6,
+          "wall_p50_ms": 18.7,
+          "stall_over_16ms_p50_ms": 0,
+          "gaps_over_16ms_total": 0
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "dio_compute",
+          "status": "ok",
+          "method": "1 ms periodic timer on the UI isolate during fetch + decode to typed models; p50_ms/p95_ms/max_ms are over the per-call longest gap between ticks",
+          "samples": 10,
+          "p50_ms": 14,
+          "p95_ms": 19.799,
+          "mean_ms": 15.32,
+          "min_ms": 13,
+          "max_ms": 19.799,
+          "longest_stall_ms": 19.799,
+          "wall_p50_ms": 17.301,
+          "stall_over_16ms_p50_ms": 0,
+          "gaps_over_16ms_total": 0
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "http",
+          "status": "ok",
+          "method": "1 ms periodic timer on the UI isolate during fetch + decode to typed models; p50_ms/p95_ms/max_ms are over the per-call longest gap between ticks",
+          "samples": 10,
+          "p50_ms": 10.4,
+          "p95_ms": 11.801,
+          "mean_ms": 10.65,
+          "min_ms": 9.4,
+          "max_ms": 11.801,
+          "longest_stall_ms": 11.801,
+          "wall_p50_ms": 13.6,
+          "stall_over_16ms_p50_ms": 0,
+          "gaps_over_16ms_total": 0
+        }
+      ],
+      "ttfi": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "http_ndjson",
+          "status": "ok",
+          "method": "NDJSON route, first line decoded to a typed item, rest of the stream abandoned",
+          "samples": 10,
+          "p50_ms": 3.9,
+          "p95_ms": 5.5,
+          "mean_ms": 3.94,
+          "min_ms": 3.299,
+          "max_ms": 5.5
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "dio_ndjson",
+          "status": "ok",
+          "method": "NDJSON route, first line decoded to a typed item, rest of the stream abandoned",
+          "samples": 10,
+          "p50_ms": 24.199,
+          "p95_ms": 28.199,
+          "mean_ms": 24.79,
+          "min_ms": 22.9,
+          "max_ms": 28.199
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "axiom",
+          "status": "not_available",
+          "note": "the generated client has no streaming list call on this branch (runtime callStream exists, but no contract endpoint exposes the list as a stream); Axiom first item = full-list latency"
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "list_10000",
+          "client": "http_ndjson",
+          "status": "ok",
+          "method": "NDJSON route, first line decoded to a typed item, rest of the stream abandoned",
+          "samples": 10,
+          "p50_ms": 10.9,
+          "p95_ms": 19,
+          "mean_ms": 11.89,
+          "min_ms": 8.4,
+          "max_ms": 19
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "list_10000",
+          "client": "dio_ndjson",
+          "status": "ok",
+          "method": "NDJSON route, first line decoded to a typed item, rest of the stream abandoned",
+          "samples": 10,
+          "p50_ms": 33.5,
+          "p95_ms": 36.8,
+          "mean_ms": 33.52,
+          "min_ms": 31.201,
+          "max_ms": 36.8
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "list_10000",
+          "client": "axiom",
+          "status": "not_available",
+          "note": "the generated client has no streaming list call on this branch (runtime callStream exists, but no contract endpoint exposes the list as a stream); Axiom first item = full-list latency"
+        }
+      ],
+      "clients": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_get_item",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 2.701,
+          "p95_ms": 3.399,
+          "mean_ms": 2.718,
+          "min_ms": 1.901,
+          "max_ms": 3.901
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_get_item",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 1.8,
+          "p95_ms": 2.101,
+          "mean_ms": 1.821,
+          "min_ms": 1.5,
+          "max_ms": 2.599
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_get_item",
+          "client": "http",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 1.699,
+          "p95_ms": 2.1,
+          "mean_ms": 1.703,
+          "min_ms": 1.4,
+          "max_ms": 2.401
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_1000",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 3.301,
+          "p95_ms": 3.899,
+          "mean_ms": 3.377,
+          "min_ms": 2.9,
+          "max_ms": 5.401
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_1000",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 3.3,
+          "p95_ms": 7,
+          "mean_ms": 3.679,
+          "min_ms": 3,
+          "max_ms": 13.801
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_1000",
+          "client": "dio_compute",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 3.4,
+          "p95_ms": 4.301,
+          "mean_ms": 3.475,
+          "min_ms": 2.899,
+          "max_ms": 5.6
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_1000",
+          "client": "http",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 2.901,
+          "p95_ms": 3.601,
+          "mean_ms": 3.017,
+          "min_ms": 2.599,
+          "max_ms": 4.701
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_10000",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 15.399,
+          "p95_ms": 21.801,
+          "mean_ms": 15.976,
+          "min_ms": 14.701,
+          "max_ms": 26.1
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_10000",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 19.301,
+          "p95_ms": 29.699,
+          "mean_ms": 20.648,
+          "min_ms": 17,
+          "max_ms": 33.801
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_10000",
+          "client": "dio_compute",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 17.601,
+          "p95_ms": 20.1,
+          "mean_ms": 18.064,
+          "min_ms": 16.801,
+          "max_ms": 25.9
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_10000",
+          "client": "http",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 12.9,
+          "p95_ms": 16,
+          "mean_ms": 13.414,
+          "min_ms": 12.199,
+          "max_ms": 23.399
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "small_get_item",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 3.199,
+          "p95_ms": 3.8,
+          "mean_ms": 3.244,
+          "min_ms": 2.699,
+          "max_ms": 7
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "small_get_item",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 2.199,
+          "p95_ms": 2.601,
+          "mean_ms": 2.205,
+          "min_ms": 1.701,
+          "max_ms": 3.2
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "small_get_item",
+          "client": "http",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 2,
+          "p95_ms": 2.301,
+          "mean_ms": 1.988,
+          "min_ms": 1.699,
+          "max_ms": 2.699
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_1000",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 5.5,
+          "p95_ms": 6.799,
+          "mean_ms": 5.637,
+          "min_ms": 4.701,
+          "max_ms": 9.9
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_1000",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 4.5,
+          "p95_ms": 8.3,
+          "mean_ms": 4.978,
+          "min_ms": 3.9,
+          "max_ms": 16.401
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_1000",
+          "client": "dio_compute",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 4.5,
+          "p95_ms": 5.299,
+          "mean_ms": 4.579,
+          "min_ms": 4.1,
+          "max_ms": 5.601
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_1000",
+          "client": "http",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 4,
+          "p95_ms": 5.8,
+          "mean_ms": 4.214,
+          "min_ms": 3.6,
+          "max_ms": 11.1
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_10000",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 26.199,
+          "p95_ms": 29.6,
+          "mean_ms": 26.876,
+          "min_ms": 24.5,
+          "max_ms": 47.5
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_10000",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 31.201,
+          "p95_ms": 40.901,
+          "mean_ms": 31.868,
+          "min_ms": 25.5,
+          "max_ms": 41.4
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_10000",
+          "client": "dio_compute",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 27,
+          "p95_ms": 29.8,
+          "mean_ms": 27.338,
+          "min_ms": 25.6,
+          "max_ms": 32.5
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_10000",
+          "client": "http",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 23.399,
+          "p95_ms": 27.5,
+          "mean_ms": 24.272,
+          "min_ms": 22,
+          "max_ms": 48.201
+        }
+      ],
+      "mode": "release"
+    },
+    {
+      "file": "results/raw-web-2026-11-21-run2.jsonl",
+      "cold": {
+        "axiom": {
+          "runs": 5,
+          "first_data_ms": [
+            272.5,
+            263.3,
+            255.6,
+            258.2,
+            259.4
+          ],
+          "median_ms": 259.4,
+          "init_median_ms": 247.4,
+          "method": "fresh launch; timer starts after runApp, before client construction; one listItems(n:1)"
+        },
+        "dio": {
+          "runs": 5,
+          "first_data_ms": [
+            217.9,
+            219.701,
+            222.7,
+            258.801,
+            223
+          ],
+          "median_ms": 222.7,
+          "init_median_ms": 0.4,
+          "method": "fresh launch; timer starts after runApp, before client construction; one listItems(n:1)"
+        },
+        "http": {
+          "runs": 5,
+          "first_data_ms": [
+            214.2,
+            224.6,
+            211.199,
+            243,
+            239.899
+          ],
+          "median_ms": 224.6,
+          "init_median_ms": 0.1,
+          "method": "fresh launch; timer starts after runApp, before client construction; one listItems(n:1)"
+        }
+      },
+      "latency": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_get_item",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 2.701,
+          "p95_ms": 3.701,
+          "mean_ms": 2.755,
+          "min_ms": 1.9,
+          "max_ms": 4.6
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_get_item",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 1.801,
+          "p95_ms": 2.4,
+          "mean_ms": 1.941,
+          "min_ms": 1.5,
+          "max_ms": 6.7
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_get_item",
+          "client": "http",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 1.701,
+          "p95_ms": 2.299,
+          "mean_ms": 1.812,
+          "min_ms": 1.5,
+          "max_ms": 2.7
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_create_item",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 2,
+          "p95_ms": 2.5,
+          "mean_ms": 2.044,
+          "min_ms": 1.699,
+          "max_ms": 3.3
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_create_item",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 1.899,
+          "p95_ms": 2.201,
+          "mean_ms": 1.904,
+          "min_ms": 1.5,
+          "max_ms": 3.801
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_create_item",
+          "client": "http",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 1.699,
+          "p95_ms": 1.901,
+          "mean_ms": 1.671,
+          "min_ms": 1.399,
+          "max_ms": 2.301
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_1000",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 3.4,
+          "p95_ms": 4.099,
+          "mean_ms": 3.538,
+          "min_ms": 3,
+          "max_ms": 9.1
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_1000",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 3.4,
+          "p95_ms": 6.4,
+          "mean_ms": 3.807,
+          "min_ms": 2.899,
+          "max_ms": 12.5
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_1000",
+          "client": "http",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 2.9,
+          "p95_ms": 3.6,
+          "mean_ms": 3.017,
+          "min_ms": 2.6,
+          "max_ms": 4.799
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_10000",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 15.4,
+          "p95_ms": 17.2,
+          "mean_ms": 15.674,
+          "min_ms": 14.099,
+          "max_ms": 26.4
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_10000",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 18.301,
+          "p95_ms": 25.5,
+          "mean_ms": 19.695,
+          "min_ms": 15.3,
+          "max_ms": 30.401
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_10000",
+          "client": "http",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 12.701,
+          "p95_ms": 14.301,
+          "mean_ms": 12.903,
+          "min_ms": 11.9,
+          "max_ms": 17.3
+        }
+      ],
+      "cache": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "client": "axiom",
+          "case": "repeat_list_1000",
+          "status": "ok",
+          "sources": {
+            "cache": 50
+          },
+          "first_call_ms": 22.399,
+          "samples": 50,
+          "p50_ms": 3.401,
+          "p95_ms": 4.1,
+          "mean_ms": 3.616,
+          "min_ms": 3.199,
+          "max_ms": 8.101
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "client": "dio_cache_interceptor",
+          "case": "repeat_list_1000",
+          "status": "ok",
+          "store": "MemCacheStore, CachePolicy.forceCache",
+          "first_call_ms": 29.701,
+          "samples": 50,
+          "p50_ms": 24.699,
+          "p95_ms": 29.4,
+          "mean_ms": 25.22,
+          "min_ms": 7.6,
+          "max_ms": 30.199
+        }
+      ],
+      "decode": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 1000,
+          "bytes": 90825,
+          "decoder": "json_only",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 50,
+          "p50_ms": 0.4,
+          "p95_ms": 1,
+          "mean_ms": 0.45,
+          "min_ms": 0.199,
+          "max_ms": 1.299
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 1000,
+          "bytes": 90825,
+          "decoder": "axiom_generated",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 50,
+          "p50_ms": 1.1,
+          "p95_ms": 3.3,
+          "mean_ms": 1.558,
+          "min_ms": 0.7,
+          "max_ms": 4
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 1000,
+          "bytes": 90825,
+          "decoder": "json_serializable",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 50,
+          "p50_ms": 1.5,
+          "p95_ms": 3.199,
+          "mean_ms": 1.688,
+          "min_ms": 1.1,
+          "max_ms": 5
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 1000,
+          "bytes": 90825,
+          "decoder": "manual_fromJson",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 50,
+          "p50_ms": 0.8,
+          "p95_ms": 1,
+          "mean_ms": 0.81,
+          "min_ms": 0.6,
+          "max_ms": 1
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 10000,
+          "bytes": 937929,
+          "decoder": "json_only",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 20,
+          "p50_ms": 4.201,
+          "p95_ms": 5.9,
+          "mean_ms": 4.605,
+          "min_ms": 3.799,
+          "max_ms": 6.401
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 10000,
+          "bytes": 937929,
+          "decoder": "axiom_generated",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 20,
+          "p50_ms": 8.599,
+          "p95_ms": 10.8,
+          "mean_ms": 8.925,
+          "min_ms": 8.399,
+          "max_ms": 10.801
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 10000,
+          "bytes": 937929,
+          "decoder": "json_serializable",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 20,
+          "p50_ms": 13.2,
+          "p95_ms": 14.599,
+          "mean_ms": 13.54,
+          "min_ms": 12.6,
+          "max_ms": 15.6
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 10000,
+          "bytes": 937929,
+          "decoder": "manual_fromJson",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 20,
+          "p50_ms": 9.5,
+          "p95_ms": 12,
+          "mean_ms": 9.98,
+          "min_ms": 8.399,
+          "max_ms": 12.6
+        }
+      ],
+      "ws": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "client": "web_socket_channel",
+          "status": "ok",
+          "messages": 1000,
+          "round_trips_per_s": 4336.532,
+          "mean_rtt_ms": 0.231
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "client": "axiom",
+          "status": "ok",
+          "messages": 1000,
+          "round_trips_per_s": 1794.044,
+          "mean_rtt_ms": 0.557
+        }
+      ],
+      "errors": [],
+      "parallel": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "parallel20_get_item",
+          "client": "axiom",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 31.799,
+          "p95_ms": 44,
+          "mean_ms": 34.81,
+          "min_ms": 27.4,
+          "max_ms": 44
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "parallel20_get_item",
+          "client": "dio",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 21.801,
+          "p95_ms": 54,
+          "mean_ms": 29.67,
+          "min_ms": 18,
+          "max_ms": 54.1
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "parallel20_get_item",
+          "client": "http",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 16.801,
+          "p95_ms": 39.5,
+          "mean_ms": 21.57,
+          "min_ms": 15.799,
+          "max_ms": 42.299
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "parallel20_list_1000",
+          "client": "axiom",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 40.4,
+          "p95_ms": 53.5,
+          "mean_ms": 42.335,
+          "min_ms": 37.9,
+          "max_ms": 54
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "parallel20_list_1000",
+          "client": "dio",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 47.4,
+          "p95_ms": 64.6,
+          "mean_ms": 50.465,
+          "min_ms": 42.6,
+          "max_ms": 78.2
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "parallel20_list_1000",
+          "client": "dio_compute",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 43.1,
+          "p95_ms": 45.301,
+          "mean_ms": 43.35,
+          "min_ms": 41.301,
+          "max_ms": 46
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "parallel20_list_1000",
+          "client": "http",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 36,
+          "p95_ms": 45.099,
+          "mean_ms": 37.355,
+          "min_ms": 33,
+          "max_ms": 51.801
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "parallel20_get_item",
+          "client": "axiom",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 27.201,
+          "p95_ms": 38.1,
+          "mean_ms": 30.61,
+          "min_ms": 24.5,
+          "max_ms": 50.299
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "parallel20_get_item",
+          "client": "dio",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 17.4,
+          "p95_ms": 40.701,
+          "mean_ms": 22.475,
+          "min_ms": 15.5,
+          "max_ms": 42.301
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "parallel20_get_item",
+          "client": "http",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 15.3,
+          "p95_ms": 44.1,
+          "mean_ms": 21.37,
+          "min_ms": 13.301,
+          "max_ms": 46.6
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "parallel20_list_1000",
+          "client": "axiom",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 56.601,
+          "p95_ms": 76.6,
+          "mean_ms": 59.905,
+          "min_ms": 52.899,
+          "max_ms": 79.401
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "parallel20_list_1000",
+          "client": "dio",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 57.201,
+          "p95_ms": 72.5,
+          "mean_ms": 61.11,
+          "min_ms": 45.701,
+          "max_ms": 99.299
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "parallel20_list_1000",
+          "client": "dio_compute",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 52.701,
+          "p95_ms": 64.601,
+          "mean_ms": 53.575,
+          "min_ms": 45.6,
+          "max_ms": 80.1
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "parallel20_list_1000",
+          "client": "http",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 55.799,
+          "p95_ms": 62.099,
+          "mean_ms": 52.97,
+          "min_ms": 40.901,
+          "max_ms": 70.201
+        }
+      ],
+      "offline": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "cached_repeat_list_1000",
+          "client": "axiom",
+          "status": "ok",
+          "policy": "contract cacheFirst ttl 10m",
+          "samples": 20,
+          "p50_ms": 3.5,
+          "p95_ms": 4.9,
+          "mean_ms": 3.7,
+          "min_ms": 3.1,
+          "max_ms": 5.799
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "offline_first_data_list_1000",
+          "client": "axiom",
+          "status": "ok",
+          "method": "server drops every data connection without a response; time to typed data",
+          "samples": 20,
+          "p50_ms": 3.401,
+          "p95_ms": 3.6,
+          "mean_ms": 3.465,
+          "min_ms": 3.2,
+          "max_ms": 4.099
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "cached_repeat_list_1000",
+          "client": "dio_cache_interceptor",
+          "status": "ok",
+          "policy": "refreshForceCache (network first, cache stored)",
+          "samples": 20,
+          "p50_ms": 4.799,
+          "p95_ms": 8,
+          "mean_ms": 5.265,
+          "min_ms": 4.4,
+          "max_ms": 8.299
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "offline_first_data_list_1000",
+          "client": "dio_cache_interceptor",
+          "status": "ok",
+          "method": "server drops every data connection without a response; time to typed data",
+          "samples": 20,
+          "p50_ms": 4.6,
+          "p95_ms": 7.4,
+          "mean_ms": 4.92,
+          "min_ms": 4.299,
+          "max_ms": 7.601
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "cached_repeat_list_1000",
+          "client": "http",
+          "status": "ok",
+          "policy": "no cache (network call)",
+          "samples": 20,
+          "p50_ms": 3,
+          "p95_ms": 3.399,
+          "mean_ms": 3.125,
+          "min_ms": 2.7,
+          "max_ms": 6.5
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "offline_first_data_list_1000",
+          "client": "http",
+          "status": "no_data",
+          "method": "server drops every data connection without a response; time to typed data",
+          "note": "ClientException: Failed to fetch, uri=http://127.0.0.1:8771/items?n=1000"
+        }
+      ],
+      "jank": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "idle",
+          "status": "ok",
+          "method": "1 ms periodic timer on the UI isolate during fetch + decode to typed models; p50_ms/p95_ms/max_ms are over the per-call longest gap between ticks",
+          "samples": 10,
+          "p50_ms": 4.401,
+          "p95_ms": 4.9,
+          "mean_ms": 4.52,
+          "min_ms": 4.4,
+          "max_ms": 4.9,
+          "longest_stall_ms": 4.9,
+          "wall_p50_ms": 100.899,
+          "stall_over_16ms_p50_ms": 0,
+          "gaps_over_16ms_total": 0
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "axiom",
+          "status": "ok",
+          "method": "1 ms periodic timer on the UI isolate during fetch + decode to typed models; p50_ms/p95_ms/max_ms are over the per-call longest gap between ticks",
+          "samples": 10,
+          "p50_ms": 11.199,
+          "p95_ms": 13.699,
+          "mean_ms": 11.89,
+          "min_ms": 10.701,
+          "max_ms": 13.699,
+          "longest_stall_ms": 13.699,
+          "wall_p50_ms": 14.799,
+          "stall_over_16ms_p50_ms": 0,
+          "gaps_over_16ms_total": 0
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "dio",
+          "status": "ok",
+          "method": "1 ms periodic timer on the UI isolate during fetch + decode to typed models; p50_ms/p95_ms/max_ms are over the per-call longest gap between ticks",
+          "samples": 10,
+          "p50_ms": 14.5,
+          "p95_ms": 20.199,
+          "mean_ms": 14.33,
+          "min_ms": 8.6,
+          "max_ms": 20.199,
+          "longest_stall_ms": 20.199,
+          "wall_p50_ms": 18.701,
+          "stall_over_16ms_p50_ms": 0,
+          "gaps_over_16ms_total": 0
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "dio_compute",
+          "status": "ok",
+          "method": "1 ms periodic timer on the UI isolate during fetch + decode to typed models; p50_ms/p95_ms/max_ms are over the per-call longest gap between ticks",
+          "samples": 10,
+          "p50_ms": 14.5,
+          "p95_ms": 20.201,
+          "mean_ms": 15.45,
+          "min_ms": 13.099,
+          "max_ms": 20.201,
+          "longest_stall_ms": 20.201,
+          "wall_p50_ms": 17.4,
+          "stall_over_16ms_p50_ms": 0,
+          "gaps_over_16ms_total": 0
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "http",
+          "status": "ok",
+          "method": "1 ms periodic timer on the UI isolate during fetch + decode to typed models; p50_ms/p95_ms/max_ms are over the per-call longest gap between ticks",
+          "samples": 10,
+          "p50_ms": 9.9,
+          "p95_ms": 12.4,
+          "mean_ms": 10.38,
+          "min_ms": 9.199,
+          "max_ms": 12.4,
+          "longest_stall_ms": 12.4,
+          "wall_p50_ms": 13.201,
+          "stall_over_16ms_p50_ms": 0,
+          "gaps_over_16ms_total": 0
+        }
+      ],
+      "ttfi": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "http_ndjson",
+          "status": "ok",
+          "method": "NDJSON route, first line decoded to a typed item, rest of the stream abandoned",
+          "samples": 10,
+          "p50_ms": 4.299,
+          "p95_ms": 5.201,
+          "mean_ms": 4.29,
+          "min_ms": 2.699,
+          "max_ms": 5.201
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "dio_ndjson",
+          "status": "ok",
+          "method": "NDJSON route, first line decoded to a typed item, rest of the stream abandoned",
+          "samples": 10,
+          "p50_ms": 24.199,
+          "p95_ms": 27.401,
+          "mean_ms": 24.43,
+          "min_ms": 21.9,
+          "max_ms": 27.401
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "axiom",
+          "status": "not_available",
+          "note": "the generated client has no streaming list call on this branch (runtime callStream exists, but no contract endpoint exposes the list as a stream); Axiom first item = full-list latency"
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "list_10000",
+          "client": "http_ndjson",
+          "status": "ok",
+          "method": "NDJSON route, first line decoded to a typed item, rest of the stream abandoned",
+          "samples": 10,
+          "p50_ms": 10.299,
+          "p95_ms": 11.201,
+          "mean_ms": 9.91,
+          "min_ms": 4.5,
+          "max_ms": 11.201
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "list_10000",
+          "client": "dio_ndjson",
+          "status": "ok",
+          "method": "NDJSON route, first line decoded to a typed item, rest of the stream abandoned",
+          "samples": 10,
+          "p50_ms": 34.399,
+          "p95_ms": 39.701,
+          "mean_ms": 35.15,
+          "min_ms": 32.201,
+          "max_ms": 39.701
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "list_10000",
+          "client": "axiom",
+          "status": "not_available",
+          "note": "the generated client has no streaming list call on this branch (runtime callStream exists, but no contract endpoint exposes the list as a stream); Axiom first item = full-list latency"
+        }
+      ],
+      "clients": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_get_item",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 2.5,
+          "p95_ms": 2.9,
+          "mean_ms": 2.684,
+          "min_ms": 1.701,
+          "max_ms": 34.701
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_get_item",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 1.701,
+          "p95_ms": 2.1,
+          "mean_ms": 1.767,
+          "min_ms": 1.4,
+          "max_ms": 3.801
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_get_item",
+          "client": "http",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 1.6,
+          "p95_ms": 1.801,
+          "mean_ms": 1.596,
+          "min_ms": 1.299,
+          "max_ms": 2.5
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_1000",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 3.299,
+          "p95_ms": 3.699,
+          "mean_ms": 3.314,
+          "min_ms": 2.9,
+          "max_ms": 5.1
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_1000",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 3.3,
+          "p95_ms": 7,
+          "mean_ms": 3.663,
+          "min_ms": 2.901,
+          "max_ms": 14.1
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_1000",
+          "client": "dio_compute",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 3.301,
+          "p95_ms": 3.8,
+          "mean_ms": 3.43,
+          "min_ms": 2.901,
+          "max_ms": 14.701
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_1000",
+          "client": "http",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 2.9,
+          "p95_ms": 3.399,
+          "mean_ms": 2.959,
+          "min_ms": 2.599,
+          "max_ms": 4.901
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_10000",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 15.4,
+          "p95_ms": 19.799,
+          "mean_ms": 16.04,
+          "min_ms": 14.699,
+          "max_ms": 31
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_10000",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 19.7,
+          "p95_ms": 23.301,
+          "mean_ms": 20.146,
+          "min_ms": 16.899,
+          "max_ms": 29.201
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_10000",
+          "client": "dio_compute",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 17.5,
+          "p95_ms": 18.801,
+          "mean_ms": 17.534,
+          "min_ms": 16.7,
+          "max_ms": 19.299
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_10000",
+          "client": "http",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 13,
+          "p95_ms": 14.801,
+          "mean_ms": 13.216,
+          "min_ms": 12.201,
+          "max_ms": 17.699
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "small_get_item",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 2.901,
+          "p95_ms": 3.601,
+          "mean_ms": 3.033,
+          "min_ms": 2.5,
+          "max_ms": 6.5
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "small_get_item",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 2,
+          "p95_ms": 2.3,
+          "mean_ms": 2.011,
+          "min_ms": 1.699,
+          "max_ms": 2.701
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "small_get_item",
+          "client": "http",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 2,
+          "p95_ms": 2.5,
+          "mean_ms": 2.042,
+          "min_ms": 1.599,
+          "max_ms": 3.4
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_1000",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 5.199,
+          "p95_ms": 5.901,
+          "mean_ms": 5.337,
+          "min_ms": 4.599,
+          "max_ms": 20.299
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_1000",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 4.401,
+          "p95_ms": 7.8,
+          "mean_ms": 4.831,
+          "min_ms": 4,
+          "max_ms": 15.1
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_1000",
+          "client": "dio_compute",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 4.5,
+          "p95_ms": 6.301,
+          "mean_ms": 4.77,
+          "min_ms": 3.9,
+          "max_ms": 8.5
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_1000",
+          "client": "http",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 4,
+          "p95_ms": 5.3,
+          "mean_ms": 4.16,
+          "min_ms": 3.6,
+          "max_ms": 12.201
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_10000",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 26.201,
+          "p95_ms": 32.199,
+          "mean_ms": 26.984,
+          "min_ms": 24.7,
+          "max_ms": 47.299
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_10000",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 28.7,
+          "p95_ms": 38.701,
+          "mean_ms": 30.33,
+          "min_ms": 25.4,
+          "max_ms": 39
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_10000",
+          "client": "dio_compute",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 26.9,
+          "p95_ms": 32.699,
+          "mean_ms": 27.738,
+          "min_ms": 25.801,
+          "max_ms": 39.601
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_10000",
+          "client": "http",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 23.799,
+          "p95_ms": 27,
+          "mean_ms": 24.352,
+          "min_ms": 22,
+          "max_ms": 40.699
+        }
+      ],
+      "mode": "release"
+    },
+    {
+      "file": "results/raw-web-2026-11-21-run3.jsonl",
+      "cold": {
+        "axiom": {
+          "runs": 5,
+          "first_data_ms": [
+            266.799,
+            261.4,
+            278.1,
+            261.8,
+            253.1
+          ],
+          "median_ms": 261.8,
+          "init_median_ms": 250.6,
+          "method": "fresh launch; timer starts after runApp, before client construction; one listItems(n:1)"
+        },
+        "dio": {
+          "runs": 5,
+          "first_data_ms": [
+            226.5,
+            216.899,
+            216.8,
+            215.799,
+            215.8
+          ],
+          "median_ms": 216.8,
+          "init_median_ms": 0.4,
+          "method": "fresh launch; timer starts after runApp, before client construction; one listItems(n:1)"
+        },
+        "http": {
+          "runs": 5,
+          "first_data_ms": [
+            215.5,
+            219,
+            214.6,
+            213.401,
+            213.6
+          ],
+          "median_ms": 214.6,
+          "init_median_ms": 0,
+          "method": "fresh launch; timer starts after runApp, before client construction; one listItems(n:1)"
+        }
+      },
+      "latency": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_get_item",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 2.7,
+          "p95_ms": 3.3,
+          "mean_ms": 2.664,
+          "min_ms": 1.799,
+          "max_ms": 5.199
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_get_item",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 1.8,
+          "p95_ms": 2.5,
+          "mean_ms": 1.902,
+          "min_ms": 1.5,
+          "max_ms": 7.901
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_get_item",
+          "client": "http",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 1.7,
+          "p95_ms": 2,
+          "mean_ms": 1.726,
+          "min_ms": 1.399,
+          "max_ms": 2.899
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_create_item",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 1.801,
+          "p95_ms": 2.3,
+          "mean_ms": 1.882,
+          "min_ms": 1.599,
+          "max_ms": 2.7
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_create_item",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 1.8,
+          "p95_ms": 2.201,
+          "mean_ms": 1.86,
+          "min_ms": 1.5,
+          "max_ms": 3.1
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_create_item",
+          "client": "http",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 1.6,
+          "p95_ms": 1.9,
+          "mean_ms": 1.628,
+          "min_ms": 1.3,
+          "max_ms": 2.201
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_1000",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 3.3,
+          "p95_ms": 4.1,
+          "mean_ms": 3.473,
+          "min_ms": 2.9,
+          "max_ms": 11
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_1000",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 3.201,
+          "p95_ms": 7,
+          "mean_ms": 3.691,
+          "min_ms": 2.8,
+          "max_ms": 10.8
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_1000",
+          "client": "http",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 2.9,
+          "p95_ms": 3.599,
+          "mean_ms": 3.042,
+          "min_ms": 2.599,
+          "max_ms": 10.4
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_10000",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 15.5,
+          "p95_ms": 17.9,
+          "mean_ms": 15.911,
+          "min_ms": 14.401,
+          "max_ms": 24.4
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_10000",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 17.6,
+          "p95_ms": 25.2,
+          "mean_ms": 20.131,
+          "min_ms": 15.299,
+          "max_ms": 81.3
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_10000",
+          "client": "http",
+          "status": "ok",
+          "warmup": 20,
+          "samples": 200,
+          "p50_ms": 12.5,
+          "p95_ms": 13.5,
+          "mean_ms": 12.714,
+          "min_ms": 11.899,
+          "max_ms": 17.1
+        }
+      ],
+      "cache": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "client": "axiom",
+          "case": "repeat_list_1000",
+          "status": "ok",
+          "sources": {
+            "cache": 50
+          },
+          "first_call_ms": 18.1,
+          "samples": 50,
+          "p50_ms": 3.5,
+          "p95_ms": 4.4,
+          "mean_ms": 3.642,
+          "min_ms": 3.099,
+          "max_ms": 8.1
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "client": "dio_cache_interceptor",
+          "case": "repeat_list_1000",
+          "status": "ok",
+          "store": "MemCacheStore, CachePolicy.forceCache",
+          "first_call_ms": 27.101,
+          "samples": 50,
+          "p50_ms": 24.899,
+          "p95_ms": 29,
+          "mean_ms": 25.19,
+          "min_ms": 8.399,
+          "max_ms": 29.7
+        }
+      ],
+      "decode": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 1000,
+          "bytes": 90825,
+          "decoder": "json_only",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 50,
+          "p50_ms": 0.301,
+          "p95_ms": 0.601,
+          "mean_ms": 0.372,
+          "min_ms": 0.2,
+          "max_ms": 1
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 1000,
+          "bytes": 90825,
+          "decoder": "axiom_generated",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 50,
+          "p50_ms": 0.8,
+          "p95_ms": 2.6,
+          "mean_ms": 0.992,
+          "min_ms": 0.699,
+          "max_ms": 3.5
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 1000,
+          "bytes": 90825,
+          "decoder": "json_serializable",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 50,
+          "p50_ms": 1.7,
+          "p95_ms": 5.199,
+          "mean_ms": 2.066,
+          "min_ms": 1.2,
+          "max_ms": 6
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 1000,
+          "bytes": 90825,
+          "decoder": "manual_fromJson",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 50,
+          "p50_ms": 0.9,
+          "p95_ms": 4,
+          "mean_ms": 1.286,
+          "min_ms": 0.699,
+          "max_ms": 4.5
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 10000,
+          "bytes": 937929,
+          "decoder": "json_only",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 20,
+          "p50_ms": 4.099,
+          "p95_ms": 5.9,
+          "mean_ms": 4.53,
+          "min_ms": 3.8,
+          "max_ms": 7.5
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 10000,
+          "bytes": 937929,
+          "decoder": "axiom_generated",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 20,
+          "p50_ms": 8.699,
+          "p95_ms": 13.399,
+          "mean_ms": 9.615,
+          "min_ms": 8.3,
+          "max_ms": 14.5
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 10000,
+          "bytes": 937929,
+          "decoder": "json_serializable",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 20,
+          "p50_ms": 13.199,
+          "p95_ms": 14.3,
+          "mean_ms": 13.36,
+          "min_ms": 12.699,
+          "max_ms": 14.7
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "items": 10000,
+          "bytes": 937929,
+          "decoder": "manual_fromJson",
+          "status": "ok",
+          "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+          "samples": 20,
+          "p50_ms": 9.1,
+          "p95_ms": 11.299,
+          "mean_ms": 9.585,
+          "min_ms": 8.5,
+          "max_ms": 14.2
+        }
+      ],
+      "ws": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "client": "web_socket_channel",
+          "status": "ok",
+          "messages": 1000,
+          "round_trips_per_s": 4599.837,
+          "mean_rtt_ms": 0.217
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "client": "axiom",
+          "status": "ok",
+          "messages": 1000,
+          "round_trips_per_s": 2692.515,
+          "mean_rtt_ms": 0.371
+        }
+      ],
+      "errors": [],
+      "parallel": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "parallel20_get_item",
+          "client": "axiom",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 31.5,
+          "p95_ms": 45.5,
+          "mean_ms": 36.065,
+          "min_ms": 26.799,
+          "max_ms": 72.3
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "parallel20_get_item",
+          "client": "dio",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 20.901,
+          "p95_ms": 39.2,
+          "mean_ms": 25.375,
+          "min_ms": 18.901,
+          "max_ms": 40.599
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "parallel20_get_item",
+          "client": "http",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 19.399,
+          "p95_ms": 51.9,
+          "mean_ms": 28.315,
+          "min_ms": 17.1,
+          "max_ms": 58.2
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "parallel20_list_1000",
+          "client": "axiom",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 38.8,
+          "p95_ms": 40.7,
+          "mean_ms": 38.825,
+          "min_ms": 36.899,
+          "max_ms": 42.2
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "parallel20_list_1000",
+          "client": "dio",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 48.9,
+          "p95_ms": 66.8,
+          "mean_ms": 52.28,
+          "min_ms": 42.9,
+          "max_ms": 79.5
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "parallel20_list_1000",
+          "client": "dio_compute",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 43.5,
+          "p95_ms": 46.699,
+          "mean_ms": 43.89,
+          "min_ms": 41.4,
+          "max_ms": 47.801
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "parallel20_list_1000",
+          "client": "http",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 35.901,
+          "p95_ms": 48.1,
+          "mean_ms": 37.59,
+          "min_ms": 33.199,
+          "max_ms": 56.301
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "parallel20_get_item",
+          "client": "axiom",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 28.8,
+          "p95_ms": 47.9,
+          "mean_ms": 32.3,
+          "min_ms": 24.5,
+          "max_ms": 51.7
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "parallel20_get_item",
+          "client": "dio",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 17.7,
+          "p95_ms": 42.5,
+          "mean_ms": 22.15,
+          "min_ms": 15.4,
+          "max_ms": 44.7
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "parallel20_get_item",
+          "client": "http",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 15.2,
+          "p95_ms": 42.3,
+          "mean_ms": 20.39,
+          "min_ms": 13.8,
+          "max_ms": 45.9
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "parallel20_list_1000",
+          "client": "axiom",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 59.2,
+          "p95_ms": 69.5,
+          "mean_ms": 59.475,
+          "min_ms": 53.3,
+          "max_ms": 71
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "parallel20_list_1000",
+          "client": "dio",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 55.1,
+          "p95_ms": 68.2,
+          "mean_ms": 58.63,
+          "min_ms": 47.4,
+          "max_ms": 90.6
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "parallel20_list_1000",
+          "client": "dio_compute",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 49.8,
+          "p95_ms": 63.6,
+          "mean_ms": 53.32,
+          "min_ms": 46,
+          "max_ms": 66.3
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "parallel20_list_1000",
+          "client": "http",
+          "status": "ok",
+          "width": 20,
+          "method": "20 calls started together; wall time until all returned typed data; 3 warm-up rounds",
+          "samples": 20,
+          "p50_ms": 54,
+          "p95_ms": 76,
+          "mean_ms": 56.235,
+          "min_ms": 42.7,
+          "max_ms": 88.6
+        }
+      ],
+      "offline": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "cached_repeat_list_1000",
+          "client": "axiom",
+          "status": "ok",
+          "policy": "contract cacheFirst ttl 10m",
+          "samples": 20,
+          "p50_ms": 3.7,
+          "p95_ms": 5.2,
+          "mean_ms": 3.945,
+          "min_ms": 3.4,
+          "max_ms": 7.3
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "offline_first_data_list_1000",
+          "client": "axiom",
+          "status": "ok",
+          "method": "server drops every data connection without a response; time to typed data",
+          "samples": 20,
+          "p50_ms": 3.599,
+          "p95_ms": 4.6,
+          "mean_ms": 3.83,
+          "min_ms": 3.4,
+          "max_ms": 6.9
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "cached_repeat_list_1000",
+          "client": "dio_cache_interceptor",
+          "status": "ok",
+          "policy": "refreshForceCache (network first, cache stored)",
+          "samples": 20,
+          "p50_ms": 4.8,
+          "p95_ms": 5.801,
+          "mean_ms": 4.985,
+          "min_ms": 4.5,
+          "max_ms": 7.2
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "offline_first_data_list_1000",
+          "client": "dio_cache_interceptor",
+          "status": "ok",
+          "method": "server drops every data connection without a response; time to typed data",
+          "samples": 20,
+          "p50_ms": 4.5,
+          "p95_ms": 6.799,
+          "mean_ms": 4.74,
+          "min_ms": 4.1,
+          "max_ms": 8.7
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "cached_repeat_list_1000",
+          "client": "http",
+          "status": "ok",
+          "policy": "no cache (network call)",
+          "samples": 20,
+          "p50_ms": 2.899,
+          "p95_ms": 3.201,
+          "mean_ms": 3.05,
+          "min_ms": 2.6,
+          "max_ms": 5.4
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "offline_first_data_list_1000",
+          "client": "http",
+          "status": "no_data",
+          "method": "server drops every data connection without a response; time to typed data",
+          "note": "ClientException: Failed to fetch, uri=http://127.0.0.1:8771/items?n=1000"
+        }
+      ],
+      "jank": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "idle",
+          "status": "ok",
+          "method": "1 ms periodic timer on the UI isolate during fetch + decode to typed models; p50_ms/p95_ms/max_ms are over the per-call longest gap between ticks",
+          "samples": 10,
+          "p50_ms": 4.401,
+          "p95_ms": 5.099,
+          "mean_ms": 4.53,
+          "min_ms": 4.301,
+          "max_ms": 5.099,
+          "longest_stall_ms": 5.099,
+          "wall_p50_ms": 100.6,
+          "stall_over_16ms_p50_ms": 0,
+          "gaps_over_16ms_total": 0
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "axiom",
+          "status": "ok",
+          "method": "1 ms periodic timer on the UI isolate during fetch + decode to typed models; p50_ms/p95_ms/max_ms are over the per-call longest gap between ticks",
+          "samples": 10,
+          "p50_ms": 11.701,
+          "p95_ms": 12.9,
+          "mean_ms": 12.12,
+          "min_ms": 11.5,
+          "max_ms": 12.9,
+          "longest_stall_ms": 12.9,
+          "wall_p50_ms": 15.6,
+          "stall_over_16ms_p50_ms": 0,
+          "gaps_over_16ms_total": 0
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "dio",
+          "status": "ok",
+          "method": "1 ms periodic timer on the UI isolate during fetch + decode to typed models; p50_ms/p95_ms/max_ms are over the per-call longest gap between ticks",
+          "samples": 10,
+          "p50_ms": 13,
+          "p95_ms": 21.2,
+          "mean_ms": 13.53,
+          "min_ms": 8.899,
+          "max_ms": 21.2,
+          "longest_stall_ms": 21.2,
+          "wall_p50_ms": 17.7,
+          "stall_over_16ms_p50_ms": 0,
+          "gaps_over_16ms_total": 0
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "dio_compute",
+          "status": "ok",
+          "method": "1 ms periodic timer on the UI isolate during fetch + decode to typed models; p50_ms/p95_ms/max_ms are over the per-call longest gap between ticks",
+          "samples": 10,
+          "p50_ms": 13.899,
+          "p95_ms": 24,
+          "mean_ms": 15.04,
+          "min_ms": 12.899,
+          "max_ms": 24,
+          "longest_stall_ms": 24,
+          "wall_p50_ms": 17.201,
+          "stall_over_16ms_p50_ms": 0,
+          "gaps_over_16ms_total": 0
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "http",
+          "status": "ok",
+          "method": "1 ms periodic timer on the UI isolate during fetch + decode to typed models; p50_ms/p95_ms/max_ms are over the per-call longest gap between ticks",
+          "samples": 10,
+          "p50_ms": 9.8,
+          "p95_ms": 11.1,
+          "mean_ms": 9.85,
+          "min_ms": 9,
+          "max_ms": 11.1,
+          "longest_stall_ms": 11.1,
+          "wall_p50_ms": 12.901,
+          "stall_over_16ms_p50_ms": 0,
+          "gaps_over_16ms_total": 0
+        }
+      ],
+      "ttfi": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "http_ndjson",
+          "status": "ok",
+          "method": "NDJSON route, first line decoded to a typed item, rest of the stream abandoned",
+          "samples": 10,
+          "p50_ms": 3.5,
+          "p95_ms": 8.1,
+          "mean_ms": 3.85,
+          "min_ms": 2.7,
+          "max_ms": 8.1
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "dio_ndjson",
+          "status": "ok",
+          "method": "NDJSON route, first line decoded to a typed item, rest of the stream abandoned",
+          "samples": 10,
+          "p50_ms": 24.3,
+          "p95_ms": 27.7,
+          "mean_ms": 24.18,
+          "min_ms": 22.6,
+          "max_ms": 27.7
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "list_10000",
+          "client": "axiom",
+          "status": "not_available",
+          "note": "the generated client has no streaming list call on this branch (runtime callStream exists, but no contract endpoint exposes the list as a stream); Axiom first item = full-list latency"
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "list_10000",
+          "client": "http_ndjson",
+          "status": "ok",
+          "method": "NDJSON route, first line decoded to a typed item, rest of the stream abandoned",
+          "samples": 10,
+          "p50_ms": 11.2,
+          "p95_ms": 13.4,
+          "mean_ms": 11.26,
+          "min_ms": 8.8,
+          "max_ms": 13.4
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "list_10000",
+          "client": "dio_ndjson",
+          "status": "ok",
+          "method": "NDJSON route, first line decoded to a typed item, rest of the stream abandoned",
+          "samples": 10,
+          "p50_ms": 33.1,
+          "p95_ms": 36.4,
+          "mean_ms": 33.73,
+          "min_ms": 32,
+          "max_ms": 36.4
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "list_10000",
+          "client": "axiom",
+          "status": "not_available",
+          "note": "the generated client has no streaming list call on this branch (runtime callStream exists, but no contract endpoint exposes the list as a stream); Axiom first item = full-list latency"
+        }
+      ],
+      "clients": [
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_get_item",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 2.5,
+          "p95_ms": 3.6,
+          "mean_ms": 2.735,
+          "min_ms": 1.799,
+          "max_ms": 31.699
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_get_item",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 1.701,
+          "p95_ms": 2.399,
+          "mean_ms": 1.805,
+          "min_ms": 1.5,
+          "max_ms": 6.1
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "small_get_item",
+          "client": "http",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 1.601,
+          "p95_ms": 2,
+          "mean_ms": 1.689,
+          "min_ms": 1.4,
+          "max_ms": 2.2
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_1000",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 3.3,
+          "p95_ms": 3.8,
+          "mean_ms": 3.362,
+          "min_ms": 2.901,
+          "max_ms": 4.8
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_1000",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 3.3,
+          "p95_ms": 7.4,
+          "mean_ms": 3.699,
+          "min_ms": 3,
+          "max_ms": 14.5
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_1000",
+          "client": "dio_compute",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 3.3,
+          "p95_ms": 4.101,
+          "mean_ms": 3.362,
+          "min_ms": 2.901,
+          "max_ms": 4.8
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_1000",
+          "client": "http",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 2.9,
+          "p95_ms": 3.599,
+          "mean_ms": 2.999,
+          "min_ms": 2.6,
+          "max_ms": 5
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_10000",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 16.1,
+          "p95_ms": 22.2,
+          "mean_ms": 16.682,
+          "min_ms": 14.601,
+          "max_ms": 26.699
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_10000",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 17.8,
+          "p95_ms": 24.4,
+          "mean_ms": 19.966,
+          "min_ms": 16.899,
+          "max_ms": 36.8
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_10000",
+          "client": "dio_compute",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 17.7,
+          "p95_ms": 20,
+          "mean_ms": 18,
+          "min_ms": 16.301,
+          "max_ms": 22.6
+        },
+        {
+          "mode": "release",
+          "proto": "h1",
+          "case": "large_list_10000",
+          "client": "http",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 13.2,
+          "p95_ms": 15.1,
+          "mean_ms": 13.634,
+          "min_ms": 12.2,
+          "max_ms": 22.101
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "small_get_item",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 3.3,
+          "p95_ms": 4.4,
+          "mean_ms": 3.387,
+          "min_ms": 2.7,
+          "max_ms": 6.2
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "small_get_item",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 2,
+          "p95_ms": 2.6,
+          "mean_ms": 2.038,
+          "min_ms": 1.7,
+          "max_ms": 3.3
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "small_get_item",
+          "client": "http",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 1.9,
+          "p95_ms": 2.4,
+          "mean_ms": 1.953,
+          "min_ms": 1.6,
+          "max_ms": 3.3
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_1000",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 5.2,
+          "p95_ms": 6.4,
+          "mean_ms": 5.372,
+          "min_ms": 4.7,
+          "max_ms": 18.9
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_1000",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 4.4,
+          "p95_ms": 7.9,
+          "mean_ms": 4.879,
+          "min_ms": 4.1,
+          "max_ms": 22.1
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_1000",
+          "client": "dio_compute",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 4.5,
+          "p95_ms": 5.1,
+          "mean_ms": 4.629,
+          "min_ms": 4,
+          "max_ms": 11
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_1000",
+          "client": "http",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 200,
+          "p50_ms": 4,
+          "p95_ms": 4.8,
+          "mean_ms": 4.075,
+          "min_ms": 3.6,
+          "max_ms": 6.6
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_10000",
+          "client": "axiom",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 25.9,
+          "p95_ms": 32.4,
+          "mean_ms": 26.846,
+          "min_ms": 24.5,
+          "max_ms": 47.1
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_10000",
+          "client": "dio",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 29.6,
+          "p95_ms": 39,
+          "mean_ms": 30.094,
+          "min_ms": 25.1,
+          "max_ms": 40.3
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_10000",
+          "client": "dio_compute",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 27.1,
+          "p95_ms": 32.3,
+          "mean_ms": 27.72,
+          "min_ms": 25.2,
+          "max_ms": 38.1
+        },
+        {
+          "mode": "release",
+          "proto": "h2",
+          "case": "large_list_10000",
+          "client": "http",
+          "status": "ok",
+          "warmup": 10,
+          "samples": 50,
+          "p50_ms": 23.5,
+          "p95_ms": 25,
+          "mean_ms": 23.908,
+          "min_ms": 22,
+          "max_ms": 40.6
+        }
+      ],
+      "mode": "release"
+    }
+  ],
+  "web_stats": {
+    "rule": "median of 3 run medians; publishable if (max-min)/median <= 10%",
+    "stable_count": 60,
+    "total": 94,
+    "metrics": {
+      "cold first_data axiom": {
+        "runs": [
+          259.4,
+          259.4,
+          261.8
+        ],
+        "median": 259.4,
+        "unit": "ms",
+        "spread_pct": 0.9,
+        "stable": true
+      },
+      "cold init axiom": {
+        "runs": [
+          247.4,
+          247.4,
+          250.6
+        ],
+        "median": 247.4,
+        "unit": "ms",
+        "spread_pct": 1.3,
+        "stable": true
+      },
+      "cold first_data dio": {
+        "runs": [
+          219.4,
+          222.7,
+          216.8
+        ],
+        "median": 219.4,
+        "unit": "ms",
+        "spread_pct": 2.7,
+        "stable": true
+      },
+      "cold init dio": {
+        "runs": [
+          0.3,
+          0.4,
+          0.4
+        ],
+        "median": 0.4,
+        "unit": "ms",
+        "spread_pct": 25.0,
+        "stable": false
+      },
+      "cold first_data http": {
+        "runs": [
+          215,
+          224.6,
+          214.6
+        ],
+        "median": 215,
+        "unit": "ms",
+        "spread_pct": 4.7,
+        "stable": true
+      },
+      "cold init http": {
+        "runs": [
+          0,
+          0.1,
+          0
+        ],
+        "median": 0,
+        "unit": "ms",
+        "spread_pct": null,
+        "stable": false
+      },
+      "latency small_get_item axiom p50": {
+        "runs": [
+          3,
+          2.701,
+          2.7
+        ],
+        "median": 2.701,
+        "unit": "ms",
+        "spread_pct": 11.1,
+        "stable": false
+      },
+      "latency small_get_item axiom p95": {
+        "runs": [
+          4,
+          3.701,
+          3.3
+        ],
+        "median": 3.701,
+        "unit": "ms",
+        "spread_pct": 18.9,
+        "stable": false
+      },
+      "latency small_get_item dio p50": {
+        "runs": [
+          2,
+          1.801,
+          1.8
+        ],
+        "median": 1.801,
+        "unit": "ms",
+        "spread_pct": 11.1,
+        "stable": false
+      },
+      "latency small_get_item dio p95": {
+        "runs": [
+          2.5,
+          2.4,
+          2.5
+        ],
+        "median": 2.5,
+        "unit": "ms",
+        "spread_pct": 4.0,
+        "stable": true
+      },
+      "latency small_get_item http p50": {
+        "runs": [
+          1.901,
+          1.701,
+          1.7
+        ],
+        "median": 1.701,
+        "unit": "ms",
+        "spread_pct": 11.8,
+        "stable": false
+      },
+      "latency small_get_item http p95": {
+        "runs": [
+          2.301,
+          2.299,
+          2
+        ],
+        "median": 2.299,
+        "unit": "ms",
+        "spread_pct": 13.1,
+        "stable": false
+      },
+      "latency small_create_item axiom p50": {
+        "runs": [
+          2.101,
+          2,
+          1.801
+        ],
+        "median": 2,
+        "unit": "ms",
+        "spread_pct": 15.0,
+        "stable": false
+      },
+      "latency small_create_item axiom p95": {
+        "runs": [
+          2.5,
+          2.5,
+          2.3
+        ],
+        "median": 2.5,
+        "unit": "ms",
+        "spread_pct": 8.0,
+        "stable": true
+      },
+      "latency small_create_item dio p50": {
+        "runs": [
+          2.2,
+          1.899,
+          1.8
+        ],
+        "median": 1.899,
+        "unit": "ms",
+        "spread_pct": 21.1,
+        "stable": false
+      },
+      "latency small_create_item dio p95": {
+        "runs": [
+          2.699,
+          2.201,
+          2.201
+        ],
+        "median": 2.201,
+        "unit": "ms",
+        "spread_pct": 22.6,
+        "stable": false
+      },
+      "latency small_create_item http p50": {
+        "runs": [
+          1.9,
+          1.699,
+          1.6
+        ],
+        "median": 1.699,
+        "unit": "ms",
+        "spread_pct": 17.7,
+        "stable": false
+      },
+      "latency small_create_item http p95": {
+        "runs": [
+          2.4,
+          1.901,
+          1.9
+        ],
+        "median": 1.901,
+        "unit": "ms",
+        "spread_pct": 26.3,
+        "stable": false
+      },
+      "latency large_list_1000 axiom p50": {
+        "runs": [
+          3.5,
+          3.4,
+          3.3
+        ],
+        "median": 3.4,
+        "unit": "ms",
+        "spread_pct": 5.9,
+        "stable": true
+      },
+      "latency large_list_1000 axiom p95": {
+        "runs": [
+          4.299,
+          4.099,
+          4.1
+        ],
+        "median": 4.1,
+        "unit": "ms",
+        "spread_pct": 4.9,
+        "stable": true
+      },
+      "latency large_list_1000 dio p50": {
+        "runs": [
+          3.4,
+          3.4,
+          3.201
+        ],
+        "median": 3.4,
+        "unit": "ms",
+        "spread_pct": 5.9,
+        "stable": true
+      },
+      "latency large_list_1000 dio p95": {
+        "runs": [
+          7.101,
+          6.4,
+          7
+        ],
+        "median": 7,
+        "unit": "ms",
+        "spread_pct": 10.0,
+        "stable": false
+      },
+      "latency large_list_1000 http p50": {
+        "runs": [
+          3,
+          2.9,
+          2.9
+        ],
+        "median": 2.9,
+        "unit": "ms",
+        "spread_pct": 3.4,
+        "stable": true
+      },
+      "latency large_list_1000 http p95": {
+        "runs": [
+          3.9,
+          3.6,
+          3.599
+        ],
+        "median": 3.6,
+        "unit": "ms",
+        "spread_pct": 8.4,
+        "stable": true
+      },
+      "latency large_list_10000 axiom p50": {
+        "runs": [
+          15.299,
+          15.4,
+          15.5
+        ],
+        "median": 15.4,
+        "unit": "ms",
+        "spread_pct": 1.3,
+        "stable": true
+      },
+      "latency large_list_10000 axiom p95": {
+        "runs": [
+          17.101,
+          17.2,
+          17.9
+        ],
+        "median": 17.2,
+        "unit": "ms",
+        "spread_pct": 4.6,
+        "stable": true
+      },
+      "latency large_list_10000 dio p50": {
+        "runs": [
+          18.9,
+          18.301,
+          17.6
+        ],
+        "median": 18.301,
+        "unit": "ms",
+        "spread_pct": 7.1,
+        "stable": true
+      },
+      "latency large_list_10000 dio p95": {
+        "runs": [
+          25,
+          25.5,
+          25.2
+        ],
+        "median": 25.2,
+        "unit": "ms",
+        "spread_pct": 2.0,
+        "stable": true
+      },
+      "latency large_list_10000 http p50": {
+        "runs": [
+          13.1,
+          12.701,
+          12.5
+        ],
+        "median": 12.701,
+        "unit": "ms",
+        "spread_pct": 4.7,
+        "stable": true
+      },
+      "latency large_list_10000 http p95": {
+        "runs": [
+          15.099,
+          14.301,
+          13.5
+        ],
+        "median": 14.301,
+        "unit": "ms",
+        "spread_pct": 11.2,
+        "stable": false
+      },
+      "clients small_get_item axiom p50": {
+        "runs": [
+          2.701,
+          2.5,
+          2.5
+        ],
+        "median": 2.5,
+        "unit": "ms",
+        "spread_pct": 8.0,
+        "stable": true
+      },
+      "clients small_get_item dio p50": {
+        "runs": [
+          1.8,
+          1.701,
+          1.701
+        ],
+        "median": 1.701,
+        "unit": "ms",
+        "spread_pct": 5.8,
+        "stable": true
+      },
+      "clients small_get_item http p50": {
+        "runs": [
+          1.699,
+          1.6,
+          1.601
+        ],
+        "median": 1.601,
+        "unit": "ms",
+        "spread_pct": 6.2,
+        "stable": true
+      },
+      "clients large_list_1000 axiom p50": {
+        "runs": [
+          3.301,
+          3.299,
+          3.3
+        ],
+        "median": 3.3,
+        "unit": "ms",
+        "spread_pct": 0.1,
+        "stable": true
+      },
+      "clients large_list_1000 dio p50": {
+        "runs": [
+          3.3,
+          3.3,
+          3.3
+        ],
+        "median": 3.3,
+        "unit": "ms",
+        "spread_pct": 0.0,
+        "stable": true
+      },
+      "clients large_list_1000 dio_compute p50": {
+        "runs": [
+          3.4,
+          3.301,
+          3.3
+        ],
+        "median": 3.301,
+        "unit": "ms",
+        "spread_pct": 3.0,
+        "stable": true
+      },
+      "clients large_list_1000 http p50": {
+        "runs": [
+          2.901,
+          2.9,
+          2.9
+        ],
+        "median": 2.9,
+        "unit": "ms",
+        "spread_pct": 0.0,
+        "stable": true
+      },
+      "clients large_list_10000 axiom p50": {
+        "runs": [
+          15.399,
+          15.4,
+          16.1
+        ],
+        "median": 15.4,
+        "unit": "ms",
+        "spread_pct": 4.6,
+        "stable": true
+      },
+      "clients large_list_10000 dio p50": {
+        "runs": [
+          19.301,
+          19.7,
+          17.8
+        ],
+        "median": 19.301,
+        "unit": "ms",
+        "spread_pct": 9.8,
+        "stable": true
+      },
+      "clients large_list_10000 dio_compute p50": {
+        "runs": [
+          17.601,
+          17.5,
+          17.7
+        ],
+        "median": 17.601,
+        "unit": "ms",
+        "spread_pct": 1.1,
+        "stable": true
+      },
+      "clients large_list_10000 http p50": {
+        "runs": [
+          12.9,
+          13,
+          13.2
+        ],
+        "median": 13,
+        "unit": "ms",
+        "spread_pct": 2.3,
+        "stable": true
+      },
+      "clients small_get_item axiom p50 [h2]": {
+        "runs": [
+          3.199,
+          2.901,
+          3.3
+        ],
+        "median": 3.199,
+        "unit": "ms",
+        "spread_pct": 12.5,
+        "stable": false
+      },
+      "clients small_get_item dio p50 [h2]": {
+        "runs": [
+          2.199,
+          2,
+          2
+        ],
+        "median": 2,
+        "unit": "ms",
+        "spread_pct": 9.9,
+        "stable": true
+      },
+      "clients small_get_item http p50 [h2]": {
+        "runs": [
+          2,
+          2,
+          1.9
+        ],
+        "median": 2,
+        "unit": "ms",
+        "spread_pct": 5.0,
+        "stable": true
+      },
+      "clients large_list_1000 axiom p50 [h2]": {
+        "runs": [
+          5.5,
+          5.199,
+          5.2
+        ],
+        "median": 5.2,
+        "unit": "ms",
+        "spread_pct": 5.8,
+        "stable": true
+      },
+      "clients large_list_1000 dio p50 [h2]": {
+        "runs": [
+          4.5,
+          4.401,
+          4.4
+        ],
+        "median": 4.401,
+        "unit": "ms",
+        "spread_pct": 2.3,
+        "stable": true
+      },
+      "clients large_list_1000 dio_compute p50 [h2]": {
+        "runs": [
+          4.5,
+          4.5,
+          4.5
+        ],
+        "median": 4.5,
+        "unit": "ms",
+        "spread_pct": 0.0,
+        "stable": true
+      },
+      "clients large_list_1000 http p50 [h2]": {
+        "runs": [
+          4,
+          4,
+          4
+        ],
+        "median": 4,
+        "unit": "ms",
+        "spread_pct": 0.0,
+        "stable": true
+      },
+      "clients large_list_10000 axiom p50 [h2]": {
+        "runs": [
+          26.199,
+          26.201,
+          25.9
+        ],
+        "median": 26.199,
+        "unit": "ms",
+        "spread_pct": 1.1,
+        "stable": true
+      },
+      "clients large_list_10000 dio p50 [h2]": {
+        "runs": [
+          31.201,
+          28.7,
+          29.6
+        ],
+        "median": 29.6,
+        "unit": "ms",
+        "spread_pct": 8.4,
+        "stable": true
+      },
+      "clients large_list_10000 dio_compute p50 [h2]": {
+        "runs": [
+          27,
+          26.9,
+          27.1
+        ],
+        "median": 27,
+        "unit": "ms",
+        "spread_pct": 0.7,
+        "stable": true
+      },
+      "clients large_list_10000 http p50 [h2]": {
+        "runs": [
+          23.399,
+          23.799,
+          23.5
+        ],
+        "median": 23.5,
+        "unit": "ms",
+        "spread_pct": 1.7,
+        "stable": true
+      },
+      "parallel parallel20_get_item axiom p50": {
+        "runs": [
+          34.5,
+          31.799,
+          31.5
+        ],
+        "median": 31.799,
+        "unit": "ms",
+        "spread_pct": 9.4,
+        "stable": true
+      },
+      "parallel parallel20_get_item dio p50": {
+        "runs": [
+          23.701,
+          21.801,
+          20.901
+        ],
+        "median": 21.801,
+        "unit": "ms",
+        "spread_pct": 12.8,
+        "stable": false
+      },
+      "parallel parallel20_get_item http p50": {
+        "runs": [
+          21.199,
+          16.801,
+          19.399
+        ],
+        "median": 19.399,
+        "unit": "ms",
+        "spread_pct": 22.7,
+        "stable": false
+      },
+      "parallel parallel20_list_1000 axiom p50": {
+        "runs": [
+          40.299,
+          40.4,
+          38.8
+        ],
+        "median": 40.299,
+        "unit": "ms",
+        "spread_pct": 4.0,
+        "stable": true
+      },
+      "parallel parallel20_list_1000 dio p50": {
+        "runs": [
+          46.601,
+          47.4,
+          48.9
+        ],
+        "median": 47.4,
+        "unit": "ms",
+        "spread_pct": 4.9,
+        "stable": true
+      },
+      "parallel parallel20_list_1000 dio_compute p50": {
+        "runs": [
+          43,
+          43.1,
+          43.5
+        ],
+        "median": 43.1,
+        "unit": "ms",
+        "spread_pct": 1.2,
+        "stable": true
+      },
+      "parallel parallel20_list_1000 http p50": {
+        "runs": [
+          35.1,
+          36,
+          35.901
+        ],
+        "median": 35.901,
+        "unit": "ms",
+        "spread_pct": 2.5,
+        "stable": true
+      },
+      "parallel parallel20_get_item axiom p50 [h2]": {
+        "runs": [
+          33.5,
+          27.201,
+          28.8
+        ],
+        "median": 28.8,
+        "unit": "ms",
+        "spread_pct": 21.9,
+        "stable": false
+      },
+      "parallel parallel20_get_item dio p50 [h2]": {
+        "runs": [
+          17.2,
+          17.4,
+          17.7
+        ],
+        "median": 17.4,
+        "unit": "ms",
+        "spread_pct": 2.9,
+        "stable": true
+      },
+      "parallel parallel20_get_item http p50 [h2]": {
+        "runs": [
+          16.599,
+          15.3,
+          15.2
+        ],
+        "median": 15.3,
+        "unit": "ms",
+        "spread_pct": 9.1,
+        "stable": true
+      },
+      "parallel parallel20_list_1000 axiom p50 [h2]": {
+        "runs": [
+          63.5,
+          56.601,
+          59.2
+        ],
+        "median": 59.2,
+        "unit": "ms",
+        "spread_pct": 11.7,
+        "stable": false
+      },
+      "parallel parallel20_list_1000 dio p50 [h2]": {
+        "runs": [
+          104.201,
+          57.201,
+          55.1
+        ],
+        "median": 57.201,
+        "unit": "ms",
+        "spread_pct": 85.8,
+        "stable": false
+      },
+      "parallel parallel20_list_1000 dio_compute p50 [h2]": {
+        "runs": [
+          61.3,
+          52.701,
+          49.8
+        ],
+        "median": 52.701,
+        "unit": "ms",
+        "spread_pct": 21.8,
+        "stable": false
+      },
+      "parallel parallel20_list_1000 http p50 [h2]": {
+        "runs": [
+          56.299,
+          55.799,
+          54
+        ],
+        "median": 55.799,
+        "unit": "ms",
+        "spread_pct": 4.1,
+        "stable": true
+      },
+      "offline cached_repeat_list_1000 axiom p50": {
+        "runs": [
+          3.5,
+          3.5,
+          3.7
+        ],
+        "median": 3.5,
+        "unit": "ms",
+        "spread_pct": 5.7,
+        "stable": true
+      },
+      "offline offline_first_data_list_1000 axiom p50": {
+        "runs": [
+          3.4,
+          3.401,
+          3.599
+        ],
+        "median": 3.401,
+        "unit": "ms",
+        "spread_pct": 5.9,
+        "stable": true
+      },
+      "offline cached_repeat_list_1000 dio_cache_interceptor p50": {
+        "runs": [
+          4.701,
+          4.799,
+          4.8
+        ],
+        "median": 4.799,
+        "unit": "ms",
+        "spread_pct": 2.1,
+        "stable": true
+      },
+      "offline offline_first_data_list_1000 dio_cache_interceptor p50": {
+        "runs": [
+          5.5,
+          4.6,
+          4.5
+        ],
+        "median": 4.6,
+        "unit": "ms",
+        "spread_pct": 21.7,
+        "stable": false
+      },
+      "offline cached_repeat_list_1000 http p50": {
+        "runs": [
+          3.6,
+          3,
+          2.899
+        ],
+        "median": 3,
+        "unit": "ms",
+        "spread_pct": 23.4,
+        "stable": false
+      },
+      "jank list_10000 idle longest_gap_p50": {
+        "runs": [
+          4.401,
+          4.401,
+          4.401
+        ],
+        "median": 4.401,
+        "unit": "ms",
+        "spread_pct": 0.0,
+        "stable": true
+      },
+      "jank list_10000 axiom longest_gap_p50": {
+        "runs": [
+          11.699,
+          11.199,
+          11.701
+        ],
+        "median": 11.699,
+        "unit": "ms",
+        "spread_pct": 4.3,
+        "stable": true
+      },
+      "jank list_10000 dio longest_gap_p50": {
+        "runs": [
+          15.5,
+          14.5,
+          13
+        ],
+        "median": 14.5,
+        "unit": "ms",
+        "spread_pct": 17.2,
+        "stable": false
+      },
+      "jank list_10000 dio_compute longest_gap_p50": {
+        "runs": [
+          14,
+          14.5,
+          13.899
+        ],
+        "median": 14,
+        "unit": "ms",
+        "spread_pct": 4.3,
+        "stable": true
+      },
+      "jank list_10000 http longest_gap_p50": {
+        "runs": [
+          10.4,
+          9.9,
+          9.8
+        ],
+        "median": 9.9,
+        "unit": "ms",
+        "spread_pct": 6.1,
+        "stable": true
+      },
+      "ttfi list_10000 http_ndjson p50": {
+        "runs": [
+          3.9,
+          4.299,
+          3.5
+        ],
+        "median": 3.9,
+        "unit": "ms",
+        "spread_pct": 20.5,
+        "stable": false
+      },
+      "ttfi list_10000 dio_ndjson p50": {
+        "runs": [
+          24.199,
+          24.199,
+          24.3
+        ],
+        "median": 24.199,
+        "unit": "ms",
+        "spread_pct": 0.4,
+        "stable": true
+      },
+      "ttfi list_10000 http_ndjson p50 [h2]": {
+        "runs": [
+          10.9,
+          10.299,
+          11.2
+        ],
+        "median": 10.9,
+        "unit": "ms",
+        "spread_pct": 8.3,
+        "stable": true
+      },
+      "ttfi list_10000 dio_ndjson p50 [h2]": {
+        "runs": [
+          33.5,
+          34.399,
+          33.1
+        ],
+        "median": 33.5,
+        "unit": "ms",
+        "spread_pct": 3.9,
+        "stable": true
+      },
+      "cache repeat_list_1000 axiom p50": {
+        "runs": [
+          3.599,
+          3.401,
+          3.5
+        ],
+        "median": 3.5,
+        "unit": "ms",
+        "spread_pct": 5.7,
+        "stable": true
+      },
+      "cache repeat_list_1000 axiom p95": {
+        "runs": [
+          4.599,
+          4.1,
+          4.4
+        ],
+        "median": 4.4,
+        "unit": "ms",
+        "spread_pct": 11.3,
+        "stable": false
+      },
+      "cache repeat_list_1000 dio_cache_interceptor p50": {
+        "runs": [
+          24.1,
+          24.699,
+          24.899
+        ],
+        "median": 24.699,
+        "unit": "ms",
+        "spread_pct": 3.2,
+        "stable": true
+      },
+      "cache repeat_list_1000 dio_cache_interceptor p95": {
+        "runs": [
+          25.699,
+          29.4,
+          29
+        ],
+        "median": 29,
+        "unit": "ms",
+        "spread_pct": 12.8,
+        "stable": false
+      },
+      "decode 1000 json_only p50": {
+        "runs": [
+          0.4,
+          0.4,
+          0.301
+        ],
+        "median": 0.4,
+        "unit": "ms",
+        "spread_pct": 24.8,
+        "stable": false
+      },
+      "decode 1000 axiom_generated p50": {
+        "runs": [
+          1,
+          1.1,
+          0.8
+        ],
+        "median": 1,
+        "unit": "ms",
+        "spread_pct": 30.0,
+        "stable": false
+      },
+      "decode 1000 json_serializable p50": {
+        "runs": [
+          1.4,
+          1.5,
+          1.7
+        ],
+        "median": 1.5,
+        "unit": "ms",
+        "spread_pct": 20.0,
+        "stable": false
+      },
+      "decode 1000 manual_fromJson p50": {
+        "runs": [
+          1,
+          0.8,
+          0.9
+        ],
+        "median": 0.9,
+        "unit": "ms",
+        "spread_pct": 22.2,
+        "stable": false
+      },
+      "decode 10000 json_only p50": {
+        "runs": [
+          4.6,
+          4.201,
+          4.099
+        ],
+        "median": 4.201,
+        "unit": "ms",
+        "spread_pct": 11.9,
+        "stable": false
+      },
+      "decode 10000 axiom_generated p50": {
+        "runs": [
+          8.799,
+          8.599,
+          8.699
+        ],
+        "median": 8.699,
+        "unit": "ms",
+        "spread_pct": 2.3,
+        "stable": true
+      },
+      "decode 10000 json_serializable p50": {
+        "runs": [
+          13.401,
+          13.2,
+          13.199
+        ],
+        "median": 13.2,
+        "unit": "ms",
+        "spread_pct": 1.5,
+        "stable": true
+      },
+      "decode 10000 manual_fromJson p50": {
+        "runs": [
+          9.799,
+          9.5,
+          9.1
+        ],
+        "median": 9.5,
+        "unit": "ms",
+        "spread_pct": 7.4,
+        "stable": true
+      },
+      "ws echo web_socket_channel round_trips_per_s": {
+        "runs": [
+          4051.864,
+          4336.532,
+          4599.837
+        ],
+        "median": 4336.532,
+        "unit": "/s",
+        "spread_pct": 12.6,
+        "stable": false
+      },
+      "ws echo axiom round_trips_per_s": {
+        "runs": [
+          3615.329,
+          1794.044,
+          2692.515
+        ],
+        "median": 2692.515,
+        "unit": "/s",
+        "spread_pct": 67.6,
+        "stable": false
+      }
+    }
+  },
+  "runtime": "axiom-runtime flutter/perf c600a8d: lean runtime bundled by axiom_flutter (web wasm); VM: /home/node/fp/artifacts/final/lean/linux-x64/libaxiom_runtime.so",
+  "box": "lane-3 (4 vCPU gVisor container); idle checked with top before the runs (load average 0.00); other units stopped at 20:05 UTC"
+}

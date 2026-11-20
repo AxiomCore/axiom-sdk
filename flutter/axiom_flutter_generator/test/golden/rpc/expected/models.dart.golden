@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// axiom_flutter_generator 0.150.0
+// axiom_flutter_generator 0.150.1
 // rpc: rpc-obs-test 1.0.0 variant default schema 6373ae1b80de
 
 import 'dart:convert';
@@ -86,12 +86,16 @@ abstract final class AxiomGeneratedCodec {
 
   static String bytesToJson(Uint8List v) => base64Encode(v);
 
+  /// jsonDecode already returns `Map<String, dynamic>`: use it directly (a
+  /// `cast` view re-checks every key and value on each read).
   static Map<String, dynamic> asObject(Object? v) =>
-      (v as Map).cast<String, dynamic>();
+      v is Map<String, dynamic> ? v : (v as Map).cast<String, dynamic>();
 
-  static List<T> asList<T>(Object? v, T Function(Object?) item) => [
-    for (final e in v as List) item(e),
-  ];
+  /// Built with its final length known (no regrowth while decoding).
+  static List<T> asList<T>(Object? v, T Function(Object?) item) {
+    final l = v as List;
+    return List<T>.generate(l.length, (i) => item(l[i]));
+  }
 
   static Map<String, T> asMap<T>(Object? v, T Function(Object?) value) => {
     for (final e in (v as Map).entries) e.key as String: value(e.value),
@@ -182,7 +186,7 @@ class CollectionRequest {
     final map = AxiomGeneratedCodec.asObject(json);
     return CollectionRequest(
       maxResults: AxiomGeneratedCodec.asInt(map['max_results']),
-      personId: AxiomGeneratedCodec.asString(map['person_id']),
+      personId: (map['person_id'] as String),
     );
   }
 
@@ -243,10 +247,7 @@ class Person {
 
   factory Person.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
-    return Person(
-      id: AxiomGeneratedCodec.asString(map['id']),
-      name: AxiomGeneratedCodec.asString(map['name']),
-    );
+    return Person(id: (map['id'] as String), name: (map['name'] as String));
   }
 
   final String id;

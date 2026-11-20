@@ -40,15 +40,27 @@ def machine():
             if "gvisor" in platform.release().lower() else ""}
 
 
+# Scenarios added by unit bench2 (app/lib/bench_extra.dart).
+EXTRA_BENCHES = ("parallel", "offline", "jank", "ttfi", "clients")
+
+
+def _sfx(x):
+    """Metric-key suffix for non-default protocols (h1 keys stay as before for history)."""
+    p = x.get("proto") or "h1"
+    return "" if p == "h1" else f" [{p}]"
+
+
 def web_summary(path):
     recs = [json.loads(l) for l in open(path) if l.strip()]
     out = {"cold": {}, "latency": [], "cache": [], "decode": [], "ws": [], "errors": []}
+    for b in EXTRA_BENCHES:
+        out[b] = []
     cold = {}
     for r in recs:
         b = r.get("bench")
         if b == "cold":
             cold.setdefault(r["client"], []).append(r)
-        elif b in ("latency", "cache", "decode", "ws"):
+        elif b in ("latency", "cache", "decode", "ws") + EXTRA_BENCHES and r.get("status") != "error":
             out[b].append({k: v for k, v in r.items() if k not in ("run", "platform", "bench")})
         elif r.get("status") == "error":
             out["errors"].append(r)
@@ -93,8 +105,20 @@ def _metrics(w):
         d[f"cold first_data {c}"] = (v["median_ms"], "ms")
         d[f"cold init {c}"] = (v["init_median_ms"], "ms")
     for x in w["latency"]:
-        d[f"latency {x['case']} {x['client']} p50"] = (x.get("p50_ms"), "ms")
-        d[f"latency {x['case']} {x['client']} p95"] = (x.get("p95_ms"), "ms")
+        d[f"latency {x['case']} {x['client']} p50{_sfx(x)}"] = (x.get("p50_ms"), "ms")
+        d[f"latency {x['case']} {x['client']} p95{_sfx(x)}"] = (x.get("p95_ms"), "ms")
+    for x in w.get("clients", []):
+        d[f"clients {x['case']} {x['client']} p50{_sfx(x)}"] = (x.get("p50_ms"), "ms")
+    for x in w.get("parallel", []):
+        d[f"parallel {x['case']} {x['client']} p50{_sfx(x)}"] = (x.get("p50_ms"), "ms")
+    for x in w.get("offline", []):
+        if x.get("status") == "ok":
+            d[f"offline {x['case']} {x['client']} p50{_sfx(x)}"] = (x.get("p50_ms"), "ms")
+    for x in w.get("jank", []):
+        d[f"jank {x['case']} {x['client']} longest_gap_p50{_sfx(x)}"] = (x.get("p50_ms"), "ms")
+    for x in w.get("ttfi", []):
+        if x.get("status") == "ok":
+            d[f"ttfi {x['case']} {x['client']} p50{_sfx(x)}"] = (x.get("p50_ms"), "ms")
     for x in w["cache"]:
         d[f"cache {x['case']} {x['client']} p50"] = (x.get("p50_ms"), "ms")
         d[f"cache {x['case']} {x['client']} p95"] = (x.get("p95_ms"), "ms")
@@ -110,14 +134,16 @@ def web_stats(runs, max_spread):
     """Median of the run medians and spread = (max - min) / median per metric."""
     per = [_metrics(w) for w in runs]
     out = {}
-    for k in per[0]:
+    keys = list(dict.fromkeys(k for m in per for k in m))
+    for k in keys:
+        unit = next(m[k][1] for m in per if k in m)
         vals = [m[k][0] for m in per if k in m and m[k][0] is not None]
         if len(vals) != len(runs):
-            out[k] = {"runs": vals, "stable": False, "note": "missing in a run"}
+            out[k] = {"runs": vals, "unit": unit, "stable": False, "note": "missing in a run"}
             continue
         med = statistics.median(vals)
         spread = (max(vals) - min(vals)) / med if med else None
-        out[k] = {"runs": vals, "median": round(med, 3), "unit": per[0][k][1],
+        out[k] = {"runs": vals, "median": round(med, 3), "unit": unit,
                   "spread_pct": None if spread is None else round(spread * 100, 1),
                   "stable": spread is not None and spread <= max_spread}
     n = sum(1 for v in out.values() if v["stable"])

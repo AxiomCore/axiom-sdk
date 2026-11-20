@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// axiom_flutter_generator 0.150.0
+// axiom_flutter_generator 0.150.1
 // fixture: dev.axiomcore.fixture 1.0.0 variant default schema aa69c58ec8f5
 
 import 'dart:convert';
@@ -88,12 +88,16 @@ abstract final class AxiomGeneratedCodec {
 
   static String bytesToJson(Uint8List v) => base64Encode(v);
 
+  /// jsonDecode already returns `Map<String, dynamic>`: use it directly (a
+  /// `cast` view re-checks every key and value on each read).
   static Map<String, dynamic> asObject(Object? v) =>
-      (v as Map).cast<String, dynamic>();
+      v is Map<String, dynamic> ? v : (v as Map).cast<String, dynamic>();
 
-  static List<T> asList<T>(Object? v, T Function(Object?) item) => [
-    for (final e in v as List) item(e),
-  ];
+  /// Built with its final length known (no regrowth while decoding).
+  static List<T> asList<T>(Object? v, T Function(Object?) item) {
+    final l = v as List;
+    return List<T>.generate(l.length, (i) => item(l[i]));
+  }
 
   static Map<String, T> asMap<T>(Object? v, T Function(Object?) value) => {
     for (final e in (v as Map).entries) e.key as String: value(e.value),
@@ -314,7 +318,7 @@ class ClaimIn {
 
   factory ClaimIn.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
-    return ClaimIn(name: AxiomGeneratedCodec.asString(map['name']));
+    return ClaimIn(name: (map['name'] as String));
   }
 
   final String name;
@@ -340,8 +344,8 @@ class Conflict {
   factory Conflict.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
     return Conflict(
-      existingId: AxiomGeneratedCodec.asString(map['existingId']),
-      message: AxiomGeneratedCodec.asString(map['message']),
+      existingId: (map['existingId'] as String),
+      message: (map['message'] as String),
     );
   }
 
@@ -378,9 +382,10 @@ class Cursor {
   factory Cursor.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
     return Cursor(
-      last: map['last'] == null
-          ? null
-          : AxiomGeneratedCodec.asString(map['last']),
+      last: switch (map['last']) {
+        null => null,
+        final v => (v as String),
+      },
     );
   }
 
@@ -410,8 +415,8 @@ class Deleted {
   factory Deleted.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
     return Deleted(
-      deleted: AxiomGeneratedCodec.asBool(map['deleted']),
-      id: AxiomGeneratedCodec.asString(map['id']),
+      deleted: (map['deleted'] as bool),
+      id: (map['id'] as String),
     );
   }
 
@@ -449,12 +454,13 @@ class Echo {
   factory Echo.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
     return Echo(
-      flag: map['flag'] == null
-          ? null
-          : AxiomGeneratedCodec.asBool(map['flag']),
+      flag: switch (map['flag']) {
+        null => null,
+        final v => (v as bool),
+      },
       limit: AxiomGeneratedCodec.asInt(map['limit']),
-      path: AxiomGeneratedCodec.asString(map['path']),
-      q: AxiomGeneratedCodec.asString(map['q']),
+      path: (map['path'] as String),
+      q: (map['q'] as String),
     );
   }
 
@@ -505,12 +511,13 @@ class EchoIn {
   factory EchoIn.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
     return EchoIn(
-      flag: map['flag'] == null
-          ? null
-          : AxiomGeneratedCodec.asBool(map['flag']),
+      flag: switch (map['flag']) {
+        null => null,
+        final v => (v as bool),
+      },
       limit: AxiomGeneratedCodec.asInt(map['limit']),
-      path: AxiomGeneratedCodec.asString(map['path']),
-      q: AxiomGeneratedCodec.asString(map['q']),
+      path: (map['path'] as String),
+      q: (map['q'] as String),
     );
   }
 
@@ -570,15 +577,17 @@ class Everything {
     final map = AxiomGeneratedCodec.asObject(json);
     final out = Everything(
       color: EverythingColor.fromJson(map['color']),
-      counts: map['counts'] == null
-          ? null
-          : AxiomGeneratedCodec.asMap(map['counts'], AxiomGeneratedCodec.asInt),
-      id: AxiomGeneratedCodec.asString(map['id']),
+      counts: switch (map['counts']) {
+        null => null,
+        final v => AxiomGeneratedCodec.asMap(v, AxiomGeneratedCodec.asInt),
+      },
+      id: (map['id'] as String),
       inner: Inner.fromJson(map['inner']),
       inners: AxiomGeneratedCodec.asList(map['inners'], Inner.fromJson),
-      note: map['note'] == null
-          ? null
-          : AxiomGeneratedCodec.asString(map['note']),
+      note: switch (map['note']) {
+        null => null,
+        final v => (v as String),
+      },
       scalars: Scalars.fromJson(map['scalars']),
       tags: AxiomGeneratedCodec.asList(
         map['tags'],
@@ -688,7 +697,7 @@ class Inner {
     final map = AxiomGeneratedCodec.asObject(json);
     return Inner(
       depth: AxiomGeneratedCodec.asInt(map['depth']),
-      label: AxiomGeneratedCodec.asString(map['label']),
+      label: (map['label'] as String),
     );
   }
 
@@ -721,8 +730,8 @@ class Item {
   factory Item.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
     return Item(
-      id: AxiomGeneratedCodec.asString(map['id']),
-      name: AxiomGeneratedCodec.asString(map['name']),
+      id: (map['id'] as String),
+      name: (map['name'] as String),
       qty: AxiomGeneratedCodec.asInt(map['qty']),
     );
   }
@@ -758,7 +767,7 @@ class ItemInput {
   factory ItemInput.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
     return ItemInput(
-      name: AxiomGeneratedCodec.asString(map['name']),
+      name: (map['name'] as String),
       qty: AxiomGeneratedCodec.asInt(map['qty']),
     );
   }
@@ -788,7 +797,7 @@ class ItemRef {
 
   factory ItemRef.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
-    return ItemRef(id: AxiomGeneratedCodec.asString(map['id']));
+    return ItemRef(id: (map['id'] as String));
   }
 
   final String id;
@@ -814,8 +823,8 @@ class ItemUpdate {
   factory ItemUpdate.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
     return ItemUpdate(
-      id: AxiomGeneratedCodec.asString(map['id']),
-      name: AxiomGeneratedCodec.asString(map['name']),
+      id: (map['id'] as String),
+      name: (map['name'] as String),
       qty: AxiomGeneratedCodec.asInt(map['qty']),
     );
   }
@@ -856,7 +865,7 @@ class KeyIn {
 
   factory KeyIn.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
-    return KeyIn(key: AxiomGeneratedCodec.asString(map['key']));
+    return KeyIn(key: (map['key'] as String));
   }
 
   final String key;
@@ -881,7 +890,7 @@ class NonceIn {
 
   factory NonceIn.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
-    return NonceIn(key: AxiomGeneratedCodec.asString(map['key']));
+    return NonceIn(key: (map['key'] as String));
   }
 
   final String key;
@@ -908,7 +917,7 @@ class Ping {
     final map = AxiomGeneratedCodec.asObject(json);
     return Ping(
       seq: AxiomGeneratedCodec.asInt(map['seq']),
-      text: AxiomGeneratedCodec.asString(map['text']),
+      text: (map['text'] as String),
     );
   }
 
@@ -937,7 +946,7 @@ class Problem {
 
   factory Problem.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
-    return Problem(message: AxiomGeneratedCodec.asString(map['message']));
+    return Problem(message: (map['message'] as String));
   }
 
   final String message;
@@ -965,7 +974,7 @@ class Retried {
     final map = AxiomGeneratedCodec.asObject(json);
     return Retried(
       attempt: AxiomGeneratedCodec.asInt(map['attempt']),
-      ok: AxiomGeneratedCodec.asBool(map['ok']),
+      ok: (map['ok'] as bool),
     );
   }
 
@@ -1034,14 +1043,14 @@ class Scalars {
     final map = AxiomGeneratedCodec.asObject(json);
     return Scalars(
       at: AxiomGeneratedCodec.asDateTime(map['at']),
-      b: AxiomGeneratedCodec.asBool(map['b']),
+      b: (map['b'] as bool),
       bytes: AxiomGeneratedCodec.asBytes(map['bytes']),
       f32: AxiomGeneratedCodec.asDouble(map['f32']),
       f64: AxiomGeneratedCodec.asDouble(map['f64']),
       i32: AxiomGeneratedCodec.asInt(map['i32']),
       i64: AxiomGeneratedCodec.asInt(map['i64']),
       json: map['json'],
-      s: AxiomGeneratedCodec.asString(map['s']),
+      s: (map['s'] as String),
     );
   }
 
@@ -1155,8 +1164,8 @@ class Stamp {
   factory Stamp.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
     return Stamp(
-      key: AxiomGeneratedCodec.asString(map['key']),
-      strategy: AxiomGeneratedCodec.asString(map['strategy']),
+      key: (map['key'] as String),
+      strategy: (map['strategy'] as String),
     );
   }
 
@@ -1189,8 +1198,8 @@ class StampIn {
   factory StampIn.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
     return StampIn(
-      key: AxiomGeneratedCodec.asString(map['key']),
-      strategy: AxiomGeneratedCodec.asString(map['strategy']),
+      key: (map['key'] as String),
+      strategy: (map['strategy'] as String),
     );
   }
 
@@ -1223,7 +1232,7 @@ class Tick {
   factory Tick.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
     return Tick(
-      id: AxiomGeneratedCodec.asString(map['id']),
+      id: (map['id'] as String),
       seq: AxiomGeneratedCodec.asInt(map['seq']),
     );
   }
@@ -1253,10 +1262,7 @@ class Who {
 
   factory Who.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
-    return Who(
-      method: AxiomGeneratedCodec.asString(map['method']),
-      ok: AxiomGeneratedCodec.asBool(map['ok']),
-    );
+    return Who(method: (map['method'] as String), ok: (map['ok'] as bool));
   }
 
   final String method;
@@ -1334,8 +1340,8 @@ class ConflictFailure extends ContractFailure implements ClaimErrors {
   factory ConflictFailure.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
     return ConflictFailure(
-      existingId: AxiomGeneratedCodec.asString(map['existingId']),
-      message: AxiomGeneratedCodec.asString(map['message']),
+      existingId: (map['existingId'] as String),
+      message: (map['message'] as String),
     );
   }
 
@@ -1381,9 +1387,7 @@ class UnauthorizedFailure extends ContractFailure
 
   factory UnauthorizedFailure.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
-    return UnauthorizedFailure(
-      message: AxiomGeneratedCodec.asString(map['message']),
-    );
+    return UnauthorizedFailure(message: (map['message'] as String));
   }
 
   final String message;

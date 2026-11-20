@@ -1,3 +1,18 @@
+## 0.150.1 - 2026-11-21
+
+Version aligned with `axiom_flutter` 0.150.1. No API change.
+
+Fixed
+- The published package no longer contains the example's `android/`, `ios/`
+  and other platform folders (only `example/lib` and its pubspec ship).
+- `lib/` analyzes with no infos under `flutter_lints` (braces added to
+  single-line `if` statements; no behaviour change).
+
+Known limits
+- MFA, step-up, hosted sign-in and magic links are tested against a scripted
+  issuer only; `axiom auth emulate` does not support them.
+- Not run on physical devices.
+
 ## 0.150.0 - 2026-11-21
 
 Version aligned with `axiom_flutter` 0.150.0; the package now depends on
