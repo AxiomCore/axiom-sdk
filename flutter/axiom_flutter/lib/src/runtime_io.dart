@@ -244,6 +244,9 @@ class _Call {
 
   /// False while the call waits for the auth provider before axiom_call.
   bool dispatched = false;
+
+  /// Set when the app cancelled the call: later errors are not reported.
+  bool abandoned = false;
   _Call(this.controller, this.namespace, this.endpointId);
 }
 
@@ -829,7 +832,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
         );
       }
       _logTransaction('IN', requestId, 'error ${richError.message}');
-      if (!richError.isCancelled) {
+      if (!richError.isCancelled && (!call.abandoned || call.timedOut)) {
         _reportError(richError, call.namespace, call.endpointId, requestId);
       }
       controller.add(AxiomState.error(richError));
@@ -1266,7 +1269,16 @@ class AxiomRuntimeIo implements AxiomRuntime {
     void dispatch(Map<String, String>? sendHeaders) {
       if (!identical(_calls[requestId], call)) return; // cancelled meanwhile
       call.dispatched = true;
-      final traceparent = AxiomTracing.generateTraceparent();
+      if (_purgedNs.isNotEmpty &&
+        (_purgedNs.contains('*') || _purgedNs.contains(namespace))) {
+      final key =
+          '$namespace|$endpointId|$finalPath|${Object.hashAll(requestBytes)}';
+      if (_refreshedAfterPurge.add(key) &&
+          !(sendHeaders?.containsKey(axiomCacheModeHeader) ?? false)) {
+        sendHeaders = {...?sendHeaders, axiomCacheModeHeader: 'refresh'};
+      }
+    }
+    final traceparent = AxiomTracing.generateTraceparent();
       final headersJson = sendHeaders != null && sendHeaders.isNotEmpty
           ? jsonEncode(sendHeaders)
           : '';
@@ -1300,7 +1312,10 @@ class AxiomRuntimeIo implements AxiomRuntime {
             b.ref,
             _toAxiomString(
               jsonEncode({
-                'timeoutMs': timeout.inMilliseconds,
+                // timeoutMs 0 means "no timeout" to the runtime: round up.
+              'timeoutMs': (timeout.inMicroseconds + 999) ~/ 1000 < 1
+                  ? 1
+                  : (timeout.inMicroseconds + 999) ~/ 1000,
                 if (options!.cacheMode == AxiomCacheMode.refresh)
                   'cacheMode': 'refresh',
               }),
@@ -1607,6 +1622,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
         ..close();
       return true;
     }
+    pending?.abandoned = true;
     final fn = _cancelFfi;
     if (fn == null || requestId == 0) return false;
     try {
@@ -1791,9 +1807,20 @@ class AxiomRuntimeIo implements AxiomRuntime {
 
   /// Clears the runtime cache of [namespace] (all loaded when null) when the
   /// runtime has `axiom_cache_clear_namespace`; returns false otherwise.
+  /// Without `axiom_cache_clear_namespace`: namespaces ('*' = all) whose
+  /// runtime cache must be bypassed once per distinct request.
+  final Set<String> _purgedNs = {};
+  final Set<String> _refreshedAfterPurge = {};
+
   bool _clearNativeCache(String? namespace) {
     final native = _cacheClearNamespaceFfi;
-    if (native == null) return false;
+    if (native == null) {
+      _purgedNs.add(namespace ?? '*');
+      _refreshedAfterPurge.removeWhere(
+        (k) => namespace == null || k.startsWith('$namespace|'),
+      );
+      return false;
+    }
     final targets = namespace == null
         ? _loadedNamespaces.toList()
         : [namespace];

@@ -26,6 +26,9 @@ class ActiveQuery<T> {
   bool _forceNext = false;
   bool _seededPending = false;
 
+  /// True once the current fetch delivered a non-loading state.
+  bool _settledThisFetch = false;
+
   /// Runtime request id of the current (or last) fetch.
   int? currentReqId;
 
@@ -90,9 +93,11 @@ class ActiveQuery<T> {
       active = _createStream!();
     }
     currentReqId = active.requestId;
+    _settledThisFetch = false;
 
     _rustSubscription = active.stream.listen(
       (newState) {
+        if (!newState.isLoading) _settledThisFetch = true;
         if (newState.hasError && newState.error!.isCancelled) {
           // Keep the cached value; forward the cancellation to listeners that
           // are still attached (explicit AxiomQuery.cancel()).
@@ -137,6 +142,7 @@ class ActiveQuery<T> {
       final id = currentReqId;
       // A unary response already delivered is terminal: no need to cancel.
       final waiting =
+          !_settledThisFetch ||
           _lastState.isLoading ||
           _lastState.isFetching ||
           _lastState.isStreaming;
