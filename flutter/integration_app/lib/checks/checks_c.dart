@@ -147,7 +147,15 @@ final checksC = <CheckDef>[
       // Native only: a browser cannot authorize this upgrade (see
       // skipBearerWsOnWeb); cancel still has to work while it connects.
       if (!kIsWeb) expectThat(errors.isEmpty, 'ws failed before cancel: $errors');
-      expectThat(_rt(c).cancel(r.requestId), 'cancel(ws) returned false');
+      final finished = done.isCompleted;
+      final cancelled = _rt(c).cancel(r.requestId);
+      if (kIsWeb && finished) {
+        // The browser could not authorize the upgrade, so the request already
+        // completed: like native, cancelling a finished request reports false.
+        expectThat(!cancelled, 'cancel(ws) after completion returned true');
+      } else {
+        expectThat(cancelled, 'cancel(ws) returned false');
+      }
       await done.future.timeout(const Duration(seconds: 5),
           onTimeout: () => throw CheckFailure('ws stream not closed by cancel'));
     } finally {
@@ -293,11 +301,11 @@ final checksC = <CheckDef>[
     // 16 000 calls of one cache-first request (cache hits after the first:
     // fast, no network). Every call ends with a Complete, so any per-call
     // state in the runtime grows with the call count. 0.150.0 kept one id per
-    // finished call (TERMINAL_REQUESTS): its hash table doubled at ~7.2k and
+    // finished call (ACTIVE_WASM_REQUESTS): its hash table doubled at ~7.2k and
     // ~14.3k ids, +147 KB / +288 KB of linear memory, which this check
-    // catches; the fixed runtime keeps the last 4096 ids only. A short
-    // warm-up only lets the allocator and the cache reach steady state; it
-    // is far below the doubling points, so it cannot hide per-call growth.
+    // catches. The warm-up (3000 calls) only lets the allocator and the cache
+    // reach steady state (one-time +320 KB step between ~1k and ~2k calls);
+    // it stays far below the doubling points, so it cannot hide per-call growth.
     final nonce = _nonce('leak');
     Future<void> one() async {
       final s = await _cacheFirst(c, nonce);
@@ -310,7 +318,7 @@ final checksC = <CheckDef>[
         await Future.wait([for (var k = 0; k < 50; k++) one()]);
       }
     }
-    await burst(500);
+    await burst(3000);
     final before = await wasmMemoryBytes();
     if (before == null) skip('wasm memory not reachable');
     await burst(16000);
