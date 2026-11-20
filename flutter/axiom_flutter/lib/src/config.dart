@@ -105,6 +105,22 @@ class AxiomConfig {
   /// sets this in release builds.
   final bool requireSignedContracts;
 
+  /// Native only: response bodies of at least this many bytes are decoded
+  /// on a background isolate (`Isolate.run`) so the calling isolate does not
+  /// block; smaller ones decode inline. `null` or `0` decodes everything
+  /// inline (the behaviour before 0.150.1). Default 256 KB.
+  final int? decodeIsolateThreshold;
+
+  /// Native only: decoded models kept in memory per query, next to the
+  /// runtime's byte cache. A model is reused only when the runtime returns
+  /// byte-for-byte the body it was decoded from, so it can never be older
+  /// than what the byte cache serves. Bounded by entry count and by body
+  /// bytes (least recently used first out). `0` entries disables it.
+  final int objectCacheMaxEntries;
+
+  /// Upper bound of the summed body sizes held by the object cache.
+  final int objectCacheMaxBytes;
+
   /// Creates a configuration.
   const AxiomConfig({
     required this.contracts,
@@ -113,6 +129,9 @@ class AxiomConfig {
     this.environment,
     this.baseUrlOverrides = const {},
     this.requireSignedContracts = false,
+    this.decodeIsolateThreshold = 256 * 1024,
+    this.objectCacheMaxEntries = 64,
+    this.objectCacheMaxBytes = 8 * 1024 * 1024,
   });
 
   /// Effective base URL for [namespace]:
@@ -141,6 +160,9 @@ class AxiomConfig {
     AxiomEnvironment? environment,
     Map<String, String>? baseUrlOverrides,
     bool? requireSignedContracts,
+    int? decodeIsolateThreshold,
+    int? objectCacheMaxEntries,
+    int? objectCacheMaxBytes,
   }) => AxiomConfig(
     contracts: contracts ?? this.contracts,
     debug: debug ?? this.debug,
@@ -149,5 +171,9 @@ class AxiomConfig {
     baseUrlOverrides: baseUrlOverrides ?? this.baseUrlOverrides,
     requireSignedContracts:
         requireSignedContracts ?? this.requireSignedContracts,
+    decodeIsolateThreshold:
+        decodeIsolateThreshold ?? this.decodeIsolateThreshold,
+    objectCacheMaxEntries: objectCacheMaxEntries ?? this.objectCacheMaxEntries,
+    objectCacheMaxBytes: objectCacheMaxBytes ?? this.objectCacheMaxBytes,
   );
 }
