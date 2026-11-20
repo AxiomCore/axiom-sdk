@@ -298,7 +298,11 @@ class AxiomQueryManager {
         payload: payload,
       );
     } else {
-      print('ATMX: Cannot send message, stream not active for $key');
+      assert(() {
+        // ignore: avoid_print
+        print('Axiom: cannot send message, stream not active for $key');
+        return true;
+      }());
     }
   }
 

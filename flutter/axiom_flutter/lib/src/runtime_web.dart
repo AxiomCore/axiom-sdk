@@ -336,6 +336,10 @@ class AxiomRuntimeWeb implements AxiomRuntime {
   @override
   bool debug = false;
 
+  /// Test hook (integration checks only): when set, the next dispatch in
+  /// [callStream] fails synchronously as if the wasm call threw.
+  bool? debugFailNextDispatch;
+
   WasmExports get _wasm {
     final w = _wasmOrNull;
     if (w == null) {
@@ -472,7 +476,10 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     AxiomAssetLoader? assetLoader,
   }) {
     final done = _initResult;
-    if (done != null && isInitialized) {
+    // Only a successful result is final: a failed initialize() (a contract
+    // asset that could not be fetched, ...) can be retried (review F15).
+    // Contract loads are idempotent, so a retry reloads all of them.
+    if (done != null && done.ok && isInitialized) {
       return Future.value(
         AxiomInitResult(
           ok: done.ok,
@@ -725,6 +732,42 @@ class AxiomRuntimeWeb implements AxiomRuntime {
             ),
           );
         }
+    }
+  }
+
+  /// Fails a request whose dispatch failed. This can run synchronously inside
+  /// [callStream], before the caller has subscribed: a broadcast controller
+  /// drops events while it has no listener, so the error would be lost and the
+  /// caller would get an already-closed, empty stream (review F9). onError
+  /// fires at once; the stream gets the error and closes on its first listen.
+  void _failDispatch(int id, int status, String message) {
+    final req = _requests.remove(id);
+    if (req == null) return;
+    req.timeout?.cancel();
+    final error = _withFailure(
+      _decodeError(status, Uint8List.fromList(utf8.encode(message))),
+    );
+    if (!error.isCancelled) {
+      _errors.add(
+        AxiomErrorEvent(
+          error,
+          namespace: req.namespace,
+          endpointId: req.endpointId,
+          requestId: id,
+        ),
+      );
+    }
+    final controller = req.controller;
+    void deliver() {
+      if (controller.isClosed) return;
+      controller.add(AxiomState.error(error));
+      controller.close();
+    }
+
+    if (controller.hasListener) {
+      deliver();
+    } else {
+      controller.onListen = () => scheduleMicrotask(deliver);
     }
   }
 
@@ -1039,15 +1082,28 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       final oStr = nativeOptions && timeoutMs != null
           ? jsonEncode({'timeoutMs': timeoutMs})
           : '';
-      final n = _alloc(namespace),
-          m = _alloc(method),
-          p = _alloc(fPath),
-          t = _alloc(AxiomTracing.generateTraceparent()),
-          h = _alloc(hStr),
-          br = _allocBytes(requestBytes),
-          o = _alloc(oStr);
+      final allocs = <_WebAlloc>[];
+      _WebAlloc a(_WebAlloc x) {
+        allocs.add(x);
+        return x;
+      }
+
       int status;
+      Object? thrown;
       try {
+        final fault = debugFailNextDispatch;
+        if (fault == true) {
+          debugFailNextDispatch = null;
+          throw StateError('debugFailNextDispatch');
+        }
+        // Inside the try: _alloc throws when the wasm is not loaded yet.
+        final n = a(_alloc(namespace)),
+            m = a(_alloc(method)),
+            p = a(_alloc(fPath)),
+            t = a(_alloc(AxiomTracing.generateTraceparent())),
+            h = a(_alloc(hStr)),
+            br = a(_allocBytes(requestBytes)),
+            o = a(_alloc(oStr));
         status = nativeOptions
             ? _wasm.axiomCallWithOptions(
                 id.toJS,
@@ -1085,20 +1141,22 @@ class AxiomRuntimeWeb implements AxiomRuntime {
               );
       } catch (e) {
         status = FfiError.internalError;
+        thrown = e;
       } finally {
-        for (final a in [n, m, p, t, h, br, o]) {
-          _free(a);
+        for (final x in allocs) {
+          try {
+            _free(x);
+          } catch (_) {}
         }
       }
       if (status != 0) {
-        _onEvent(
+        _failDispatch(
           id,
-          EventType.error,
           status,
-          Uint8List(0),
-          Uint8List.fromList(utf8.encode('axiom_wasm_call failed')),
+          thrown == null
+              ? 'axiom_wasm_call failed (status $status)'
+              : 'axiom_wasm_call failed: $thrown',
         );
-        _finish(id);
         return;
       }
       final timeout = options?.timeout;
@@ -1159,13 +1217,21 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     required T Function(dynamic json) decoder,
     AxiomCallOptions? options,
   }) {
-    final key = AxiomQueryKey.build(
+    // Headers and timeout are part of the key (F7, shared AxiomQueryKey rule,
+    // same as native): a call that differs only there must not join another
+    // call's request.
+    String keyFor(Map<String, String> customHeaders) => AxiomQueryKey.build(
       endpoint: '${namespace}_$endpointId',
       args: args,
+      headers: {...?headers, ...?options?.headers, ...customHeaders},
+      timeout: options?.timeout,
     );
-    _queries[key] = _QueryMeta(namespace, endpointId, args);
+    final baseKey = keyFor(const {});
+    _queries[baseKey] = _QueryMeta(namespace, endpointId, args);
 
-    return AxiomQuery<T>(key, (customHeaders) {
+    return AxiomQuery<T>(baseKey, (customHeaders) {
+      final key = keyFor(customHeaders);
+      _queries[key] = _QueryMeta(namespace, endpointId, args);
       return AxiomQueryManager().watchRaw<T>(
         key,
         null,
@@ -1209,7 +1275,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
           );
         },
       );
-    }, runtime: this);
+    }, runtime: this, keyForHeaders: keyFor);
   }
 
   @override
