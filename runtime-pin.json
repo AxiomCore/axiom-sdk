@@ -11,33 +11,33 @@
   "android": {
     "distribution": "bundled",
     "path": "flutter/axiom_flutter/android/src/main/jniLibs/<abi>/libaxiom_runtime.so",
-    "source": "axiom-runtime perf/rtlean 984335d65fbf0ef4cdeb9ff2f45ebe223c14f69f (unit rtlean artifact set, on flutter/perf f93a3b8; needs axiom-lib perf/rtlean c542aa2), scripts/build-android-so.sh NDK 26.3.11579264 API 24 16 KB pages --remap-path-prefix (lean: no executable extensions, no telemetry exporter)",
+    "source": "axiom-runtime flutter/perf c600a8d50971bbfa491fbc31c12858b1d0a7efc9 (axiom-lib 4991e44 = flutter/perf incl. perf/rtlean c542aa2; rod e473e7e incl. perf/rtspeed 82736d8) lean: --no-default-features (android 3 ABIs, linux-x64, wasm); full: default features (android 3 ABIs, linux-x64) lean android: compiled while HEAD moved 2c0734b -> c600a8d; that diff is wasm32-only (cfg target_arch = \"wasm32\"), native sources identical full set and lean linux-x64/wasm: c600a8d. rustc 1.93.0 NDK 26.3.11579264, built with the scripts' --remap-path-prefix flags (lean: no executable extensions, no telemetry exporter)",
     "archive": null,
     "url": null,
     "sha256": null,
     "libraries": {
       "arm64-v8a": {
         "variant": "lean",
-        "sha256": "96c32b114d319c9b5171a83a66eccb0e37809d86113b286c5aabb8062819db71",
-        "bytes": 4766760
+        "sha256": "22fbd670a353963bfce054b9fe129b4c337a2054b6f4434b7f47ccbd3e691339",
+        "bytes": 4804712
       },
       "armeabi-v7a": {
         "variant": "lean",
-        "sha256": "6f127f6725f981d68e53d0e74a920ade1b4a28fde64815bed175bf59b94c1272",
-        "bytes": 3382984
+        "sha256": "c0b2576a8d9f9bfb4a33229d9f0fe5869f9093246ae8e0551e88c7db8a26775f",
+        "bytes": 3410196
       },
       "x86_64": {
         "variant": "lean",
-        "sha256": "9a227665b423879af50cde9f06e23ef0bfdf716bfb4733304070b87f039a6858",
-        "bytes": 5646576
+        "sha256": "3fc35b455ac623e4e58435bcd68ef74aa483faf289411825670e61f7bbfd7f85",
+        "bytes": 5701680
       }
     },
     "variant": "lean"
   },
   "wasm": {
     "variant": "lean",
-    "runtime_branch": "axiom-runtime perf/rtlean 984335d65fbf0ef4cdeb9ff2f45ebe223c14f69f (unit rtlean artifact set, on flutter/perf f93a3b8; needs axiom-lib perf/rtlean c542aa2), scripts/build-android-so.sh NDK 26.3.11579264 API 24 16 KB pages --remap-path-prefix (lean), scripts/build-wasm-flutter.sh, --remap-path-prefix",
-    "axiom_runtime_js_sha256": "c84160fd08bea44b46016c76cbe531d6e876dfab3bf17bfa45d2c4c2a702a8ce",
-    "axiom_runtime_bg_wasm_sha256": "4f6a3eaccd7d1a79a7b13723e71fb7ac9b04c40e25acb44d8736a43c58b9a88e"
+    "runtime_branch": "axiom-runtime flutter/perf c600a8d50971bbfa491fbc31c12858b1d0a7efc9 (axiom-lib 4991e44 = flutter/perf incl. perf/rtlean c542aa2; rod e473e7e incl. perf/rtspeed 82736d8) lean: --no-default-features (android 3 ABIs, linux-x64, wasm); full: default features (android 3 ABIs, linux-x64) lean android: compiled while HEAD moved 2c0734b -> c600a8d; that diff is wasm32-only (cfg target_arch = \"wasm32\"), native sources identical full set and lean linux-x64/wasm: c600a8d. rustc 1.93.0 NDK 26.3.11579264, built with the scripts' --remap-path-prefix flags (lean), scripts/build-wasm-flutter.sh, --remap-path-prefix",
+    "axiom_runtime_js_sha256": "2c4e79904b8c3131e62c562970e515c7176e896db655de72b65f89f9032ec692",
+    "axiom_runtime_bg_wasm_sha256": "99a490b55d2ff2e04e6f53b4521f24e417e4667040a89a8e141cd9b0ebad70ba"
   }
 }
