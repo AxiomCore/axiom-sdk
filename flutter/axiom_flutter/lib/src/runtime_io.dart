@@ -474,7 +474,24 @@ class AxiomRuntimeIo implements AxiomRuntime {
     AxiomContractMetadata.addListener(_applyTokensFor);
   }
 
+  /// Exports added after the published 0.148.6 runtime (Apple pin).
+  static const _optionalSymbols = {
+    'axiom_cache_clear_namespace',
+    'axiom_cache_invalidate_identity',
+    'axiom_call_with_options',
+    'axiom_clear_auth_provider',
+    'axiom_clear_namespace_auth_tokens',
+    'axiom_register_auth_provider_v2',
+    'axiom_set_namespace_auth_token',
+  };
+
+  /// Host tests only: `AXIOM_RUNTIME_ABI=published` (only when set) hides the
+  /// optional exports so a new host library behaves like the published one.
+  static final bool _publishedAbiOnly =
+      Platform.environment['AXIOM_RUNTIME_ABI'] == 'published';
+
   static bool _has(String symbol) {
+    if (_publishedAbiOnly && _optionalSymbols.contains(symbol)) return false;
     try {
       return _lib.providesSymbol(symbol);
     } catch (_) {
@@ -864,7 +881,9 @@ class AxiomRuntimeIo implements AxiomRuntime {
       return;
     }
 
-    if (data.isNotEmpty) {
+    // A successful empty body (204, void endpoints) is still a success:
+    // emit it (null data downstream) as web does, or mutations never settle.
+    if (data.isNotEmpty || eventTypeValue == EventType.networkSuccess) {
       controller.add(
         AxiomState.success(
           data,
