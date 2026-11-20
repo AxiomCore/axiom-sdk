@@ -26,7 +26,101 @@ Future<AxiomState<T>> _settled<T>(Stream<AxiomState<T>> s) => s
 
 String _nonce() => DateTime.now().microsecondsSinceEpoch.toString();
 
+
+// Awaits a query stream directly inside async functions, the way app code
+// does (k finding: dart2js release crashed with "Null check operator used on
+// a null value" in _StreamIterator/_awaitOnObject). Each helper is an async
+// function whose code after the await must run.
+Future<T> _awaitFirstWhere<T>(AxiomQuery<T> q) async {
+  final s = await q.stream.firstWhere((s) => s.hasData || s.hasError);
+  if (s.hasError) throw CheckFailure('error: ${s.error}');
+  return s.data as T;
+}
+
+Future<T> _awaitFor<T>(AxiomQuery<T> q) async {
+  await for (final s in q.stream) {
+    if (s.hasError) throw CheckFailure('error: ${s.error}');
+    if (s.hasData) return s.data as T;
+  }
+  throw CheckFailure('stream closed without data');
+}
+
+Future<T> _awaitUnwrap<T>(AxiomQuery<T> q) async {
+  final v = await q.stream.unwrap();
+  return v;
+}
+
+Future<void> _awaitStyles(Ctx c, String tag) async {
+  final styles = <String, Future<Object?> Function(AxiomQuery<Object?>)>{
+    'firstWhere': _awaitFirstWhere,
+    'await for': _awaitFor,
+    'unwrap': _awaitUnwrap,
+  };
+  for (final e in styles.entries) {
+    final n = 'h2-$tag-${e.key.replaceAll(' ', '')}-${_nonce()}';
+    // Fresh args (network), then the same args again (second fetch of the
+    // same query), then a cache-first endpoint twice.
+    for (final q in <AxiomQuery<Object?> Function()>[
+      () => c.api.echo(path: n, q: 'x', limit: 1),
+      () => c.api.echo(path: n, q: 'x', limit: 1),
+      () => c.api.cacheCacheFirst(nonce: n),
+      () => c.api.cacheCacheFirst(nonce: n),
+      // Mutations are not routed through the query manager (k's crash).
+      () => c.api.createItem(name: n, qty: 1),
+    ]) {
+      var after = false;
+      final v = await e.value(q()).then((v) {
+        return v;
+      }).timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => throw CheckFailure(
+          '${e.key}: the async function never resumed after the await',
+        ),
+      );
+      after = true;
+      expectThat(after && v != null, '${e.key}: no value');
+    }
+  }
+}
+
 final checksH2 = <CheckDef>[
+  // Lead/k: awaiting a query stream inside an async function (firstWhere,
+  // await for, unwrap()) must resume after the await, in release builds too.
+  CheckDef('h2.await_query_stream_in_async', 'runtime', (c) async {
+    await _awaitStyles(c, 'a');
+  }),
+  // The same for the raw runtime stream (public callStream): await for and
+  // await firstWhere inside an async function must resume.
+  CheckDef('h2.await_call_stream_in_async', 'runtime', (c) async {
+    AxiomStreamResponse call() => c.sdk.runtime.callStream(
+      namespace: 'fixture',
+      endpointId: _echoId,
+      method: 'GET',
+      path: '/echo/h2raw',
+      queryParams: {'q': _nonce(), 'limit': '1'},
+      requestBytes: Uint8List(0),
+    );
+    Future<bool> viaAwaitFor() async {
+      await for (final s in call().stream) {
+        if (s.isSuccess || s.hasError) return s.isSuccess;
+      }
+      return false;
+    }
+
+    Future<bool> viaFirstWhere() async {
+      final s = await call().stream.firstWhere((s) => s.isSuccess || s.hasError);
+      return s.isSuccess;
+    }
+
+    for (final f in [viaAwaitFor, viaFirstWhere]) {
+      final ok = await f().timeout(
+        const Duration(seconds: 5),
+        onTimeout: () =>
+            throw CheckFailure('async function never resumed after the await'),
+      );
+      expectThat(ok, 'raw call did not succeed');
+    }
+  }),
   // F9: an error raised synchronously while callStream dispatches (wasm throw,
   // non-zero status, runtime not loaded) must reach the first listener as an
   // AxiomState error, and onError, instead of an empty, already-closed stream.
