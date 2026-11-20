@@ -23,7 +23,16 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   test('integration checks on the host native runtime', () async {
     final ctx = Ctx(await createFixtureSdk());
-    final results = await runChecks(ctx, allChecks);
+    // AXIOM_CHECKS=a.,b.x : run only checks whose id starts with one of the
+    // comma-separated prefixes (local debugging; receipts use the full list).
+    final only = (Platform.environment['AXIOM_CHECKS'] ?? '')
+        .split(',')
+        .where((p) => p.isNotEmpty)
+        .toList();
+    final checks = only.isEmpty
+        ? allChecks
+        : allChecks.where((c) => only.any(c.name.startsWith)).toList();
+    final results = await runChecks(ctx, checks);
     final out = Platform.environment['AXIOM_RECEIPT_OUT'];
     if (out != null && out.isNotEmpty) {
       File(out)

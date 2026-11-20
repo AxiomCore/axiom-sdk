@@ -436,6 +436,29 @@ class AxiomRuntimeIo implements AxiomRuntime {
   /// Namespaces with a successfully loaded contract.
   final Set<String> _loadedNamespaces = {};
 
+  /// Successful contract loads of the current engine, by namespace. Loading
+  /// the same namespace again natively re-opens its sled cache, which is still
+  /// locked by the first load, so the runtime answers InitializationFailed
+  /// (status 13). A retried initialize (F15) therefore reuses the result of
+  /// an identical earlier load instead of calling axiom_load_contract again.
+  final Map<String, (String, AxiomContractLoadResult)> _loadedContracts = {};
+
+  static String _contractFingerprint(
+    String baseUrl,
+    Uint8List bytes,
+    String? signature,
+    String? publicKey,
+    String? sha256,
+  ) {
+    // Length + FNV-1a of the bytes, plus every other input verbatim.
+    var h = 0x811c9dc5;
+    for (final b in bytes) {
+      h = ((h ^ b) * 0x01000193) & 0xffffffff;
+    }
+    return '${bytes.length}:$h|$baseUrl|${signature ?? ''}|'
+        '${publicKey ?? ''}|${sha256?.toLowerCase() ?? ''}';
+  }
+
   AxiomRuntimeIo._internal() {
     _lib = _openLibrary();
     _initFfi = _lib.lookupFunction<_AxiomInitializeNative, _AxiomInitialize>(
@@ -932,6 +955,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
     // the previous engine first so they drop its cache handles before the
     // new engine opens the same database directory.
     _resetSessionFfi?.call();
+    _loadedContracts.clear();
     final status = using(
       (Arena arena) => _initFfi(_toAxiomString(resolvedDb, arena)),
     );
@@ -1283,7 +1307,8 @@ class AxiomRuntimeIo implements AxiomRuntime {
     final future = _initialize(config, assetLoader);
     _initResultFuture = future;
     // A failed initialize is not cached (F15): the next call retries.
-    // Contracts that already loaded are idempotent to load again.
+    // Contracts that already loaded with the same inputs are not loaded
+    // again (see _loadedContracts); only the failed ones are retried.
     future.then((r) {
       if (!r.ok && identical(_initResultFuture, future)) {
         _initResultFuture = null;
@@ -1408,6 +1433,15 @@ class AxiomRuntimeIo implements AxiomRuntime {
     String? publicKey,
     String? sha256,
   }) {
+    final fingerprint = _contractFingerprint(
+      baseUrl,
+      contractBytes,
+      signature,
+      publicKey,
+      sha256,
+    );
+    final previous = _loadedContracts[namespace];
+    if (previous != null && previous.$1 == fingerprint) return previous.$2;
     final locked = sha256 != null && sha256.isNotEmpty;
     if (locked && _loadContractLockedFfi == null) {
       return AxiomContractLoadResult(
@@ -1451,7 +1485,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
         _applyTokensFor(namespace);
       }
     }
-    return AxiomContractLoadResult(
+    final result = AxiomContractLoadResult(
       namespace: namespace,
       baseUrl: baseUrl,
       status: status,
@@ -1469,6 +1503,8 @@ class AxiomRuntimeIo implements AxiomRuntime {
               '(status $status, ${FfiError.name(status)})',
             ),
     );
+    if (ok) _loadedContracts[namespace] = (fingerprint, result);
+    return result;
   }
 
   // ---------------------------------------------------------------------------
@@ -2061,6 +2097,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
     _initialized = false;
     _initResultFuture = null;
     _initResult = null;
+    _loadedContracts.clear();
   }
 
   // ---------------------------------------------------------------------------
