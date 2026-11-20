@@ -9,6 +9,13 @@ import 'dart:typed_data';
 import 'package:ansicolor/ansicolor.dart';
 import 'package:ffi/ffi.dart';
 
+import 'call_options.dart';
+import 'channel.dart';
+import 'config.dart';
+import 'errors.dart';
+import 'extension_host.dart';
+import 'init_result.dart';
+import 'runtime_info.dart';
 import 'runtime_interface.dart';
 import 'state.dart';
 import 'query.dart';
@@ -328,7 +335,11 @@ class AxiomRuntimeIo implements AxiomRuntime {
     required Uint8List contractBytes,
     String? signature,
     String? publicKey,
+    String? sha256,
   }) {
+    if (sha256 != null) {
+      throw UnimplementedError('loadContract(sha256:)');
+    }
     using((Arena arena) {
       final cPtr = arena<Uint8>(contractBytes.length);
       cPtr.asTypedList(contractBytes.length).setAll(0, contractBytes);
@@ -356,6 +367,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
     Map<String, dynamic>? pathParams,
     Map<String, dynamic>? queryParams,
     required Uint8List requestBytes,
+    AxiomCallOptions? options,
   }) {
     final requestId = _nextRequestId++;
     final controller = StreamController<AxiomState<Uint8List>>.broadcast();
@@ -436,6 +448,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
     Map<String, dynamic>? queryParams,
     Object? body,
     required T Function(dynamic json) decoder,
+    AxiomCallOptions? options,
   }) {
     final key = AxiomQueryKey.build(
       endpoint: '${namespace}_$endpointId',
@@ -476,6 +489,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
     Map<String, dynamic> args = const {},
     Object? body,
     required T Function(dynamic json) decoder,
+    AxiomCallOptions? options,
   }) {
     final key =
         '${namespace}_${endpointId}_mut_${DateTime.now().microsecondsSinceEpoch}';
@@ -506,6 +520,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
     Map<String, dynamic>? queryParams,
     Object? body,
     required T Function(dynamic json) decoder,
+    AxiomCallOptions? options,
   }) {
     final response = callStream(
       namespace: namespace,
@@ -585,4 +600,128 @@ class AxiomRuntimeIo implements AxiomRuntime {
       publicKey: publicKey,
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // Parity API (unit f1): signatures frozen, bodies implemented by later units.
+  // ---------------------------------------------------------------------------
+
+  @override
+  Future<AxiomInitResult> initialize(
+    AxiomConfig config, {
+    AxiomAssetLoader? assetLoader,
+  }) => throw UnimplementedError('initialize');
+
+  @override
+  bool get isInitialized => throw UnimplementedError('isInitialized');
+
+  @override
+  AxiomInitResult? get initResult => throw UnimplementedError('initResult');
+
+  @override
+  AxiomRuntimeInfo get runtimeInfo => throw UnimplementedError('runtimeInfo');
+
+  @override
+  AxiomContractLoadResult tryLoadContract({
+    required String namespace,
+    required String baseUrl,
+    required Uint8List contractBytes,
+    String? signature,
+    String? publicKey,
+    String? sha256,
+  }) => throw UnimplementedError('tryLoadContract');
+
+  @override
+  AxiomChannel<R, S> openChannel<R, S>({
+    required String namespace,
+    required int endpointId,
+    required String path,
+    String method = 'GET',
+    Map<String, String>? headers,
+    Map<String, dynamic>? pathParams,
+    Map<String, dynamic>? queryParams,
+    required R Function(dynamic json) decoder,
+    AxiomReconnectPolicy reconnect = AxiomReconnectPolicy.none,
+    AxiomCallOptions? options,
+  }) => throw UnimplementedError('openChannel');
+
+  @override
+  void setNamespaceAuthToken({
+    required String namespace,
+    required String token,
+  }) => throw UnimplementedError('setNamespaceAuthToken');
+
+  @override
+  void clearNamespaceAuthToken({required String namespace}) =>
+      throw UnimplementedError('clearNamespaceAuthToken');
+
+  @override
+  void setGlobalAuthToken(String token) =>
+      throw UnimplementedError('setGlobalAuthToken');
+
+  @override
+  void clearGlobalAuthToken() =>
+      throw UnimplementedError('clearGlobalAuthToken');
+
+  @override
+  void setAuthProvider(AxiomAuthProvider? provider) =>
+      throw UnimplementedError('setAuthProvider');
+
+  @override
+  bool cancel(int requestId) => throw UnimplementedError('cancel');
+
+  @override
+  Future<void> resetSession() => throw UnimplementedError('resetSession');
+
+  @override
+  Future<void> shutdown() => throw UnimplementedError('shutdown');
+
+  @override
+  void invalidate({
+    required String namespace,
+    String? cacheIdentity,
+    int? endpointId,
+    Map<String, dynamic>? args,
+  }) => throw UnimplementedError('invalidate');
+
+  @override
+  void setQueryData<T>({
+    required String namespace,
+    required int endpointId,
+    Map<String, dynamic> args = const {},
+    required T data,
+  }) => throw UnimplementedError('setQueryData');
+
+  @override
+  T? getCachedQueryData<T>({
+    required String namespace,
+    required int endpointId,
+    Map<String, dynamic> args = const {},
+  }) => throw UnimplementedError('getCachedQueryData');
+
+  @override
+  Future<void> clearCache([String? namespace]) =>
+      throw UnimplementedError('clearCache');
+
+  @override
+  Future<void> purgeCache([String? namespace]) =>
+      throw UnimplementedError('purgeCache');
+
+  @override
+  Stream<AxiomErrorEvent> get onError => throw UnimplementedError('onError');
+
+  @override
+  Future<void> loadExtension(AxiomExtensionPackage package) =>
+      throw UnimplementedError('loadExtension');
+
+  @override
+  Future<Object?> invokeExtension(AxiomExtensionCall call) =>
+      throw UnimplementedError('invokeExtension');
+
+  @override
+  void extensionLifecycle(AxiomLifecycleEvent event) =>
+      throw UnimplementedError('extensionLifecycle');
+
+  @override
+  Future<Object?> extensionAudit() =>
+      throw UnimplementedError('extensionAudit');
 }

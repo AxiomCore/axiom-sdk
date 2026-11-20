@@ -1,12 +1,23 @@
 import 'dart:async';
 import 'package:axiom_flutter/src/runtime_interface.dart';
 
+import 'call_options.dart';
 import 'state.dart';
 import 'query_manager.dart';
 
+/// A lazily started, cached call.
+///
+/// Cancellation rule: a query's network request is cancelled
+/// (`AxiomRuntime.cancel`) when the last listener of its shared stream
+/// unsubscribes while the request is still in flight, unless the request is
+/// a mutation (mutations always run to completion unless [cancel] is called
+/// explicitly). The cached value stays available for the next listener.
 class AxiomQuery<T> {
   final String key;
   final bool isMutation;
+
+  final AxiomRuntime? _runtime;
+  int? _requestId;
 
   final Map<String, String> _customHeaders = {};
   Stream<AxiomState<T>>? _cachedStream;
@@ -15,7 +26,15 @@ class AxiomQuery<T> {
   final AxiomActiveStream<T> Function(Map<String, String> headers)
   _streamFactory;
 
-  AxiomQuery(this.key, this._streamFactory, {this.isMutation = false});
+  AxiomQuery(
+    this.key,
+    this._streamFactory, {
+    this.isMutation = false,
+    AxiomRuntime? runtime,
+  }) : _runtime = runtime;
+
+  /// Runtime request id of the current fetch, once [stream] was read.
+  int? get requestId => _requestId;
 
   void setHeader(String key, String value) {
     _customHeaders[key] = value;
@@ -24,14 +43,30 @@ class AxiomQuery<T> {
   /// The public getter for the UI
   Stream<AxiomState<T>> get stream {
     // ✨ FIX: Extract .stream from the AxiomActiveStream wrapper
-    _cachedStream ??= _streamFactory(_customHeaders).stream;
+    if (_cachedStream == null) {
+      final active = _streamFactory(_customHeaders);
+      _requestId = active.requestId;
+      _cachedStream = active.stream;
+    }
     return _cachedStream!;
   }
 
-  void refresh() {
-    if (!isMutation) {
-      AxiomQueryManager().invalidate(key);
+  /// Refetches this query. With [force] the fetch bypasses the runtime cache
+  /// (header `x-axiom-cache-mode: refresh`, see [AxiomCacheMode.refresh]).
+  void refresh({bool force = false}) {
+    if (isMutation) return;
+    if (force) {
+      throw UnimplementedError('AxiomQuery.refresh(force: true)');
     }
+    AxiomQueryManager().invalidate(key);
+  }
+
+  /// Cancels the in-flight request, if any. Listeners receive one error
+  /// with code [Cancelled]. Returns true when a live request was cancelled.
+  bool cancel() {
+    final id = _requestId;
+    if (id == null || id == 0) return false;
+    return (_runtime ?? AxiomRuntime()).cancel(id);
   }
 
   Future<void> prefetch() async {

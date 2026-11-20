@@ -1,3 +1,5 @@
+import 'errors.dart';
+
 enum ErrorStage {
   configuration,
   contractLoad,
@@ -53,6 +55,7 @@ sealed class AxiomErrorCode {
         'CodecError' => const CodecError(),
         'AuthTokenExpired' => const AuthTokenExpired(),
         'NotInitialized' => const NotInitialized(),
+        'Cancelled' => const Cancelled(),
         _ => UnknownCode(json),
       };
     } else if (json is Map && json.containsKey('HttpStatus')) {
@@ -112,6 +115,12 @@ class UnknownCode extends AxiomErrorCode {
   const UnknownCode(this.raw);
 }
 
+/// The request was cancelled (`axiom_cancel`, query disposal,
+/// `resetSession`, or a per-call timeout raised by the SDK).
+class Cancelled extends AxiomErrorCode {
+  const Cancelled();
+}
+
 /// The main rich error object that is deserialized from Rust.
 // FILE: lib/src/state.dart (Partial Replacement)
 
@@ -123,6 +132,14 @@ class AxiomError {
   final bool retryable;
   final String? details;
 
+  /// Contract `failure` code (for example `NotFound`, `InsufficientFunds`)
+  /// when the server answered with a declared failure. Null otherwise.
+  /// Read from the error JSON field `failure_code`.
+  final String? failureCode;
+
+  /// Decoded JSON payload of the contract failure (field `failure_payload`).
+  final Object? failurePayload;
+
   AxiomError({
     required this.stage,
     required this.category,
@@ -130,6 +147,8 @@ class AxiomError {
     required this.message,
     required this.retryable,
     this.details,
+    this.failureCode,
+    this.failurePayload,
   });
 
   factory AxiomError.fromJson(Map<String, dynamic> json) {
@@ -140,8 +159,18 @@ class AxiomError {
       message: json['message'],
       retryable: json['retryable'] ?? false,
       details: json['details'],
+      failureCode: (json['failure_code'] ?? json['failureCode']) as String?,
+      failurePayload: json['failure_payload'] ?? json['failurePayload'],
     );
   }
+
+  /// True when [code] is [Cancelled].
+  bool get isCancelled => code is Cancelled;
+
+  /// Typed failure produced by the decoder registered for [failureCode] in
+  /// [AxiomFailureRegistry], or null.
+  Object? failure({String? namespace}) =>
+      AxiomFailureRegistry.decode(this, namespace: namespace);
 
   /// NEW: The Magic Zero-Dart Validation Parser
   /// Extracts field-specific errors from the Rust rod-rs schema validator.
