@@ -1,8 +1,20 @@
 #!/usr/bin/env python3
 """Render a results JSON (results/<date>-<label>.json) as markdown for the repo README.
 
-  python3 tool/render_readme.py results/2026-11-20-linux-chrome.json [more.json ...]
+  python3 tool/render_readme.py results/2026-11-20-linux-chrome.json [more.json ...]   long table
   python3 tool/render_readme.py results/X.json --insert ../../README.md
+
+  Short summary block (the one between the README markers: a timings table with Axiom / dio /
+  http columns and a size table), from the web results, optionally the VM results and the
+  size table (tool/size_table.py):
+  python3 tool/render_readme.py --summary results/<web>.json [--vm results/<vm>.json]
+      [--size-table results/size-table.json] [--insert ../../README.md]
+
+  Before/after table for every metric two results files share:
+  python3 tool/render_readme.py --compare results/<old>.json results/<new>.json
+
+  Append one line per release and machine to the history file:
+  python3 tool/render_readme.py --history results/history.jsonl --release 0.150.1 results/<x>.json ...
 
 With --insert the output replaces the text between <!-- BENCHMARKS:START --> and
 <!-- BENCHMARKS:END --> in that file; otherwise it is printed.
@@ -37,13 +49,40 @@ def table(head, rows):
 LABELS = {"axiom": "Axiom", "dio": "dio + retrofit", "http": "package:http", "web_socket_channel": "web_socket_channel",
           "dio_cache_interceptor": "dio + dio_cache_interceptor", "axiom_generated": "Axiom generated models",
           "json_serializable": "json_serializable", "manual_fromJson": "manual fromJson", "json_only": "jsonDecode only"}
+LABELS.update({"dio_compute": "dio + compute() decode", "dio_http2": "dio + dio_http2_adapter",
+               "cronet_http": "cronet_http", "cupertino_http": "cupertino_http", "idle": "idle (no request)",
+               "http_ndjson": "package:http, NDJSON stream", "dio_ndjson": "dio, NDJSON stream"})
 CASES = {"small_get_item": "getItem (~110 B)", "small_create_item": "createItem (POST)",
          "large_list_1000": "listItems 1 000 items (91 KB)", "large_list_10000": "listItems 10 000 items (938 KB)",
          "repeat_list_1000": "cache hit, 1 000 items, repeat call"}
 
 
+EXTRA_CASES = {"parallel20_get_item": "20 parallel getItem calls, wall time",
+               "parallel20_list_1000": "20 parallel listItems(~1 000) calls, wall time",
+               "cached_repeat_list_1000": "repeat call after caching, 1 000 items",
+               "offline_first_data_list_1000": "first data with the server unreachable, 1 000 items",
+               "list_10000": "10 000 items"}
+
+
 def describe(key):
+    proto = ""
+    if key.endswith("]") and " [" in key:
+        key, proto = key[:key.rindex(" [")], key[key.rindex(" [") + 2:-1]
+    what, client = _describe(key)
+    if proto:
+        what += f" ({'HTTP/2 over TLS' if proto == 'h2' else 'HTTP/1.1 over TLS'})"
+    return what, client
+
+
+def _describe(key):
     p = key.split()
+    if p[0] in ("parallel", "offline", "clients"):
+        c = EXTRA_CASES.get(p[1]) or CASES.get(p[1], p[1])
+        return f"{c}, {p[3]}", LABELS.get(p[2], p[2])
+    if p[0] == "jank":
+        return f"Longest UI-isolate stall while fetching + decoding {EXTRA_CASES.get(p[1], p[1])} (median of 10 calls)", LABELS.get(p[2], p[2])
+    if p[0] == "ttfi":
+        return f"Time to first item, {EXTRA_CASES.get(p[1], p[1])}, p50", LABELS.get(p[2], p[2])
     if p[0] == "cold":
         return (f"Cold start, {'time to first data' if p[1] == 'first_data' else 'runtime/client init'} (median of 5 launches)",
                 LABELS.get(p[2], p[2]))
@@ -200,8 +239,188 @@ def render(r):
     return "\n".join(md)
 
 
+# ---------------- short summary, compare, history (unit bench2) ----------------
+
+def _m(r, key):
+    """(median, stable, spread) of a web_stats metric, or None."""
+    v = (r or {}).get("web_stats", {}).get("metrics", {}).get(key)
+    if not v or v.get("median") is None:
+        return None
+    return v["median"], v.get("stable", False), v.get("spread_pct")
+
+
+def _ms(v):
+    if v is None:
+        return "–"
+    med, stable, spread = v
+    txt = f"{med:,.0f} ms" if med >= 100 else (f"{med:.1f} ms" if med >= 10 else f"{med:.2f} ms")
+    return txt if stable else f"not stable ({spread:.0f}% spread)" if spread is not None else "not stable"
+
+
+SUMMARY_ROWS = [
+    # (label, axiom key, dio key, http key)
+    ("Cold start to first data", "cold first_data axiom", "cold first_data dio", "cold first_data http"),
+    ("getItem (~110 B), p50", "latency small_get_item axiom p50", "latency small_get_item dio p50", "latency small_get_item http p50"),
+    ("List of 1 000 items (91 KB), p50", "latency large_list_1000 axiom p50", "latency large_list_1000 dio p50", "latency large_list_1000 http p50"),
+    ("List of 10 000 items (938 KB), p50", "latency large_list_10000 axiom p50", "latency large_list_10000 dio p50", "latency large_list_10000 http p50"),
+    ("20 parallel getItem calls, all done, p50", "parallel parallel20_get_item axiom p50", "parallel parallel20_get_item dio p50", "parallel parallel20_get_item http p50"),
+    ("20 parallel 1 000-item lists, all done, p50", "parallel parallel20_list_1000 axiom p50", "parallel parallel20_list_1000 dio p50", "parallel parallel20_list_1000 http p50"),
+    ("Repeat call served from cache, 1 000 items, p50", "cache repeat_list_1000 axiom p50", "cache repeat_list_1000 dio_cache_interceptor p50", None),
+    ("First data with the server unreachable, 1 000 items", "offline offline_first_data_list_1000 axiom p50", "offline offline_first_data_list_1000 dio_cache_interceptor p50", None),
+    ("Longest UI stall while loading 10 000 items", "jank list_10000 axiom longest_gap_p50", "jank list_10000 dio longest_gap_p50", "jank list_10000 http longest_gap_p50"),
+    ("Time to first item, 10 000 items", "latency large_list_10000 axiom p50", "ttfi list_10000 dio_ndjson p50", "ttfi list_10000 http_ndjson p50"),
+    ("Decode only, 10 000 items, p50", "decode 10000 axiom_generated p50", "decode 10000 json_serializable p50", "decode 10000 manual_fromJson p50"),
+]
+NOTES = {"Repeat call served from cache, 1 000 items, p50": (None, " (`dio_cache_interceptor`)", "not applicable"),
+         "First data with the server unreachable, 1 000 items": (None, " (`dio_cache_interceptor`)", "fails (no cache)"),
+         "Time to first item, 10 000 items": (" (no streaming call; whole list)", " (NDJSON stream)", " (NDJSON stream)"),
+         "Decode only, 10 000 items, p50": (None, " (`json_serializable`)", " (manual `fromJson`)")}
+
+
+def _timing_table(r):
+    rows = []
+    for label, *keys in SUMMARY_ROWS:
+        cells = []
+        for i, k in enumerate(keys):
+            note = NOTES.get(label, (None, None, None))[i]
+            if k is None:
+                cells.append(note or "not applicable")
+                continue
+            v = _m(r, k)
+            cells.append(_ms(v) + (note or "") if v else "–")
+        if all(c == "–" for c, k in zip(cells, keys) if k is not None):
+            continue
+        rows.append([label] + cells)
+    t = r.get("tooling", {}).get("results", {})
+    for mode in ("cold", "warm"):
+        g, pull, br = (t.get(k, {}).get(mode, {}).get("median_s") for k in ("axiom_generator", "axiom_pull", "build_runner"))
+        if g is not None and br is not None:
+            rows.insert(0 if mode == "cold" else 1, [f"Client generation, {mode}", f"{g:.1f} s (`axiom pull` {pull:.1f} s)",
+                                                     f"{br:.1f} s (`build_runner`)", "none"])
+    loc = r.get("loc", {}).get("approaches")
+    if loc:
+        rows.append(["Hand-written client code", f"{loc['axiom']['hand_written']['total']} lines",
+                     f"{loc['dio_retrofit']['hand_written']['total']} lines (plus {loc['dio_retrofit']['generated']['total']} generated)",
+                     f"{loc['http_manual']['hand_written']['total']} lines"])
+    return table(["Measurement", "Axiom", "dio + retrofit", "package:http"], rows)
+
+
+def _size_table(st):
+    v = st.get("variants", {})
+    base = v.get("baseline", {})
+    rows = []
+    names = {"axiom": "Axiom (runtime bundled by axiom_flutter)", "axiom_extensions": "Axiom + `axiom_flutter_extensions`"}
+    for name, x in v.items():
+        if name == "baseline":
+            continue
+        label = names.get(name, f"Axiom, runtime `{name}`")
+        if x.get("status") != "ok":
+            rows.append([label, "not available on this branch", "", ""])
+            continue
+        for abi, d in (x.get("apk_delta_vs_baseline") or {}).items():
+            a = x["apk"][abi]
+            rows.append([f"{label}, Android {abi}", mb(d), mb(a.get("runtime_raw", a.get("axiom_so_raw"))), mb(a.get("runtime_gzip9", a.get("axiom_so_gzip9")))])
+        wd = x.get("web_delta_vs_baseline")
+        if wd:
+            rows.append([f"{label}, web", f"{mb(wd['js_wasm_raw'])} ({mb(wd['js_wasm_gzip'])} gzip, {mb(wd['js_wasm_brotli'])} brotli)",
+                         mb(x['web']['axiom_assets']['raw']), mb(x['web']['axiom_assets']['gzip'])])
+    return table(["Target", "Added to the app", "Runtime installed", "Runtime download (gzip -9)"], rows)
+
+
+def summary(web, vm=None, size_table=None, size_legacy=None):
+    m = web.get("machine", {})
+    md = [f"Measured {web.get('date')} on a {m.get('cores')} vCPU Linux container: release web build in headless "
+          f"{(m.get('chrome') or 'Chrome').replace('Google ', '')}, {(web.get('flutter') or '').split(' •')[0]}, "
+          f"local loopback server, {len(web.get('web_runs', [])) or 3} full run(s). Each value is the median of the run "
+          "medians; a value whose runs differ by more than 10% is shown as not stable. These are not "
+          "physical-device numbers. All clients call the same server.", ""]
+    md += [_timing_table(web), ""]
+    if vm:
+        md += [f"Native Dart VM on the same machine (Linux x86_64, `flutter_tester` JIT, host runtime library; "
+               f"a server CPU, not a phone), {len(vm.get('web_runs', [])) or 3} run(s):", "", _timing_table(vm), ""]
+    if size_table:
+        md += ["Size added to an app:", "", _size_table(size_table), ""]
+    elif web.get("size", {}).get("apk_delta"):
+        sz = web["size"]
+        rows = [[f"Android APK, {abi}", f"{mb(d)} (runtime library {mb(sz['apk_breakdown']['axiom'][abi]['libaxiom_runtime.so']['in_apk'])})"]
+                for abi, d in sz["apk_delta"].items()]
+        if sz.get("web_delta"):
+            rows.append(["Web", f"{mb(sz['web_delta']['js_wasm_bytes'])} ({mb(sz['web_delta']['js_wasm_gzip'])} gzip)"])
+        md += ["Size added to an app:", "", table(["Target", "Added"], rows), ""]
+    md += ["The full table, including every unstable metric, the HTTP/2 rows and the method, is in "
+           "[`flutter/benchmarks`](flutter/benchmarks/README.md) and "
+           "[`flutter/benchmarks/results/README-TABLE.md`](flutter/benchmarks/results/README-TABLE.md).", ""]
+    return "\n".join(md)
+
+
+def compare_md(old, new):
+    om = old.get("web_stats", {}).get("metrics", {})
+    nm = new.get("web_stats", {}).get("metrics", {})
+    rows = []
+    for k, n in nm.items():
+        o = om.get(k)
+        if not o or o.get("median") is None or n.get("median") is None:
+            continue
+        what, client = describe(k)
+        ch = (n["median"] - o["median"]) / o["median"] * 100 if o["median"] else None
+        both = o.get("stable") and n.get("stable")
+        rows.append([what, client, f"{o['median']:g}", f"{n['median']:g}",
+                     "–" if ch is None else f"{ch:+.0f}%",
+                     "yes" if both else f"no ({o.get('spread_pct')}% / {n.get('spread_pct')}%)"])
+    head = (f"#### Before/after: {old.get('label')} {old.get('date')} (`{old.get('sdk_commit')}`) vs "
+            f"{new.get('label')} {new.get('date')} (`{new.get('sdk_commit')}`)")
+    return "\n".join([head, "", "Medians of the run medians (ms; ws: round trips/s). A change is only meaningful "
+                       "when both sides are stable (spread <= 10%).", "",
+                       table(["Measurement", "Client", "Before", "After", "Change", "Both stable"], rows), ""])
+
+
+def history_line(r, release):
+    ws = r.get("web_stats", {}).get("metrics", {})
+    return {"release": release, "date": r.get("date"), "label": r.get("label"), "sdk_commit": r.get("sdk_commit"),
+            "machine": {k: r.get("machine", {}).get(k) for k in ("cores", "ram_gb", "os", "chrome", "virtualised")},
+            "runs": len(r.get("web_runs", [])),
+            "stable": {k: v["median"] for k, v in ws.items() if v.get("stable")},
+            "not_stable": {k: v.get("spread_pct") for k, v in ws.items() if not v.get("stable")}}
+
+
+def _opt(args, name, n=1):
+    if name not in args:
+        return args, None
+    i = args.index(name)
+    val = args[i + 1] if n == 1 else True
+    return args[:i] + args[i + 1 + n - (0 if n == 1 else 1):] if n != 1 else args[:i] + args[i + 2:], val
+
+
 def main():
     args = sys.argv[1:]
+    if "--compare" in args:
+        args.remove("--compare")
+        print(compare_md(json.load(open(args[0])), json.load(open(args[1]))))
+        return
+    if "--history" in args:
+        args, hist = _opt(args, "--history")
+        args, rel = _opt(args, "--release")
+        with open(hist, "a") as fh:
+            for p in args:
+                fh.write(json.dumps(history_line(json.load(open(p)), rel or "unreleased")) + "\n")
+        print("appended", len(args), "line(s) to", hist)
+        return
+    if "--summary" in args:
+        args.remove("--summary")
+        args, vm = _opt(args, "--vm")
+        args, st = _opt(args, "--size-table")
+        args, target = _opt(args, "--insert")
+        body = summary(json.load(open(args[0])), json.load(open(vm)) if vm else None,
+                       json.load(open(st)) if st else None)
+        if not target:
+            print(body)
+            return
+        text = open(target).read()
+        pre, rest = text.split(START, 1)
+        _, post = rest.split(END, 1)
+        open(target, "w").write(pre + START + "\n" + body + END + post)
+        print("updated", target)
+        return
     target = None
     if "--insert" in args:
         i = args.index("--insert")
