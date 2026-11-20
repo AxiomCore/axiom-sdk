@@ -31,7 +31,16 @@ Future<List<CheckResult>> runChecks(
   void Function(CheckResult)? onResult,
 }) async {
   final results = <CheckResult>[];
+  String? group;
   for (final def in checks) {
+    // Between check groups (id prefix before the first '.'), start from no
+    // tokens and no provider: an auth check that fails half-way must not
+    // change the outcome of later groups.
+    final g = def.name.split('.').first;
+    if (ctx != null && g != group) {
+      if (group != null) resetAuthState(ctx);
+      group = g;
+    }
     final sw = Stopwatch()..start();
     CheckResult r;
     if (ctx == null) {

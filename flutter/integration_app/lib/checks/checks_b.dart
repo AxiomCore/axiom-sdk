@@ -6,29 +6,30 @@ import 'package:axiom_flutter/axiom_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart' show rootBundle;
 
-import 'checks_b_blackhole.dart'
-    if (dart.library.io) 'checks_b_blackhole_io.dart';
 import 'ctx.dart';
 
 // Fixture endpoint ids (see axiom_generated/axiom_sdk.dart).
 const _epEverything = 1643923642;
 const _epApiKeyHeader = 1256260924;
 
-/// Namespace whose base URL never answers (non-routable address), so its
-/// requests stay in flight until cancelled.
+/// Namespace bound to the hanging server (`flutter/fixtures/tool/hang.py`,
+/// `--dart-define=FIXTURE_HANG_URL=...`): requests stay in flight until
+/// cancelled, on every platform. No in-app server (macOS App Sandbox) and no
+/// blackhole address (Chrome refuses port 9 at once).
 const _slowNs = 'b_slow';
 bool _slowLoaded = false;
 
 AxiomRuntime _rt(Ctx c) => c.sdk.runtime;
 
 Future<void> _ensureSlow(Ctx c) async {
+  requireHangUrl();
   if (_slowLoaded) return;
   final bytes = (await rootBundle.load('assets/axiom/fixture.axiom'))
       .buffer
       .asUint8List();
   final r = _rt(c).tryLoadContract(
     namespace: _slowNs,
-    baseUrl: await bBlackholeUrl(),
+    baseUrl: fixtureHangUrl,
     contractBytes: bytes,
   );
   expectThat(r.ok, 'slow namespace load: $r');
@@ -144,19 +145,6 @@ final checksB = <CheckDef>[
     expectThat(!rt.cancel(id2), 'last unsubscribe cancelled the request');
   }),
   CheckDef('b.call_options', 'runtime', (c) async {
-    await _ensureSlow(c);
-    final timedOut = await _settled(
-      _everything(
-        c,
-        ns: _slowNs,
-        args: {'b': 'timeout'},
-        options: const AxiomCallOptions(timeout: Duration(milliseconds: 300)),
-      ).stream,
-    );
-    expectThat(
-      timedOut.hasError && timedOut.error!.code is NetworkTimeout,
-      'timeout -> NetworkTimeout, got ${timedOut.error}',
-    );
     final headers = await _settled(
       _rt(c)
           .send<Object?>(
@@ -175,6 +163,19 @@ final checksB = <CheckDef>[
           .stream,
     );
     expectThat(headers.isSuccess, 'options.headers override: ${headers.error}');
+    await _ensureSlow(c); // skips the timeout half without FIXTURE_HANG_URL
+    final timedOut = await _settled(
+      _everything(
+        c,
+        ns: _slowNs,
+        args: {'b': 'timeout'},
+        options: const AxiomCallOptions(timeout: Duration(milliseconds: 300)),
+      ).stream,
+    );
+    expectThat(
+      timedOut.hasError && timedOut.error!.code is NetworkTimeout,
+      'timeout -> NetworkTimeout, got ${timedOut.error}',
+    );
   }),
   CheckDef('b.error_listener_typed_failure', 'runtime', (c) async {
     final events = <AxiomErrorEvent>[];
@@ -250,12 +251,16 @@ final checksB = <CheckDef>[
     final rt = _rt(c);
     // Must not throw; end-to-end injection needs contract auth methods
     // (the fixture declares none client-side).
-    rt.setNamespaceAuthToken(namespace: 'fixture', token: fixtureBearerToken);
-    rt.setGlobalAuthToken(fixtureBearerToken);
-    rt.clearNamespaceAuthToken(namespace: 'fixture');
-    rt.clearGlobalAuthToken();
-    rt.setAuthProvider((ns, method) async => null);
-    rt.setAuthProvider(null);
+    try {
+      rt.setNamespaceAuthToken(namespace: 'fixture', token: fixtureBearerToken);
+      rt.setGlobalAuthToken(fixtureBearerToken);
+      rt.clearNamespaceAuthToken(namespace: 'fixture');
+      rt.clearGlobalAuthToken();
+      rt.setAuthProvider((ns, method) async => null);
+      rt.setAuthProvider(null);
+    } finally {
+      resetAuthState(c);
+    }
   }),
   CheckDef('b.extensions', 'runtime', (c) async {
     if (kIsWeb) skip('extensions are native only');

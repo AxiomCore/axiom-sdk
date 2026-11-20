@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:axiom_flutter/axiom_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart' show rootBundle;
 
 import 'checks_c_mem_stub.dart'
     if (dart.library.js_interop) 'checks_c_mem_web.dart';
@@ -19,6 +20,9 @@ const _authBearerId = 1404635741;
 const _wsEchoId = 1471516720;
 
 AxiomRuntime _rt(Ctx c) => c.sdk.runtime;
+
+const _hangNs = 'c_hang';
+bool _hangLoaded = false;
 
 AxiomConfig _config() => const AxiomConfig(
   contracts: {
@@ -39,9 +43,10 @@ Future<List<AxiomState<Uint8List>>> _raw(
   Map<String, dynamic>? query,
   AxiomCallOptions? options,
   void Function(int id)? onStart,
+  String ns = _ns,
 }) async {
   final r = _rt(c).callStream(
-    namespace: _ns,
+    namespace: ns,
     endpointId: endpointId,
     method: 'GET',
     path: path,
@@ -121,26 +126,53 @@ final checksC = <CheckDef>[
   }),
   CheckDef('c.cancel_websocket', 'runtime', (c) async {
     // The ws echo stays open (nothing is sent), so it is live until cancelled.
-    final r = _rt(c).callStream(
-      namespace: _ns,
-      endpointId: _wsEchoId,
-      method: 'WS',
-      path: '/stream/ws',
-      requestBytes: Uint8List(0),
-    );
-    final done = Completer<void>();
-    r.stream.listen(null, onDone: done.complete);
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    expectThat(_rt(c).cancel(r.requestId), 'cancel(ws) returned false');
-    await done.future.timeout(const Duration(seconds: 5),
-        onTimeout: () => throw CheckFailure('ws stream not closed by cancel'));
+    // Same server, token and Origin as stream.websocket_echo.
+    await c.wsApi();
+    c.setWsToken();
+    try {
+      final r = _rt(c).callStream(
+        namespace: c.wsNamespace,
+        endpointId: _wsEchoId,
+        method: 'WS',
+        path: '/stream/ws',
+        headers: Ctx.wsHeaders,
+        requestBytes: Uint8List(0),
+      );
+      final errors = <Object>[];
+      final done = Completer<void>();
+      r.stream.listen((s) {
+        if (s.hasError && !s.error!.isCancelled) errors.add(s.error!);
+      }, onDone: done.complete);
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      // Native only: a browser cannot authorize this upgrade (see
+      // skipBearerWsOnWeb); cancel still has to work while it connects.
+      if (!kIsWeb) expectThat(errors.isEmpty, 'ws failed before cancel: $errors');
+      expectThat(_rt(c).cancel(r.requestId), 'cancel(ws) returned false');
+      await done.future.timeout(const Duration(seconds: 5),
+          onTimeout: () => throw CheckFailure('ws stream not closed by cancel'));
+    } finally {
+      resetAuthState(c);
+    }
   }),
   CheckDef('c.call_options_timeout', 'runtime', (c) async {
+    // Deterministic: the hanging server never answers, so only the timeout
+    // can end the call (a 1 µs timeout against the real fixture raced it).
+    requireHangUrl();
+    if (!_hangLoaded) {
+      final bytes = (await rootBundle.load('assets/axiom/fixture.axiom'))
+          .buffer
+          .asUint8List();
+      final r = _rt(c).tryLoadContract(
+          namespace: _hangNs, baseUrl: fixtureHangUrl, contractBytes: bytes);
+      expectThat(r.ok, 'hang namespace load: $r');
+      _hangLoaded = true;
+    }
     final states = await _raw(c,
+        ns: _hangNs,
         endpointId: _echoId,
         path: '/echo/timeout',
         query: {'q': 'x', 'limit': 1},
-        options: const AxiomCallOptions(timeout: Duration(microseconds: 1)));
+        options: const AxiomCallOptions(timeout: Duration(milliseconds: 300)));
     final err = states.where((s) => s.hasError).map((s) => s.error!).toList();
     expectThat(err.isNotEmpty && err.first.code is NetworkTimeout,
         'expected NetworkTimeout, got ${err.isEmpty ? states : err.first}');
@@ -225,17 +257,24 @@ final checksC = <CheckDef>[
   }),
   CheckDef('c.namespace_global_token', 'auth', (c) async {
     final rt = _rt(c);
-    rt.setGlobalAuthToken(fixtureBearerToken);
-    rt.setNamespaceAuthToken(namespace: _ns, token: fixtureBearerToken);
-    rt.clearNamespaceAuthToken(namespace: _ns);
-    rt.clearGlobalAuthToken();
+    try {
+      rt.setGlobalAuthToken(fixtureBearerToken);
+      rt.setNamespaceAuthToken(namespace: _ns, token: fixtureBearerToken);
+      rt.clearNamespaceAuthToken(namespace: _ns);
+      rt.clearGlobalAuthToken();
+    } finally {
+      resetAuthState(c);
+    }
     skip('setters run without error; the fixture contract carries no '
         'endpoint auth metadata ("auth": null), so no token is injected '
         'on any platform');
   }),
   CheckDef('c.auth_provider', 'auth', (c) async {
-    _rt(c).setAuthProvider((ns, m) async => fixtureBearerToken);
-    _rt(c).setAuthProvider(null);
+    try {
+      _rt(c).setAuthProvider((ns, m) async => fixtureBearerToken);
+    } finally {
+      _rt(c).setAuthProvider(null);
+    }
     skip('provider registered; not exercised because the fixture contract '
         'has no endpoint auth metadata (web asks the provider before '
         'dispatch for endpoints that declare auth methods)');
