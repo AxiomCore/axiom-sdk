@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "runtime_version": "0.148.6",
+  "apple": {
+    "archive": "AxiomRuntime.xcframework.zip",
+    "url": "https://github.com/AxiomCore/AxiomCore/releases/download/v0.148.6/AxiomRuntime.xcframework.zip",
+    "sha256": "f8b394fe7be49091face20e142ae2c3f2c4ad2a47235d736c137493bbe014db6"
+  },
+  "android": {
+    "archive": null,
+    "url": null,
+    "sha256": null
+  },
+  "wasm": {
+    "runtime_commit": "85934e544ef08ede418cd76dc5c3c98e3a7c9de8",
+    "runtime_branch": "axiom-runtime flutter/f4 (flutter/parity a67a62d + wasm exports)",
+    "axiom_runtime_js_sha256": "e74b0dc93f1dddfc72ef42c16a486d4d9683a9bb7123a2ac11564f4c1411e8da",
+    "axiom_runtime_bg_wasm_sha256": "bd57be2892cbfeecf11ece2fb8fe279f3848c082485cd08ddf974ab727f6215e"
+  }
+}

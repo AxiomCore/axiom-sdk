@@ -52,11 +52,17 @@ failure unauthorized(payload: Models.Problem, status: 401, category: FailureCate
 
 guard signedIn(kind: GuardKind.authenticated)
 
-cors(origins: ["http://127.0.0.1:8792", "http://localhost:8792"], methods: [GET, POST, PUT, DELETE], headers: ["content-type", "authorization", "x-api-key", "x-axiom-cache-mode"], credentials: false, maxAge: 10m)
+cors(origins: ["http://127.0.0.1:8792", "http://localhost:8792"], methods: [GET, POST, PUT, DELETE], headers: ["accept", "authorization", "axiom-public-failures", "content-type", "last-event-id", "traceparent", "tracestate", "x-api-key", "x-axiom-cache-mode", "x-axiom-request-id", "x-axiom-submission-resolution", "x-fixture-nonce"], credentials: false, maxAge: 10m)
 
 // ---- unary ----
 action echo(kind: ActionKind.query, input: Models.EchoIn, output: Models.Echo) {
-  managed { return {path: Input.path, q: Input.q, limit: Input.limit, flag: Input.flag} }
+  managed {
+    if Input.flag == null {
+      return {path: Input.path, q: Input.q, limit: Input.limit}
+    } else {
+      return {path: Input.path, q: Input.q, limit: Input.limit, flag: Input.flag}
+    }
+  }
 }
 endpoint echo(method: GET, path: "/echo/{path}") {
   request {
@@ -139,9 +145,9 @@ endpoint claim(method: POST, path: "/claims") {
 }
 
 // ---- client cache policies ----
-// No mutable state or clock is available to managed code, so each response
-// echoes the optional `x-fixture-nonce` request header: a cached hit returns
-// the old nonce, a network hit returns the new one.
+// No mutable state or clock is available to managed code, so a response cannot
+// change between identical calls. Each call echoes the `nonce` query value;
+// clients observe caching through the reported source of the second identical call.
 action stamp(kind: ActionKind.query, input: Models.NonceIn, output: Models.Stamp) {
   managed { return {strategy: "nonce", key: Input.key} }
 }
@@ -149,39 +155,39 @@ action itemStamp(kind: ActionKind.query, input: Models.StampIn, output: Models.S
   managed { return {strategy: Input.strategy, key: Input.key} }
 }
 endpoint cacheNetworkOnly(method: GET, path: "/cache/network-only") {
-  request { header("x-fixture-nonce", type: String) }
-  handle(action: Actions.stamp, input: {key: Input.header["x-fixture-nonce"]})
+  request { query("nonce", type: String) }
+  handle(action: Actions.stamp, input: {key: Input.query.nonce})
   response(type: Models.Stamp)
   cache(strategy: CacheStrategy.networkOnly, ttl: 1m)
 }
 endpoint cacheCacheFirst(method: GET, path: "/cache/cache-first") {
-  request { header("x-fixture-nonce", type: String) }
-  handle(action: Actions.stamp, input: {key: Input.header["x-fixture-nonce"]})
+  request { query("nonce", type: String) }
+  handle(action: Actions.stamp, input: {key: Input.query.nonce})
   response(type: Models.Stamp)
   cache(strategy: CacheStrategy.cacheFirst, ttl: 1m)
 }
 endpoint cacheNetworkFirst(method: GET, path: "/cache/network-first") {
-  request { header("x-fixture-nonce", type: String) }
-  handle(action: Actions.stamp, input: {key: Input.header["x-fixture-nonce"]})
+  request { query("nonce", type: String) }
+  handle(action: Actions.stamp, input: {key: Input.query.nonce})
   response(type: Models.Stamp)
   cache(strategy: CacheStrategy.networkFirst, ttl: 1m)
 }
 endpoint cacheStale(method: GET, path: "/cache/stale-while-revalidate") {
-  request { header("x-fixture-nonce", type: String) }
-  handle(action: Actions.stamp, input: {key: Input.header["x-fixture-nonce"]})
+  request { query("nonce", type: String) }
+  handle(action: Actions.stamp, input: {key: Input.query.nonce})
   response(type: Models.Stamp)
   cache(strategy: CacheStrategy.staleWhileRevalidate, ttl: 1m)
 }
 endpoint cachedItem(method: GET, path: "/cache/items/{id}") {
-  request { path("id", type: String) header("x-fixture-nonce", type: String) }
-  handle(action: Actions.itemStamp, input: {strategy: Input.path.id, key: Input.header["x-fixture-nonce"]})
+  request { path("id", type: String) query("nonce", type: String) }
+  handle(action: Actions.itemStamp, input: {strategy: Input.path.id, key: Input.query.nonce})
   response(type: Models.Stamp)
   cache(strategy: CacheStrategy.cacheFirst, ttl: 5m)
   cacheIdentity("fixture.item")
 }
 endpoint touchItem(method: POST, path: "/cache/items/{id}/touch") {
-  request { path("id", type: String) header("x-fixture-nonce", type: String) }
-  handle(action: Actions.itemStamp, input: {strategy: Input.path.id, key: Input.header["x-fixture-nonce"]})
+  request { path("id", type: String) query("nonce", type: String) }
+  handle(action: Actions.itemStamp, input: {strategy: Input.path.id, key: Input.query.nonce})
   response(type: Models.Stamp)
   invalidates("fixture.item")
 }
