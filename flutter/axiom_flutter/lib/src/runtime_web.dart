@@ -750,6 +750,8 @@ class AxiomRuntimeWeb implements AxiomRuntime {
           duration: sw.elapsed,
         );
       }
+      // From here on calls take the normal path (also after a shutdown()).
+      _runtimeReady = null;
       ready.complete();
     }();
     final result = AxiomInitResult(
@@ -1593,7 +1595,7 @@ class AxiomRuntimeWeb implements AxiomRuntime {
     }
 
     final ready = _runtimeReady;
-    if (ready != null && _pump == null) {
+    if (ready != null) {
       // C3.1: the runtime is still loading.
       if (_fastEligible(
         namespace,
