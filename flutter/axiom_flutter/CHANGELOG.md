@@ -1,21 +1,24 @@
 ## 0.150.1 (unreleased): Dart-side speed on native
 
 Behaviour changes (native only; web unchanged)
-- Bodies of 256 KB or more decode on a background isolate (`Isolate.run`),
-  so a 10 000-item list no longer blocks the UI isolate for the whole decode.
-  Old behaviour: `AxiomConfig(decodeIsolateThreshold: 0)`.
-- Decoded models are kept in a small in-memory object cache per query key
-  (64 entries / 8 MB of bodies by default). A model is reused only when the
-  runtime returns byte-for-byte the body it was decoded from, so it is never
-  older than what the runtime's byte cache serves; a repeat call can now
-  return the same model instance. Old behaviour:
-  `AxiomConfig(objectCacheMaxEntries: 0)`.
+- Bodies of 256 KB or more are PARSED (bytes to JSON tree) on a background
+  isolate; the generated `fromJson` still runs on the calling isolate, so
+  decoder state such as unknown enum wire values is kept. For a 10 000-item
+  list the longest UI-isolate stall drops from about 21-26 ms to 5-8 ms
+  (Linux host). Old behaviour: `AxiomConfig(decodeIsolateThreshold: 0)`.
+- New, OFF by default: an in-memory object cache of decoded models per query
+  key (`AxiomConfig(objectCacheMaxEntries: 64)` to enable). Enable it only if
+  you treat models as immutable: a hit returns the SAME instance to every
+  caller, so an in-place edit (`items.sort()`, `add`) would be seen by later
+  callers. A model is reused only for byte-for-byte the same body and the
+  same decoder, so it is never older than what the runtime's byte cache
+  serves.
 - Response bodies cross from the runtime event isolate as
   `TransferableTypedData` (one copy fewer per response).
 
 Added
-- `AxiomConfig.decodeIsolateThreshold`, `objectCacheMaxEntries`,
-  `objectCacheMaxBytes`.
+- `AxiomConfig.decodeIsolateThreshold` (default 256 KB),
+  `objectCacheMaxEntries` (default 0 = off), `objectCacheMaxBytes` (8 MB).
 
 ## 0.150.0 - 2026-11-21
 

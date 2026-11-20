@@ -1879,9 +1879,11 @@ class AxiomRuntimeIo implements AxiomRuntime {
           isFetching: state.isFetching,
           isStreaming: state.isStreaming,
         );
-        final cacheKey = state.isStreaming ? null : objectCacheKey;
+        final cacheKey = state.isStreaming || objectCache.maxEntries <= 0
+            ? null
+            : objectCacheKey;
         if (cacheKey != null) {
-          final hit = objectCache.lookup<T>(cacheKey, bytes);
+          final hit = objectCache.lookup<T>(cacheKey, bytes, decoder);
           if (hit != null) return ok(hit);
         }
         final threshold = decodeIsolateThreshold;
@@ -1890,13 +1892,13 @@ class AxiomRuntimeIo implements AxiomRuntime {
             bytes.length >= threshold &&
             !state.isStreaming) {
           return decodeOffIsolate<T>(bytes, decoder).then((value) {
-            if (cacheKey != null) objectCache.store(cacheKey, bytes, value);
+            if (cacheKey != null) objectCache.store(cacheKey, bytes, decoder, value);
             return ok(value);
           }, onError: (Object e) => failed(e));
         }
         try {
           final value = AxiomCodec.decode(bytes, decoder);
-          if (cacheKey != null) objectCache.store(cacheKey, bytes, value);
+          if (cacheKey != null) objectCache.store(cacheKey, bytes, decoder, value);
           return ok(value);
         } catch (e) {
           return failed(e);

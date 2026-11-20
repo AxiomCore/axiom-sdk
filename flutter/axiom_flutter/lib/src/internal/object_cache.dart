@@ -2,9 +2,17 @@ import 'dart:collection';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'dart:convert';
+
 import 'axiom_codec.dart';
+import 'sse.dart';
 
 /// In-memory cache of decoded models (C2.1), one entry per query key.
+///
+/// OFF by default (`AxiomConfig.objectCacheMaxEntries` 0). A hit hands the
+/// SAME instance to every later caller, so enable it only if the app treats
+/// models as immutable (never sorts or edits a returned list or map in
+/// place).
 ///
 /// Correctness rule: an entry is returned only when the runtime delivered
 /// byte-for-byte the body the model was decoded from. The runtime's byte
@@ -13,7 +21,7 @@ import 'axiom_codec.dart';
 /// cleared on clearCache / purgeCache / invalidate / resetSession to free
 /// memory. Bounded LRU by entry count and summed body bytes.
 class AxiomObjectCache {
-  AxiomObjectCache({this.maxEntries = 64, this.maxBytes = 8 * 1024 * 1024});
+  AxiomObjectCache({this.maxEntries = 0, this.maxBytes = 8 * 1024 * 1024});
 
   int maxEntries;
   int maxBytes;
@@ -28,10 +36,15 @@ class AxiomObjectCache {
   int get length => _entries.length;
   int get bytes => _bytes;
 
-  /// The model decoded earlier from exactly [body] under [key], or null.
-  T? lookup<T>(String key, Uint8List body) {
+  /// The model decoded earlier by the same [decoder] from exactly [body]
+  /// under [key], or null.
+  T? lookup<T>(String key, Uint8List body, Object decoder) {
+    if (maxEntries <= 0) return null;
     final e = _entries[key];
-    if (e == null || e.value is! T || !sameBytes(e.body, body)) {
+    if (e == null ||
+        !identical(e.decoder, decoder) ||
+        e.value is! T ||
+        !sameBytes(e.body, body)) {
       misses++;
       return null;
     }
@@ -42,11 +55,11 @@ class AxiomObjectCache {
     return e.value as T;
   }
 
-  void store(String key, Uint8List body, Object? value) {
+  void store(String key, Uint8List body, Object decoder, Object? value) {
     if (maxEntries <= 0 || body.length > maxBytes) return;
     final old = _entries.remove(key);
     if (old != null) _bytes -= old.body.length;
-    _entries[key] = _Entry(body, value);
+    _entries[key] = _Entry(body, decoder, value);
     _bytes += body.length;
     while (_entries.length > maxEntries || _bytes > maxBytes) {
       final first = _entries.keys.first;
@@ -91,28 +104,34 @@ class AxiomObjectCache {
 }
 
 class _Entry {
-  _Entry(this.body, this.value);
+  _Entry(this.body, this.decoder, this.value);
   final Uint8List body;
+  final Object decoder;
   final Object? value;
 }
 
-/// Decodes [bytes] with [decoder], on a background isolate when the body
-/// has at least [threshold] bytes (C1.3); inline otherwise. Falls back to
-/// inline decoding when the decoder cannot be sent to another isolate.
+final Converter<List<int>, Object?> _utf8Json = utf8.decoder.fuse(
+  json.decoder,
+);
+
+/// Parses [bytes] (UTF-8 JSON) to a JSON tree on a background isolate, then
+/// runs [decoder] (the generated `fromJson`) HERE, on the calling isolate
+/// (C1.3). Only the parse moves: decoders may rely on isolate-local state
+/// (the generated models keep unknown enum wire values in an `Expando`) and
+/// are never copied. The tree comes back through `Isolate.exit` without a
+/// copy. SSE bodies and parse fallbacks decode inline.
 Future<T> decodeOffIsolate<T>(
   Uint8List bytes,
   T Function(dynamic json) decoder,
 ) async {
-  // The body crosses as TransferableTypedData: one memcpy into the transfer
-  // buffer on this isolate, none on receipt.
-  final transfer = TransferableTypedData.fromList([bytes]);
-  try {
-    return await Isolate.run(
-      () => AxiomCodec.decode(transfer.materialize().asUint8List(), decoder),
-      debugName: 'axiom-decode',
-    );
-  } on ArgumentError {
-    // Unsendable decoder closure: decode here.
+  if (bytes.length <= 3 || AxiomSseParser.looksLike(bytes)) {
     return AxiomCodec.decode(bytes, decoder);
   }
+  // One memcpy into the transfer buffer here, none on receipt.
+  final transfer = TransferableTypedData.fromList([bytes]);
+  final tree = await Isolate.run(
+    () => _utf8Json.convert(transfer.materialize().asUint8List()),
+    debugName: 'axiom-json-parse',
+  );
+  return decoder(tree);
 }

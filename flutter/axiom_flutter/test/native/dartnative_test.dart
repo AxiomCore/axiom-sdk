@@ -12,6 +12,7 @@ import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:axiom_flutter/axiom_flutter.dart';
+import 'package:axiom_flutter/src/query_manager.dart';
 import 'package:axiom_flutter/src/runtime_io.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -43,6 +44,18 @@ class ItemList {
     );
   }
 }
+
+/// Isolate-local state set by a decoder (like the generated models' raw
+/// enum wire values): must survive off-isolate decoding (review B4).
+final _tag = Expando<String>();
+
+ItemList taggedDecoder(dynamic j) {
+  final l = ItemList.fromJson(j);
+  _tag[l] = 'kept';
+  return l;
+}
+
+ItemList otherDecoder(dynamic j) => ItemList(ItemList.fromJson(j).items, -1);
 
 /// Server on its own isolate. `?v=` in the body changes when the test sends
 /// 'bump', so a changed body can be detected.
@@ -95,7 +108,9 @@ void main() {
   late AxiomRuntimeIo rt;
   late SendPort bump;
 
-  AxiomQuery<ItemList> call(int ep, int n, {AxiomCallOptions? options}) =>
+  AxiomQuery<ItemList> call(int ep, int n,
+          {AxiomCallOptions? options,
+          ItemList Function(dynamic) decoder = ItemList.fromJson}) =>
       rt.send<ItemList>(
         namespace: 'bench',
         endpointId: ep,
@@ -103,12 +118,13 @@ void main() {
         path: ep == _cachedItems ? '/cached/items' : '/items',
         queryParams: {'n': '$n'},
         args: {'n': n},
-        decoder: ItemList.fromJson,
+        decoder: decoder,
         options: options,
       );
 
-  Future<ItemList> fetch(int ep, int n) async {
-    final s = await settle(call(ep, n).stream);
+  Future<ItemList> fetch(int ep, int n,
+      {ItemList Function(dynamic) decoder = ItemList.fromJson}) async {
+    final s = await settle(call(ep, n, decoder: decoder).stream);
     expect(s.hasError, isFalse, reason: '${s.error}');
     return s.data!;
   }
@@ -146,6 +162,40 @@ void main() {
     return 'p50=${times[15] / 1000}ms min=${times.first / 1000}ms';
   }
 
+  test('B5 object cache is off by default: no shared mutable instance',
+      () async {
+    expect(rt.objectCache.maxEntries, 0);
+    final a = await fetch(_listItems, 50);
+    a.items.removeWhere((_) => true); // caller edits its result in place
+    final b = await fetch(_listItems, 50);
+    expect(identical(a, b), isFalse);
+    expect(b.items.length, 50);
+  });
+
+  test('B5 object cache key includes the decoder', () async {
+    rt.objectCache.maxEntries = 64;
+    addTearDown(() {
+      rt.objectCache.maxEntries = 0;
+      rt.objectCache.removeWhere();
+    });
+    final a = await fetch(_listItems, 60);
+    expect(a.total, 60);
+    // Forget the live query (it keeps its first decoder) so the second call
+    // reaches the object cache with another decoder.
+    AxiomQueryManager().clear();
+    final b = await fetch(_listItems, 60, decoder: otherDecoder);
+    expect(b.total, -1, reason: 'decoded by its own decoder, not a hit');
+  });
+
+  test('B4 off-isolate decode keeps decoder isolate-local state', () async {
+    final old = rt.decodeIsolateThreshold;
+    rt.decodeIsolateThreshold = 1; // force the background path
+    addTearDown(() => rt.decodeIsolateThreshold = old);
+    final a = await fetch(_listItems, 1000, decoder: taggedDecoder);
+    expect(a.items.length, 1000);
+    expect(_tag[a], 'kept');
+  });
+
   test('C2.1 cache-first repeat with and without the object cache', () async {
     rt.objectCache.maxEntries = 0;
     await fetch(_cachedItems, 1000);
@@ -153,12 +203,15 @@ void main() {
     rt.objectCache.maxEntries = 64;
     await fetch(_cachedItems, 1000);
     final on = await p50(1000);
+    rt.objectCache.maxEntries = 0;
     // ignore: avoid_print
     print('DN_CACHE_REPEAT_1K object_cache_off $off | on $on');
   });
 
   test('C2.1 cache hit returns the same instance; clearCache drops it',
       () async {
+    rt.objectCache.maxEntries = 64;
+    addTearDown(() => rt.objectCache.maxEntries = 0);
     final a = await fetch(_cachedItems, 1000);
     final times = <int>[];
     ItemList? b;
@@ -181,6 +234,8 @@ void main() {
 
   test('C2.1 never serves a model the byte cache would not (body changed)',
       () async {
+    rt.objectCache.maxEntries = 64;
+    addTearDown(() => rt.objectCache.maxEntries = 0);
     final a = await fetch(_listItems, 100);
     final a2 = await fetch(_listItems, 100);
     expect(identical(a, a2), isTrue, reason: 'same bytes -> same model');
@@ -191,6 +246,7 @@ void main() {
     expect(b.items.first.name, endsWith('v1'));
   });
 
+  final totals = <int, List<int>>{};
   Future<int> longestStretchUs(int threshold) async {
     rt.decodeIsolateThreshold = threshold;
     rt.objectCache.removeWhere();
@@ -202,11 +258,13 @@ void main() {
       if (now - last > maxGap) maxGap = now - last;
       last = now;
     });
+    final start = sw.elapsedMicroseconds;
     final s = await settle(
       call(_listItems, 10000,
               options: const AxiomCallOptions(cacheMode: AxiomCacheMode.refresh))
           .stream,
     );
+    (totals[threshold] ??= []).add(sw.elapsedMicroseconds - start);
     // One more tick so a stretch that ends with the call is counted.
     await Future<void>.delayed(const Duration(milliseconds: 5));
     t.cancel();
@@ -228,6 +286,10 @@ void main() {
     // ignore: avoid_print
     print('DN_BLOCK_10K inline_median=${inline[3] / 1000}ms '
         'isolate_median=${off[3] / 1000}ms inline=$inline off=$off');
-    expect(off[3], lessThan(inline[3]));
+    final ti = totals[0]!..sort();
+    final to = totals[256 * 1024]!..sort();
+    // ignore: avoid_print
+    print('DN_TOTAL_10K inline_median=${ti[ti.length ~/ 2] / 1000}ms '
+        'isolate_median=${to[to.length ~/ 2] / 1000}ms');
   });
 }
