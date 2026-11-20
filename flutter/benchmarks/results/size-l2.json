@@ -1,0 +1,300 @@
+{
+  "method": "App size with and without the Axiom SDK.\n\n  python3 tool/bench_size.py [--out results/size.json] [--skip-apk] [--skip-web]\n\nbaseline = baseline_app/lib/main.dart (dio + http, one call each, no axiom_flutter dependency)\naxiom    = app/lib/size_main.dart (the same screen plus one Axiom call; app depends on axiom_flutter)\nBuilds: `flutter build apk --release --split-per-abi` and `flutter build web --release`.\nWeb sizes: main.dart.js, every file under build/web, the Axiom wasm/js assets, and gzip -9\nsizes of the largest files (what a server with gzip would transfer).",
+  "apk": {
+    "baseline": {
+      "arm64-v8a": 14934249,
+      "armeabi-v7a": 12061517,
+      "x86_64": 16105283
+    },
+    "axiom": {
+      "arm64-v8a": 26202252,
+      "armeabi-v7a": 20478706,
+      "x86_64": 29748963
+    },
+    "axiom_wasm_opt_out": {
+      "arm64-v8a": 25245441,
+      "armeabi-v7a": 19521895,
+      "x86_64": 28792152
+    }
+  },
+  "web": {
+    "baseline": {
+      "total_bytes": 23827408,
+      "main_dart_js": 1741584,
+      "main_dart_js_gzip": 512450,
+      "js_wasm_bytes": 18059530,
+      "js_wasm_gzip": 6994285,
+      "js_wasm_files": [
+        "canvaskit/canvaskit.js",
+        "canvaskit/canvaskit.wasm",
+        "canvaskit/chromium/canvaskit.js",
+        "canvaskit/chromium/canvaskit.wasm",
+        "canvaskit/skwasm.js",
+        "canvaskit/skwasm.wasm",
+        "flutter.js",
+        "flutter_bootstrap.js",
+        "flutter_service_worker.js",
+        "main.dart.js"
+      ]
+    },
+    "axiom": {
+      "total_bytes": 26386476,
+      "main_dart_js": 1784857,
+      "main_dart_js_gzip": 526353,
+      "axiom_asset:axiom_runtime.js": 38932,
+      "axiom_asset:axiom_runtime.js:gzip": 7138,
+      "axiom_asset:axiom_runtime_bg.wasm": 2445357,
+      "axiom_asset:axiom_runtime_bg.wasm:gzip": 945673,
+      "js_wasm_bytes": 20587372,
+      "js_wasm_gzip": 7961115,
+      "js_wasm_files": [
+        "assets/packages/axiom_flutter/lib/assets/wasm/axiom_runtime.js",
+        "assets/packages/axiom_flutter/lib/assets/wasm/axiom_runtime_bg.wasm",
+        "canvaskit/canvaskit.js",
+        "canvaskit/canvaskit.wasm",
+        "canvaskit/chromium/canvaskit.js",
+        "canvaskit/chromium/canvaskit.wasm",
+        "canvaskit/skwasm.js",
+        "canvaskit/skwasm.wasm",
+        "flutter.js",
+        "flutter_bootstrap.js",
+        "flutter_service_worker.js",
+        "main.dart.js"
+      ],
+      "contract_asset": 7389
+    }
+  },
+  "apk_breakdown": {
+    "baseline": {
+      "arm64-v8a": {
+        "total": 14934249,
+        "libaxiom_runtime.so": {
+          "in_apk": 0,
+          "raw": 0
+        },
+        "libapp.so (Dart AOT)": {
+          "in_apk": 3277728,
+          "raw": 3277728
+        },
+        "libflutter.so": {
+          "in_apk": 11275648,
+          "raw": 11275648
+        },
+        "axiom web runtime assets (wasm+js)": {
+          "in_apk": 0,
+          "raw": 0
+        },
+        "contract asset": {
+          "in_apk": 0,
+          "raw": 0
+        }
+      },
+      "armeabi-v7a": {
+        "total": 12061517,
+        "libaxiom_runtime.so": {
+          "in_apk": 0,
+          "raw": 0
+        },
+        "libapp.so (Dart AOT)": {
+          "in_apk": 3670612,
+          "raw": 3670612
+        },
+        "libflutter.so": {
+          "in_apk": 8009696,
+          "raw": 8009696
+        },
+        "axiom web runtime assets (wasm+js)": {
+          "in_apk": 0,
+          "raw": 0
+        },
+        "contract asset": {
+          "in_apk": 0,
+          "raw": 0
+        }
+      },
+      "x86_64": {
+        "total": 16105283,
+        "libaxiom_runtime.so": {
+          "in_apk": 0,
+          "raw": 0
+        },
+        "libapp.so (Dart AOT)": {
+          "in_apk": 3343264,
+          "raw": 3343264
+        },
+        "libflutter.so": {
+          "in_apk": 12381152,
+          "raw": 12381152
+        },
+        "axiom web runtime assets (wasm+js)": {
+          "in_apk": 0,
+          "raw": 0
+        },
+        "contract asset": {
+          "in_apk": 0,
+          "raw": 0
+        }
+      }
+    },
+    "axiom": {
+      "arm64-v8a": {
+        "total": 26202252,
+        "libaxiom_runtime.so": {
+          "in_apk": 10095168,
+          "raw": 10095168
+        },
+        "libapp.so (Dart AOT)": {
+          "in_apk": 3474336,
+          "raw": 3474336
+        },
+        "libflutter.so": {
+          "in_apk": 11275648,
+          "raw": 11275648
+        },
+        "axiom web runtime assets (wasm+js)": {
+          "in_apk": 956340,
+          "raw": 2484289
+        },
+        "contract asset": {
+          "in_apk": 1310,
+          "raw": 7389
+        }
+      },
+      "armeabi-v7a": {
+        "total": 20478706,
+        "libaxiom_runtime.so": {
+          "in_apk": 7257044,
+          "raw": 7257044
+        },
+        "libapp.so (Dart AOT)": {
+          "in_apk": 3867220,
+          "raw": 3867220
+        },
+        "libflutter.so": {
+          "in_apk": 8009696,
+          "raw": 8009696
+        },
+        "axiom web runtime assets (wasm+js)": {
+          "in_apk": 956340,
+          "raw": 2484289
+        },
+        "contract asset": {
+          "in_apk": 1310,
+          "raw": 7389
+        }
+      },
+      "x86_64": {
+        "total": 29748963,
+        "libaxiom_runtime.so": {
+          "in_apk": 12473872,
+          "raw": 12473872
+        },
+        "libapp.so (Dart AOT)": {
+          "in_apk": 3539872,
+          "raw": 3539872
+        },
+        "libflutter.so": {
+          "in_apk": 12381152,
+          "raw": 12381152
+        },
+        "axiom web runtime assets (wasm+js)": {
+          "in_apk": 956340,
+          "raw": 2484289
+        },
+        "contract asset": {
+          "in_apk": 1310,
+          "raw": 7389
+        }
+      }
+    },
+    "axiom_wasm_opt_out": {
+      "arm64-v8a": {
+        "total": 25245441,
+        "libaxiom_runtime.so": {
+          "in_apk": 10095168,
+          "raw": 10095168
+        },
+        "libapp.so (Dart AOT)": {
+          "in_apk": 3474336,
+          "raw": 3474336
+        },
+        "libflutter.so": {
+          "in_apk": 11275648,
+          "raw": 11275648
+        },
+        "axiom web runtime assets (wasm+js)": {
+          "in_apk": 0,
+          "raw": 0
+        },
+        "contract asset": {
+          "in_apk": 1310,
+          "raw": 7389
+        }
+      },
+      "armeabi-v7a": {
+        "total": 19521895,
+        "libaxiom_runtime.so": {
+          "in_apk": 7257044,
+          "raw": 7257044
+        },
+        "libapp.so (Dart AOT)": {
+          "in_apk": 3867220,
+          "raw": 3867220
+        },
+        "libflutter.so": {
+          "in_apk": 8009696,
+          "raw": 8009696
+        },
+        "axiom web runtime assets (wasm+js)": {
+          "in_apk": 0,
+          "raw": 0
+        },
+        "contract asset": {
+          "in_apk": 1310,
+          "raw": 7389
+        }
+      },
+      "x86_64": {
+        "total": 28792152,
+        "libaxiom_runtime.so": {
+          "in_apk": 12473872,
+          "raw": 12473872
+        },
+        "libapp.so (Dart AOT)": {
+          "in_apk": 3539872,
+          "raw": 3539872
+        },
+        "libflutter.so": {
+          "in_apk": 12381152,
+          "raw": 12381152
+        },
+        "axiom web runtime assets (wasm+js)": {
+          "in_apk": 0,
+          "raw": 0
+        },
+        "contract asset": {
+          "in_apk": 1310,
+          "raw": 7389
+        }
+      }
+    }
+  },
+  "apk_delta": {
+    "arm64-v8a": 11268003,
+    "armeabi-v7a": 8417189,
+    "x86_64": 13643680
+  },
+  "web_delta": {
+    "total_bytes": 2559068,
+    "main_dart_js": 43273,
+    "main_dart_js_gzip": 13903,
+    "js_wasm_bytes": 2527842,
+    "js_wasm_gzip": 966830
+  },
+  "apk_delta_wasm_opt_out": {
+    "arm64-v8a": 10311192,
+    "armeabi-v7a": 7460378,
+    "x86_64": 12686869
+  },
+  "flutter": "Flutter 3.32.0 \u2022 channel stable \u2022 https://github.com/flutter/flutter.git"
+}

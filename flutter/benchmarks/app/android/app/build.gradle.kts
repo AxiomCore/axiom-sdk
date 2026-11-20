@@ -42,3 +42,16 @@ android {
 flutter {
     source = "../.."
 }
+
+// Size benchmark only: AXIOM_DROP_WASM=1 applies the documented opt-out from
+// axiom_flutter/doc/wasm-size.md (drops the web runtime assets from the APK).
+if (System.getenv("AXIOM_DROP_WASM") == "1") {
+    tasks.matching { it.name.startsWith("copyFlutterAssets") }.configureEach {
+        doLast {
+            outputs.files.forEach { out ->
+                fileTree(out) { include("**/packages/axiom_flutter/lib/assets/wasm/**") }
+                    .forEach { it.delete() }
+            }
+        }
+    }
+}
