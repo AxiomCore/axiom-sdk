@@ -37,7 +37,10 @@ Future<Map<String, String>> _formatted(Map<String, String> files) async {
     final f = File('${dir.path}/${e.key}')..writeAsStringSync(e.value);
     paths.add(f.path);
   }
-  final r = await Process.run(Platform.resolvedExecutable, ['format', ...paths]);
+  final r = await Process.run(Platform.resolvedExecutable, [
+    'format',
+    ...paths,
+  ]);
   expect(r.exitCode, 0, reason: 'dart format failed: ${r.stderr}');
   return {
     for (final e in files.keys) e: File('${dir.path}/$e').readAsStringSync(),
@@ -56,8 +59,16 @@ Future<void> _compare(String caseName, Map<String, String> generated) async {
         ..writeAsStringSync(e.value);
       continue;
     }
-    expect(golden.existsSync(), isTrue, reason: 'missing ${golden.path}; run with UPDATE_GOLDENS=1');
-    expect(e.value, golden.readAsStringSync(), reason: '${e.key} differs from ${golden.path}');
+    expect(
+      golden.existsSync(),
+      isTrue,
+      reason: 'missing ${golden.path}; run with UPDATE_GOLDENS=1',
+    );
+    expect(
+      e.value,
+      golden.readAsStringSync(),
+      reason: '${e.key} differs from ${golden.path}',
+    );
   }
 }
 
@@ -85,10 +96,16 @@ void main() {
     final b = generate([_input('fixture/fixture.axiom', 'fixture')]);
     expect(a, b);
     for (final content in a.values) {
-      expect(content, startsWith('// GENERATED CODE - DO NOT EDIT.\n// axiom_flutter_generator $generatorVersion'));
+      expect(
+        content,
+        startsWith(
+          '// GENERATED CODE - DO NOT EDIT.\n// axiom_flutter_generator $generatorVersion',
+        ),
+      );
       expect(content, isNot(contains('package:axiom_flutter/src/')));
       expect(content, isNot(contains('print(')));
-      for (final line in content.split('\n').where((l) => l.startsWith('import '))) {
+      for (final line
+          in content.split('\n').where((l) => l.startsWith('import '))) {
         expect(
           line,
           anyOf(
@@ -106,7 +123,10 @@ void main() {
   test('variant mismatch is rejected', () {
     final input = _input('fixture/fixture.axiom', 'fixture');
     (input.contract['project'] as Map)['variant'] = 'mobile';
-    expect(() => generate([input], variant: 'web'), throwsA(isA<GeneratorException>()));
+    expect(
+      () => generate([input], variant: 'web'),
+      throwsA(isA<GeneratorException>()),
+    );
   });
 
   test('variant keeps only member endpoints when the contract lists them', () {

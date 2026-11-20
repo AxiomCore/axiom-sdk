@@ -39,7 +39,6 @@ class MapType extends TypeNode {
   const MapType(this.key, this.value);
 }
 
-
 /// Converts IR type references to Dart types and JSON (de)serialisation code.
 class TypeMapper {
   /// Prefix for generated types (`models.` from the SDK file, '' in models).
@@ -127,9 +126,10 @@ class TypeMapper {
   String decode(TypeNode t, String x) => switch (t) {
     JsonType() => x,
     ListType(:final item) => '$codec.asList($x, ${decodeFn(item)})',
-    MapType(:final key, :final value) => _isStringKey(key)
-        ? '$codec.asMap($x, ${decodeFn(value)})'
-        : '$codec.asKeyedMap($x, ${_keyDecodeFn(key)}, ${decodeFn(value)})',
+    MapType(:final key, :final value) =>
+      _isStringKey(key)
+          ? '$codec.asMap($x, ${decodeFn(value)})'
+          : '$codec.asKeyedMap($x, ${_keyDecodeFn(key)}, ${decodeFn(value)})',
     _ => '${decodeFn(t)}($x)',
   };
 

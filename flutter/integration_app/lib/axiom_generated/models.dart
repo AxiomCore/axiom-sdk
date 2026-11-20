@@ -84,6 +84,14 @@ abstract final class AxiomGeneratedCodec {
     return a == b;
   }
 
+  /// True when [v] is, or contains, an enum value this client does not know.
+  static bool hasUnknown(Object? v) => switch (v) {
+    AxiomGeneratedEnum() => v.isUnknown,
+    List() => v.any(hasUnknown),
+    Map() => v.keys.any(hasUnknown) || v.values.any(hasUnknown),
+    _ => false,
+  };
+
   static int deepHash(Object? v) => switch (v) {
     List() => Object.hashAll(v.map(deepHash)),
     Map() => Object.hashAllUnordered(
@@ -119,12 +127,56 @@ abstract final class AxiomGeneratedCodec {
   }
 }
 
-enum EverythingColor {
+/// Implemented by every generated enum.
+abstract interface class AxiomGeneratedEnum {
+  /// True for a wire value this client version does not know.
+  bool get isUnknown;
+}
+
+final Expando<Map<String, Object?>> _axiomRaw = Expando('axiomRaw');
+
+/// Remembers the wire value of each field of [decoded] holding an unknown
+/// enum value.
+void _keepRaw(
+  Object model,
+  Map<String, dynamic> json,
+  Map<String, Object?> decoded,
+) {
+  Map<String, Object?>? raw;
+  for (final e in decoded.entries) {
+    if (AxiomGeneratedCodec.hasUnknown(e.value)) {
+      (raw ??= {})[e.key] = json[e.key];
+    }
+  }
+  if (raw != null) _axiomRaw[model] = raw;
+}
+
+/// The kept wire value of [key], else [encode]().
+Object? _rawOr(Object model, String key, Object? Function() encode) {
+  final raw = _axiomRaw[model];
+  return raw != null && raw.containsKey(key) ? raw[key] : encode();
+}
+
+/// Copies the kept wire values of [from] to [to], except [changed] keys.
+T _carryRaw<T extends Object>(Object from, T to, List<String> changed) {
+  final raw = _axiomRaw[from];
+  if (raw != null) {
+    final kept = {
+      for (final e in raw.entries)
+        if (!changed.contains(e.key)) e.key: e.value,
+    };
+    if (kept.isNotEmpty) _axiomRaw[to] = kept;
+  }
+  return to;
+}
+
+enum EverythingColor implements AxiomGeneratedEnum {
   red('red'),
   green('green'),
   blue('blue'),
 
-  /// A value this client version does not know.
+  /// A value this client version does not know. Models keep the
+  /// original wire value and send it back unchanged.
   unknown(null);
 
   const EverythingColor(this.value);
@@ -139,7 +191,13 @@ enum EverythingColor {
     return unknown;
   }
 
-  String toJson() => value ?? 'unknown';
+  @override
+  bool get isUnknown => value == null;
+
+  /// The wire value. Throws for [unknown], which has none: a model
+  /// decoded from JSON sends the original value back instead.
+  String toJson() =>
+      value ?? (throw StateError('EverythingColor.unknown has no wire value'));
 }
 
 class BytesIn {
@@ -466,7 +524,7 @@ class Everything {
 
   factory Everything.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
-    return Everything(
+    final out = Everything(
       color: EverythingColor.fromJson(map['color']),
       counts: map['counts'] == null
           ? null
@@ -483,6 +541,8 @@ class Everything {
         AxiomGeneratedCodec.asString,
       ),
     );
+    _keepRaw(out, map, {'color': out.color});
+    return out;
   }
 
   final EverythingColor color;
@@ -495,7 +555,7 @@ class Everything {
   final List<String> tags;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-    'color': color.toJson(),
+    'color': _rawOr(this, 'color', () => color.toJson()),
     if (counts case final v?) 'counts': v,
     'id': id,
     'inner': inner.toJson(),
@@ -514,17 +574,21 @@ class Everything {
     Object? note = _unset,
     Scalars? scalars,
     List<String>? tags,
-  }) => Everything(
-    color: color ?? this.color,
-    counts: identical(counts, _unset)
-        ? this.counts
-        : counts as Map<String, int>?,
-    id: id ?? this.id,
-    inner: inner ?? this.inner,
-    inners: inners ?? this.inners,
-    note: identical(note, _unset) ? this.note : note as String?,
-    scalars: scalars ?? this.scalars,
-    tags: tags ?? this.tags,
+  }) => _carryRaw(
+    this,
+    Everything(
+      color: color ?? this.color,
+      counts: identical(counts, _unset)
+          ? this.counts
+          : counts as Map<String, int>?,
+      id: id ?? this.id,
+      inner: inner ?? this.inner,
+      inners: inners ?? this.inners,
+      note: identical(note, _unset) ? this.note : note as String?,
+      scalars: scalars ?? this.scalars,
+      tags: tags ?? this.tags,
+    ),
+    [if (color != null) 'color'],
   );
 
   @override

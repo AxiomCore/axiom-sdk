@@ -39,6 +39,12 @@ class UnionSpec {
 
   /// Model dart names, in contract order.
   final List<String> options;
+
+  /// (model dart name, variant class name), in contract order.
+  final List<(String, String)> variants = [];
+
+  /// Class name of the unknown variant.
+  String unknownName = '';
   UnionSpec(this.dartName, this.discriminator, this.options);
 }
 
@@ -62,11 +68,56 @@ class Schema {
   /// endpoint raw name -> failure codes (sorted), across contracts.
   final Map<String, List<String>> endpointFailures = {};
 
+  /// Model dart name -> `<Model>Validators` class name (models with rules).
+  final Map<String, String> validatorClasses = {};
+
+  /// Endpoint raw name -> sealed `<Endpoint>Errors` interface name.
+  final Map<String, String> endpointInterfaces = {};
+
   late final TypeMapper mapper;
 
+  /// Names models.dart declares itself.
+  static const reservedTypes = {
+    'AxiomGeneratedCodec',
+    'AxiomGeneratedEnum',
+    'ContractFailure',
+    'AxiomErrorContractFailures',
+  };
+
+  /// Every type name declared in models.dart -> what declared it.
+  final Map<String, String> _types = {
+    for (final t in reservedTypes) t: 'generated helper',
+  };
+
+  /// Claims a type name taken from the contract: a clash is an error.
+  void _claim(String dartName, String what) {
+    final prev = _types[dartName];
+    if (prev != null) {
+      throw GeneratorException(
+        'Both $prev and $what map to the Dart type name "$dartName". '
+        'Rename one of them in the contract.',
+      );
+    }
+    _types[dartName] = what;
+  }
+
+  /// Claims a derived type name: a clash gets a numeric suffix.
+  String _derived(String dartName, String what) {
+    final name = GeneratorUtils.unique(dartName, _types.keys.toSet());
+    _types[name] = what;
+    return name;
+  }
+
   static const _fieldAvoid = {
-    'other', 'copyWith', 'toJson', 'fromJson', 'hashCode', 'toString',
-    'runtimeType', 'noSuchMethod',
+    'other',
+    'copyWith',
+    'toJson',
+    'fromJson',
+    'hashCode',
+    'toString',
+    'runtimeType',
+    'noSuchMethod',
+    'identical',
   };
 
   Schema(Map<String, Map<String, dynamic>> contracts) {
@@ -80,10 +131,22 @@ class Schema {
     mapper = TypeMapper(prefix: '', enumNames: rawEnums.keys.toSet());
 
     for (final name in rawEnums.keys.toList()..sort()) {
+      _claim(GeneratorUtils.pascalCase(name), 'enum "$name"');
+    }
+    for (final name in rawModels.keys.toList()..sort()) {
+      if (rawEnums.containsKey(name)) continue;
+      _claim(GeneratorUtils.pascalCase(name), 'model "$name"');
+    }
+
+    for (final name in rawEnums.keys.toList()..sort()) {
       final e = rawEnums[name]!;
       final values = (e['values'] as List? ?? const []).map((v) => '$v');
       final dartName = GeneratorUtils.pascalCase(name);
-      enums[dartName] = EnumSpec(dartName, values.toList(), e['doc'] as String?);
+      enums[dartName] = EnumSpec(
+        dartName,
+        values.toList(),
+        e['doc'] as String?,
+      );
     }
 
     for (final name in rawModels.keys.toList()..sort()) {
@@ -91,15 +154,22 @@ class Schema {
       final dartName = GeneratorUtils.pascalCase(name);
       final fields = <FieldSpec>[];
       final rawFields = _fieldList(m['fields']);
-      for (final f in rawFields) {
+      final names = GeneratorUtils.uniqueNames(
+        [for (final f in rawFields) f['name'] as String],
+        <String>{},
+        avoid: _fieldAvoid,
+      );
+      for (final (i, f) in rawFields.indexed) {
         final wire = f['name'] as String;
         final validate = (f['validate'] as Map?)?.cast<String, dynamic>();
-        var type = mapper.resolve((f['typeRef'] as Map).cast<String, dynamic>());
+        var type = mapper.resolve(
+          (f['typeRef'] as Map).cast<String, dynamic>(),
+        );
         type = _refine(type, validate, dartName, wire);
         fields.add(
           FieldSpec(
             wire: wire,
-            dart: GeneratorUtils.identifier(wire, avoid: _fieldAvoid),
+            dart: names[i],
             type: type,
             optional: f['isOptional'] as bool? ?? false,
             validate: validate,
@@ -110,8 +180,33 @@ class Schema {
       models[dartName] = ModelSpec(name, dartName, m['doc'] as String?, fields);
     }
 
+    for (final u in unions.values) {
+      for (final o in u.options) {
+        u.variants.add((o, _derived('${u.dartName}$o', 'union variant')));
+      }
+      u.unknownName = _derived('${u.dartName}Unknown', 'union variant');
+    }
+    for (final model in models.values) {
+      final hasRules = model.fields.any((f) {
+        final t = f.validate?['type'];
+        return t == 'string' || t == 'number' || t == 'enum';
+      });
+      if (hasRules) {
+        validatorClasses[model.dartName] = _derived(
+          '${model.dartName}Validators',
+          'validators',
+        );
+      }
+    }
+
     for (final c in contracts.values) {
       _collectFailures(c);
+    }
+    for (final ep in endpointFailures.keys.toList()..sort()) {
+      endpointInterfaces[ep] = _derived(
+        '${GeneratorUtils.pascalCase(ep)}Errors',
+        'failure interface',
+      );
     }
   }
 
@@ -125,10 +220,13 @@ class Schema {
   ) {
     if (validate == null) return type;
     final rule = validate['type'];
-    final name = '$model${GeneratorUtils.pascalCase(field)}';
+    final base = '$model${GeneratorUtils.pascalCase(field)}';
     if (rule == 'enum' && type is PrimType && type.kind == 'string') {
       final values = validate['values'];
-      if (values is List && values.isNotEmpty && values.every((v) => v is String)) {
+      if (values is List &&
+          values.isNotEmpty &&
+          values.every((v) => v is String)) {
+        final name = _derived(base, 'field enum');
         enums[name] = EnumSpec(name, values.cast<String>(), null);
         return RefType(name, 'enum');
       }
@@ -138,11 +236,11 @@ class Schema {
       if (options is List &&
           options.isNotEmpty &&
           options.every((o) => o is Map && o['ref'] is String)) {
-        unions[name] = UnionSpec(
-          name,
-          validate['discriminator'] as String?,
-          [for (final o in options) GeneratorUtils.pascalCase(o['ref'] as String)],
-        );
+        final name = _derived(base, 'field union');
+        unions[name] = UnionSpec(name, validate['discriminator'] as String?, [
+          for (final o in options)
+            GeneratorUtils.pascalCase(o['ref'] as String),
+        ]);
         return RefType(name, 'union');
       }
     }
@@ -177,14 +275,16 @@ class Schema {
       endpointFailures[epName] = {
         ...?endpointFailures[epName],
         ...codes.keys,
-      }.toList()
-        ..sort();
+      }.toList()..sort();
       for (final code in codes.keys) {
         final spec = failures.putIfAbsent(
           code,
           () => FailureSpec(
             code,
-            '${GeneratorUtils.pascalCase(code)}Failure',
+            _derived(
+              '${GeneratorUtils.pascalCase(code)}Failure',
+              'failure "$code"',
+            ),
             [],
             {},
           ),
@@ -192,9 +292,13 @@ class Schema {
         spec.endpoints.add(epName);
         final payload = codes[code]!['payload'];
         final fields = <String, TypeNode>{};
-        if (payload is Map && payload['kind'] == 'record' && payload['value'] is Map) {
+        if (payload is Map &&
+            payload['kind'] == 'record' &&
+            payload['value'] is Map) {
           (payload['value'] as Map).forEach((k, v) {
-            fields[k as String] = _payloadType((v as Map).cast<String, dynamic>());
+            fields[k as String] = _payloadType(
+              (v as Map).cast<String, dynamic>(),
+            );
           });
         }
         fieldSets.putIfAbsent(code, () => []).add(fields);
@@ -210,13 +314,18 @@ class Schema {
         all.putIfAbsent(existing.wire, () => existing.type);
       }
       final names = all.keys.toList()..sort();
+      final dartNames = GeneratorUtils.uniqueNames(
+        names,
+        <String>{},
+        avoid: {..._fieldAvoid, 'code', 'failureCode'},
+      );
       spec.fields
         ..clear()
         ..addAll([
-          for (final n in names)
+          for (final (i, n) in names.indexed)
             FieldSpec(
               wire: n,
-              dart: GeneratorUtils.identifier(n, avoid: {..._fieldAvoid, 'code'}),
+              dart: dartNames[i],
               type: all[n]!,
               optional: !sets.every((s) => s.containsKey(n)),
             ),
@@ -227,7 +336,9 @@ class Schema {
   /// Failure payload records use the IR typeRef kinds; nested records
   /// (`kind: record`) are kept as JSON.
   TypeNode _payloadType(Map<String, dynamic> t) {
-    if (t['kind'] == 'record' || t['kind'] == 'optional') return const JsonType();
+    if (t['kind'] == 'record' || t['kind'] == 'optional') {
+      return const JsonType();
+    }
     return mapper.resolve(t);
   }
 

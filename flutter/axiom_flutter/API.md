@@ -99,3 +99,11 @@ shared by native and web (`lib/src/internal/auth_headers.dart`):
   example `Authorization`).
 - `resetSession` clears all of these, including tokens the runtime stored
   from provider answers.
+- Scope (review F6): a namespace token is sent only to calls of that
+  namespace, never to another one (`AxiomAuthHeaders.explicitTokenFor`). A
+  global token is sent to **every** loaded namespace, including contracts on
+  third-party hosts, so it exists only when the app calls
+  `setGlobalAuthToken` itself; nothing in the SDK sets one implicitly.
+  `AxiomAuthBinding` (axiom_flutter_auth) takes a required `namespaces` list
+  and uses `setNamespaceAuthToken` and a provider that answers `null` outside
+  that list.

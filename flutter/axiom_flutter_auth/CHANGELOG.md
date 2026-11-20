@@ -1,5 +1,11 @@
 ## Unreleased
 
+- **Breaking (security):** `AxiomAuthBinding.attach` takes a required
+  `namespaces` list. The access token goes only to those namespaces
+  (`setNamespaceAuthToken`, provider answers `null` elsewhere); the binding
+  no longer sets a global token, which reached every loaded contract,
+  third-party hosts included.
+
 - `flutter_secure_storage` ^10 (was ^9.2.2): apps using this package now build with
   `flutter build web --wasm`. Android apps need `minSdk 23` and `compileSdk 36`.
   The deprecated `encryptedSharedPreferences` option is no longer passed.

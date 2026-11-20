@@ -16,16 +16,44 @@ import 'package:yaml/yaml.dart';
 Future<void> main(List<String> arguments) async {
   final parser = ArgParser()
     ..addOption('config', help: 'Path to AxiomDeps.toml')
-    ..addOption('out', help: 'Output dir relative to lib/, e.g. axiom_generated')
-    ..addOption('project-root', help: 'Absolute path to the Flutter project root')
-    ..addOption('base-url', help: 'Default base URL baked into the generated config')
-    ..addOption('variant', help: 'Emit only the endpoints of this contract variant')
-    ..addOption('namespace', help: 'Apply --base-url/--signature/... to this contract only')
+    ..addOption(
+      'out',
+      help: 'Output dir relative to lib/, e.g. axiom_generated',
+    )
+    ..addOption(
+      'project-root',
+      help: 'Absolute path to the Flutter project root',
+    )
+    ..addOption(
+      'base-url',
+      help: 'Default base URL baked into the generated config',
+    )
+    ..addOption(
+      'variant',
+      help: 'Emit only the endpoints of this contract variant',
+    )
+    ..addOption(
+      'namespace',
+      help: 'Apply --base-url/--signature/... to this contract only',
+    )
     ..addOption('signature', help: 'Contract signature (base64)')
-    ..addOption('public-key', help: 'Public key verifying the signature (base64)')
-    ..addOption('sha256', help: 'Contract sha256 (computed from the asset when omitted)')
-    ..addOption('contract', help: 'Generate from this .axiom file instead of AxiomDeps.toml (needs --namespace)')
-    ..addOption('out-dir', help: 'Absolute output directory (overrides --project-root/lib/--out)')
+    ..addOption(
+      'public-key',
+      help: 'Public key verifying the signature (base64)',
+    )
+    ..addOption(
+      'sha256',
+      help: 'Contract sha256 (computed from the asset when omitted)',
+    )
+    ..addOption(
+      'contract',
+      help:
+          'Generate from this .axiom file instead of AxiomDeps.toml (needs --namespace)',
+    )
+    ..addOption(
+      'out-dir',
+      help: 'Absolute output directory (overrides --project-root/lib/--out)',
+    )
     ..addFlag('format', defaultsTo: true, help: 'Run dart format on the output')
     ..addFlag('help', abbr: 'h', negatable: false);
 
@@ -41,7 +69,8 @@ Future<void> main(List<String> arguments) async {
   }
   final configPath = args['config'] as String?;
   final outDir = (args['out'] as String?) ?? 'axiom_generated';
-  final projectRoot = (args['project-root'] as String?) ?? Directory.current.path;
+  final projectRoot =
+      (args['project-root'] as String?) ?? Directory.current.path;
   final directContract = args['contract'] as String?;
   final only = args['namespace'] as String?;
   final Map<String, dynamic> contractsNode;
@@ -55,13 +84,19 @@ Future<void> main(List<String> arguments) async {
   } else {
     if (configPath == null) _fail('--config <AxiomDeps.toml> is required');
     final pubspecFile = File('$projectRoot/pubspec.yaml');
-    if (!pubspecFile.existsSync()) _fail('pubspec.yaml not found at $projectRoot');
+    if (!pubspecFile.existsSync()) {
+      _fail('pubspec.yaml not found at $projectRoot');
+    }
     loadYaml(pubspecFile.readAsStringSync());
     final tomlFile = File(configPath);
-    if (!tomlFile.existsSync()) _fail('AxiomDeps.toml not found at $configPath');
+    if (!tomlFile.existsSync()) {
+      _fail('AxiomDeps.toml not found at $configPath');
+    }
     final tomlDoc = TomlDocument.parse(tomlFile.readAsStringSync()).toMap();
     final node = tomlDoc['contracts'] as Map<String, dynamic>?;
-    if (node == null || node.isEmpty) _fail('No [contracts] found in $configPath');
+    if (node == null || node.isEmpty) {
+      _fail('No [contracts] found in $configPath');
+    }
     contractsNode = node;
     configDir = tomlFile.parent.path;
   }
@@ -71,7 +106,8 @@ Future<void> main(List<String> arguments) async {
 
   final inputs = <ContractInput>[];
   String? variant = args['variant'] as String?;
-  final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'] ?? '';
+  final home =
+      Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'] ?? '';
 
   for (final entry in contractsNode.entries) {
     final name = entry.key;
@@ -79,12 +115,15 @@ Future<void> main(List<String> arguments) async {
     final assetPath = 'assets/axiom/$name.axiom';
     final candidates = <String>[
       if (directContract == null) '$projectRoot/$assetPath',
-      if (meta['source'] is String) _resolve(meta['source'] as String, configDir),
+      if (meta['source'] is String)
+        _resolve(meta['source'] as String, configDir),
       '$home/.axiom/contracts/$name/contract.axiom',
     ];
     final found = candidates.where((p) => File(p).existsSync()).firstOrNull;
     if (found == null) {
-      _fail('contract "$name" not found. Tried:\n  ${candidates.join('\n  ')}\nRun: axiom pull');
+      _fail(
+        'contract "$name" not found. Tried:\n  ${candidates.join('\n  ')}\nRun: axiom pull',
+      );
     }
     final bytes = File(found).readAsBytesSync();
     final Map<String, dynamic> parsed;
@@ -99,10 +138,16 @@ Future<void> main(List<String> arguments) async {
         namespace: name,
         contract: parsed,
         assetPath: assetPath,
-        baseUrl: flag('base-url', name) ?? meta['base_url'] as String? ?? _contractBaseUrl(parsed),
+        baseUrl:
+            flag('base-url', name) ??
+            meta['base_url'] as String? ??
+            _contractBaseUrl(parsed),
         signature: flag('signature', name) ?? meta['signature'] as String?,
         publicKey: flag('public-key', name) ?? meta['public_key'] as String?,
-        sha256: flag('sha256', name) ?? meta['sha256'] as String? ?? sha256.convert(bytes).toString(),
+        sha256:
+            flag('sha256', name) ??
+            meta['sha256'] as String? ??
+            sha256.convert(bytes).toString(),
       ),
     );
     final built = (parsed['project'] as Map?)?['variant'];
@@ -132,8 +177,13 @@ Future<void> main(List<String> arguments) async {
     written.add(path);
   }
   if (args['format'] as bool) {
-    final r = await Process.run(Platform.resolvedExecutable, ['format', ...written]);
-    if (r.exitCode != 0) stderr.writeln('WARNING: dart format failed: ${r.stderr}');
+    final r = await Process.run(Platform.resolvedExecutable, [
+      'format',
+      ...written,
+    ]);
+    if (r.exitCode != 0) {
+      stderr.writeln('WARNING: dart format failed: ${r.stderr}');
+    }
   }
   for (final p in written) {
     stdout.writeln('  → wrote $p');

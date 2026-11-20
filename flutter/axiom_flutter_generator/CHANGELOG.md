@@ -4,6 +4,14 @@ Rewritten on the `axiom_flutter` 0.150.0 API. Regenerate your client after
 upgrading.
 
 Fixed
+- Names that collide after camel-casing (`user_id` and `userId`), or with
+  reserved words and generated members, get a deterministic suffix; JSON keys
+  are unchanged. Colliding contract type names stop generation with an error.
+- Unknown enum values keep their wire value: a model sends it back unchanged,
+  and `unknown.toJson()` throws instead of sending `"unknown"`.
+- Model RPCs (`rpcs` on a model) are generated again as extension methods.
+- `dart:typed_data` is imported only when used; generated files analyze
+  cleanly with `flutter_lints`.
 - Several body fields are encoded as one JSON object; a single body
   parameter as its raw JSON value.
 - Bytes are encoded and decoded as base64.

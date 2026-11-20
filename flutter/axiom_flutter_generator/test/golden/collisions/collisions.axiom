@@ -1,0 +1,520 @@
+{
+ "ir": {
+  "endpoints": {
+   "axiom": {
+    "auth": null,
+    "cache": null,
+    "doc": null,
+    "errors": [],
+    "id": 4,
+    "invalidates": [],
+    "isStream": false,
+    "method": "GET",
+    "name": "axiom",
+    "parameters": [],
+    "path": "/a",
+    "retry": null,
+    "returnIsOptional": false,
+    "returnType": {
+     "kind": "named",
+     "value": "Todo"
+    },
+    "streaming": null,
+    "validate": null
+   },
+   "feed": {
+    "auth": null,
+    "cache": null,
+    "doc": null,
+    "errors": [],
+    "id": 7,
+    "invalidates": [],
+    "isStream": false,
+    "method": "GET",
+    "name": "feed",
+    "parameters": [],
+    "path": "/feed",
+    "retry": null,
+    "returnIsOptional": false,
+    "returnType": {
+     "kind": "named",
+     "value": "Todo"
+    },
+    "streaming": {
+     "type": "sse"
+    },
+    "validate": null
+   },
+   "feed_stream": {
+    "auth": null,
+    "cache": null,
+    "doc": null,
+    "errors": [],
+    "id": 8,
+    "invalidates": [],
+    "isStream": false,
+    "method": "GET",
+    "name": "feed_stream",
+    "parameters": [],
+    "path": "/feed2",
+    "retry": null,
+    "returnIsOptional": false,
+    "returnType": {
+     "kind": "named",
+     "value": "Todo"
+    },
+    "streaming": null,
+    "validate": null
+   },
+   "get-user": {
+    "auth": null,
+    "cache": null,
+    "doc": null,
+    "errors": [],
+    "id": 3,
+    "invalidates": [],
+    "isStream": false,
+    "method": "GET",
+    "name": "get-user",
+    "parameters": [],
+    "path": "/u3",
+    "retry": null,
+    "returnIsOptional": false,
+    "returnType": {
+     "kind": "named",
+     "value": "Todo"
+    },
+    "streaming": null,
+    "validate": null
+   },
+   "getUser": {
+    "auth": null,
+    "cache": null,
+    "doc": null,
+    "errors": [],
+    "id": 2,
+    "invalidates": [],
+    "isStream": false,
+    "method": "GET",
+    "name": "getUser",
+    "parameters": [],
+    "path": "/u2",
+    "retry": null,
+    "returnIsOptional": false,
+    "returnType": {
+     "kind": "named",
+     "value": "Todo"
+    },
+    "streaming": null,
+    "validate": null
+   },
+   "get_user": {
+    "auth": null,
+    "cache": null,
+    "doc": null,
+    "errors": [
+     "not_found",
+     "notFound"
+    ],
+    "id": 1,
+    "invalidates": [],
+    "isStream": false,
+    "method": "GET",
+    "name": "get_user",
+    "parameters": [
+     {
+      "isOptional": false,
+      "name": "user_id",
+      "source": "path",
+      "typeRef": {
+       "kind": "string"
+      }
+     },
+     {
+      "isOptional": false,
+      "name": "userId",
+      "source": "query",
+      "typeRef": {
+       "kind": "string"
+      }
+     },
+     {
+      "isOptional": false,
+      "name": "headers",
+      "source": "header",
+      "typeRef": {
+       "kind": "string"
+      }
+     },
+     {
+      "isOptional": false,
+      "name": "options",
+      "source": "query",
+      "typeRef": {
+       "kind": "string"
+      }
+     },
+     {
+      "isOptional": false,
+      "name": "models",
+      "source": "query",
+      "typeRef": {
+       "kind": "string"
+      }
+     },
+     {
+      "isOptional": false,
+      "name": "e",
+      "source": "query",
+      "typeRef": {
+       "kind": "string"
+      }
+     },
+     {
+      "isOptional": false,
+      "name": "json_encode",
+      "source": "query",
+      "typeRef": {
+       "kind": "string"
+      }
+     },
+     {
+      "isOptional": false,
+      "name": "class",
+      "source": "query",
+      "typeRef": {
+       "kind": "string"
+      }
+     }
+    ],
+    "path": "/u/{user_id}",
+    "retry": null,
+    "returnIsOptional": false,
+    "returnType": {
+     "kind": "named",
+     "value": "Todo"
+    },
+    "streaming": null,
+    "validate": null
+   },
+   "hash_code": {
+    "auth": null,
+    "cache": null,
+    "doc": null,
+    "errors": [],
+    "id": 5,
+    "invalidates": [],
+    "isStream": false,
+    "method": "GET",
+    "name": "hash_code",
+    "parameters": [],
+    "path": "/h",
+    "retry": null,
+    "returnIsOptional": false,
+    "returnType": {
+     "kind": "named",
+     "value": "Todo"
+    },
+    "streaming": null,
+    "validate": null
+   },
+   "runtime": {
+    "auth": null,
+    "cache": null,
+    "doc": null,
+    "errors": [],
+    "id": 6,
+    "invalidates": [],
+    "isStream": false,
+    "method": "GET",
+    "name": "runtime",
+    "parameters": [],
+    "path": "/r",
+    "retry": null,
+    "returnIsOptional": false,
+    "returnType": {
+     "kind": "named",
+     "value": "Todo"
+    },
+    "streaming": null,
+    "validate": null
+   },
+   "save": {
+    "auth": null,
+    "cache": null,
+    "doc": null,
+    "errors": [],
+    "id": 9,
+    "invalidates": [],
+    "isStream": false,
+    "method": "PUT",
+    "name": "save",
+    "parameters": [
+     {
+      "isOptional": false,
+      "name": "todo",
+      "source": "body",
+      "typeRef": {
+       "kind": "named",
+       "value": "Todo"
+      }
+     }
+    ],
+    "path": "/save",
+    "retry": null,
+    "returnIsOptional": false,
+    "returnType": {
+     "kind": "named",
+     "value": "Todo"
+    },
+    "streaming": null,
+    "validate": null
+   }
+  },
+  "enums": {
+   "Status": {
+    "doc": null,
+    "name": "Status",
+    "values": [
+     "active",
+     "ACTIVE",
+     "Active",
+     "unknown",
+     "hash_code",
+     "values",
+     "is_unknown",
+     "to_string",
+     "class"
+    ]
+   }
+  },
+  "models": {
+   "Form": {
+    "doc": null,
+    "fields": {
+     "All": {
+      "doc": null,
+      "isOptional": true,
+      "name": "All",
+      "typeRef": {
+       "kind": "string"
+      },
+      "validate": {
+       "max": 3,
+       "type": "string"
+      }
+     },
+     "all": {
+      "doc": null,
+      "isOptional": false,
+      "name": "all",
+      "typeRef": {
+       "kind": "string"
+      },
+      "validate": {
+       "min": 1,
+       "type": "string"
+      }
+     }
+    },
+    "name": "Form"
+   },
+   "Todo": {
+    "doc": null,
+    "fields": {
+     "by_status": {
+      "doc": null,
+      "isOptional": true,
+      "name": "by_status",
+      "typeRef": {
+       "kind": "map",
+       "value": [
+        {
+         "kind": "string"
+        },
+        {
+         "kind": "named",
+         "value": "Status"
+        }
+       ]
+      },
+      "validate": null
+     },
+     "class": {
+      "doc": null,
+      "isOptional": false,
+      "name": "class",
+      "typeRef": {
+       "kind": "string"
+      },
+      "validate": null
+     },
+     "copy_with": {
+      "doc": null,
+      "isOptional": false,
+      "name": "copy_with",
+      "typeRef": {
+       "kind": "string"
+      },
+      "validate": null
+     },
+     "hashCode": {
+      "doc": null,
+      "isOptional": false,
+      "name": "hashCode",
+      "typeRef": {
+       "kind": "string"
+      },
+      "validate": null
+     },
+     "hash_code": {
+      "doc": null,
+      "isOptional": false,
+      "name": "hash_code",
+      "typeRef": {
+       "kind": "int"
+      },
+      "validate": null
+     },
+     "identical": {
+      "doc": null,
+      "isOptional": true,
+      "name": "identical",
+      "typeRef": {
+       "kind": "string"
+      },
+      "validate": null
+     },
+     "level": {
+      "doc": null,
+      "isOptional": false,
+      "name": "level",
+      "typeRef": {
+       "kind": "string"
+      },
+      "validate": {
+       "type": "enum",
+       "values": [
+        "low",
+        "high"
+       ]
+      }
+     },
+     "level_": {
+      "doc": null,
+      "isOptional": true,
+      "name": "level_",
+      "typeRef": {
+       "kind": "string"
+      },
+      "validate": {
+       "type": "enum",
+       "values": [
+        "a",
+        "b"
+       ]
+      }
+     },
+     "other": {
+      "doc": null,
+      "isOptional": false,
+      "name": "other",
+      "typeRef": {
+       "kind": "string"
+      },
+      "validate": null
+     },
+     "prev_status": {
+      "doc": null,
+      "isOptional": true,
+      "name": "prev_status",
+      "typeRef": {
+       "kind": "named",
+       "value": "Status"
+      },
+      "validate": null
+     },
+     "status": {
+      "doc": null,
+      "isOptional": false,
+      "name": "status",
+      "typeRef": {
+       "kind": "named",
+       "value": "Status"
+      },
+      "validate": null
+     },
+     "tags": {
+      "doc": null,
+      "isOptional": false,
+      "name": "tags",
+      "typeRef": {
+       "kind": "list",
+       "value": {
+        "kind": "named",
+        "value": "Status"
+       }
+      },
+      "validate": null
+     },
+     "toJson": {
+      "doc": null,
+      "isOptional": false,
+      "name": "toJson",
+      "typeRef": {
+       "kind": "string"
+      },
+      "validate": null
+     },
+     "user-id": {
+      "doc": null,
+      "isOptional": true,
+      "name": "user-id",
+      "typeRef": {
+       "kind": "string"
+      },
+      "validate": null
+     },
+     "userId": {
+      "doc": null,
+      "isOptional": false,
+      "name": "userId",
+      "typeRef": {
+       "kind": "string"
+      },
+      "validate": null
+     },
+     "user_id": {
+      "doc": null,
+      "isOptional": false,
+      "name": "user_id",
+      "typeRef": {
+       "kind": "string"
+      },
+      "validate": null
+     }
+    },
+    "name": "Todo"
+   },
+   "TodoLevel": {
+    "doc": null,
+    "fields": {
+     "x": {
+      "doc": null,
+      "isOptional": false,
+      "name": "x",
+      "typeRef": {
+       "kind": "string"
+      },
+      "validate": null
+     }
+    },
+    "name": "TodoLevel"
+   }
+  }
+ },
+ "project": {
+  "project_id": "collisions",
+  "version": "0.0.1"
+ }
+}

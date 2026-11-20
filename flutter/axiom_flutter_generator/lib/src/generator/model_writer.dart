@@ -27,6 +27,7 @@ class ModelWriter {
       b.writeln();
     }
     _writeCodec(b);
+    if (_usesRaw) _writeRawHelpers(b);
 
     for (final name in schema.enums.keys.toList()..sort()) {
       _writeEnum(b, schema.enums[name]!);
@@ -43,6 +44,59 @@ class ModelWriter {
   }
 
   // ---------------------------------------------------------------------------
+
+  /// True when [t] contains an enum (directly, or in a list/map).
+  bool _hasEnum(TypeNode t) => switch (t) {
+    RefType(kind: 'enum') => true,
+    ListType(:final item) => _hasEnum(item),
+    MapType(:final key, :final value) => _hasEnum(key) || _hasEnum(value),
+    _ => false,
+  };
+
+  bool get _usesRaw =>
+      schema.models.values.any((m) => m.fields.any((f) => _hasEnum(f.type))) ||
+      schema.failures.values.any((f) => f.fields.any((x) => _hasEnum(x.type)));
+
+  /// Raw wire values of enum-bearing fields that held a value this client
+  /// does not know: kept per instance and sent back unchanged by toJson
+  /// while the field is not replaced (copyWith carries them over).
+  void _writeRawHelpers(StringBuffer b) {
+    b.write(r'''
+final Expando<Map<String, Object?>> _axiomRaw = Expando('axiomRaw');
+
+/// Remembers the wire value of each field of [decoded] holding an unknown
+/// enum value.
+void _keepRaw(Object model, Map<String, dynamic> json, Map<String, Object?> decoded) {
+  Map<String, Object?>? raw;
+  for (final e in decoded.entries) {
+    if (AxiomGeneratedCodec.hasUnknown(e.value)) {
+      (raw ??= {})[e.key] = json[e.key];
+    }
+  }
+  if (raw != null) _axiomRaw[model] = raw;
+}
+
+/// The kept wire value of [key], else [encode]().
+Object? _rawOr(Object model, String key, Object? Function() encode) {
+  final raw = _axiomRaw[model];
+  return raw != null && raw.containsKey(key) ? raw[key] : encode();
+}
+
+/// Copies the kept wire values of [from] to [to], except [changed] keys.
+T _carryRaw<T extends Object>(Object from, T to, List<String> changed) {
+  final raw = _axiomRaw[from];
+  if (raw != null) {
+    final kept = {
+      for (final e in raw.entries)
+        if (!changed.contains(e.key)) e.key: e.value,
+    };
+    if (kept.isNotEmpty) _axiomRaw[to] = kept;
+  }
+  return to;
+}
+
+''');
+  }
 
   void _writeCodec(StringBuffer b) {
     b.write(r'''
@@ -121,6 +175,14 @@ abstract final class AxiomGeneratedCodec {
     return a == b;
   }
 
+  /// True when [v] is, or contains, an enum value this client does not know.
+  static bool hasUnknown(Object? v) => switch (v) {
+    AxiomGeneratedEnum() => v.isUnknown,
+    List() => v.any(hasUnknown),
+    Map() => v.keys.any(hasUnknown) || v.values.any(hasUnknown),
+    _ => false,
+  };
+
   static int deepHash(Object? v) => switch (v) {
     List() => Object.hashAll(v.map(deepHash)),
     Map() => Object.hashAllUnordered(
@@ -154,13 +216,28 @@ abstract final class AxiomGeneratedCodec {
   }
 }
 
+/// Implemented by every generated enum.
+abstract interface class AxiomGeneratedEnum {
+  /// True for a wire value this client version does not know.
+  bool get isUnknown;
+}
+
 ''');
   }
 
   // ---------------------------------------------------------------------------
 
   void _writeEnum(StringBuffer b, EnumSpec e) {
-    final used = <String>{'values', 'index', 'name', 'value', 'fromJson', 'toJson'};
+    final used = <String>{
+      'values',
+      'index',
+      'name',
+      'value',
+      'fromJson',
+      'toJson',
+      'isUnknown',
+      ...GeneratorUtils.objectMembers,
+    };
     final members = <(String, String)>[];
     for (final v in e.values) {
       var id = GeneratorUtils.identifier(v);
@@ -179,12 +256,15 @@ abstract final class AxiomGeneratedCodec {
     }
 
     b.write(GeneratorUtils.docComment(e.doc, ''));
-    b.writeln('enum ${e.dartName} {');
+    b.writeln('enum ${e.dartName} implements AxiomGeneratedEnum {');
     for (final (id, v) in members) {
       b.writeln('  $id(${GeneratorUtils.str(v)}),');
     }
     b.writeln('');
-    b.writeln('  /// A value this client version does not know.');
+    b.writeln(
+      '  /// A value this client version does not know. Models keep the',
+    );
+    b.writeln('  /// original wire value and send it back unchanged.');
     b.writeln('  $unknown(null);');
     b.writeln();
     b.writeln('  const ${e.dartName}(this.value);');
@@ -199,7 +279,17 @@ abstract final class AxiomGeneratedCodec {
     b.writeln('    return $unknown;');
     b.writeln('  }');
     b.writeln();
-    b.writeln("  String toJson() => value ?? 'unknown';");
+    b.writeln('  @override');
+    b.writeln('  bool get isUnknown => value == null;');
+    b.writeln();
+    b.writeln(
+      '  /// The wire value. Throws for [$unknown], which has none: a model',
+    );
+    b.writeln('  /// decoded from JSON sends the original value back instead.');
+    b.writeln('  String toJson() =>');
+    b.writeln(
+      '      value ?? (throw StateError(${GeneratorUtils.str('${e.dartName}.$unknown has no wire value')}));',
+    );
     b.writeln('}');
     b.writeln();
   }
@@ -207,10 +297,8 @@ abstract final class AxiomGeneratedCodec {
   // ---------------------------------------------------------------------------
 
   void _writeUnion(StringBuffer b, UnionSpec u) {
-    final variants = [
-      for (final o in u.options) (o, '${u.dartName}$o'),
-    ];
-    final unknown = '${u.dartName}Unknown';
+    final variants = u.variants;
+    final unknown = u.unknownName;
 
     b.writeln('/// One of: ${u.options.join(', ')}.');
     b.writeln('sealed class ${u.dartName} {');
@@ -219,7 +307,9 @@ abstract final class AxiomGeneratedCodec {
     b.writeln('  factory ${u.dartName}.fromJson(Object? json) {');
     b.writeln('    if (json is Map) {');
     if (u.discriminator != null) {
-      b.writeln('      final tag = json[${GeneratorUtils.str(u.discriminator!)}];');
+      b.writeln(
+        '      final tag = json[${GeneratorUtils.str(u.discriminator!)}];',
+      );
       b.writeln('      if (tag is String) {');
       b.writeln('        switch (tag.toLowerCase()) {');
       for (final (model, variant) in variants) {
@@ -233,16 +323,19 @@ abstract final class AxiomGeneratedCodec {
       b.writeln('      }');
     }
     // Shape match: most specific option (most required keys) first.
-    final ordered = [...variants]..sort((a, b) {
-      final ka = _requiredKeys(a.$1).length;
-      final kb = _requiredKeys(b.$1).length;
-      return kb.compareTo(ka);
-    });
+    final ordered = [...variants]
+      ..sort((a, b) {
+        final ka = _requiredKeys(a.$1).length;
+        final kb = _requiredKeys(b.$1).length;
+        return kb.compareTo(ka);
+      });
     for (final (model, variant) in ordered) {
       final keys = _requiredKeys(model);
       final cond = keys.isEmpty
           ? 'true'
-          : keys.map((k) => 'json.containsKey(${GeneratorUtils.str(k)})').join(' && ');
+          : keys
+                .map((k) => 'json.containsKey(${GeneratorUtils.str(k)})')
+                .join(' && ');
       b.writeln('      if ($cond) {');
       b.writeln('        return $variant($model.fromJson(json));');
       b.writeln('      }');
@@ -285,7 +378,9 @@ abstract final class AxiomGeneratedCodec {
     b.writeln();
     b.writeln('  @override');
     b.writeln('  bool operator ==(Object other) =>');
-    b.writeln('      other is $unknown && AxiomGeneratedCodec.deepEquals(other.raw, raw);');
+    b.writeln(
+      '      other is $unknown && AxiomGeneratedCodec.deepEquals(other.raw, raw);',
+    );
     b.writeln();
     b.writeln('  @override');
     b.writeln('  int get hashCode => AxiomGeneratedCodec.deepHash(raw);');
@@ -299,7 +394,10 @@ abstract final class AxiomGeneratedCodec {
   List<String> _requiredKeys(String modelDart) {
     final model = schema.models[modelDart];
     if (model == null) return const [];
-    return [for (final f in model.fields) if (!f.optional) f.wire];
+    return [
+      for (final f in model.fields)
+        if (!f.optional) f.wire,
+    ];
   }
 
   /// Tag values selecting [modelDart]: literal/enum rule values of the
@@ -346,6 +444,10 @@ abstract final class AxiomGeneratedCodec {
   }) {
     b.write(GeneratorUtils.docComment(doc, ''));
     b.writeln('class $name${extendsClause ?? ''} {');
+    final rawFields = [
+      for (final f in fields)
+        if (_hasEnum(f.type)) f,
+    ];
 
     // Constructor
     if (fields.isEmpty) {
@@ -365,7 +467,9 @@ abstract final class AxiomGeneratedCodec {
     } else {
       b.writeln('  factory $name.fromJson(Object? json) {');
       b.writeln('    final map = AxiomGeneratedCodec.asObject(json);');
-      b.writeln('    return $name(');
+      b.writeln(
+        rawFields.isEmpty ? '    return $name(' : '    final out = $name(',
+      );
       for (final f in fields) {
         final access = 'map[${GeneratorUtils.str(f.wire)}]';
         final expr = f.optional
@@ -374,6 +478,13 @@ abstract final class AxiomGeneratedCodec {
         b.writeln('      ${f.dart}: $expr,');
       }
       b.writeln('    );');
+      if (rawFields.isNotEmpty) {
+        final entries = rawFields
+            .map((f) => '${GeneratorUtils.str(f.wire)}: out.${f.dart}')
+            .join(', ');
+        b.writeln('    _keepRaw(out, map, {$entries});');
+        b.writeln('    return out;');
+      }
       b.writeln('  }');
     }
     b.writeln();
@@ -395,10 +506,17 @@ abstract final class AxiomGeneratedCodec {
       b.writeln('  Map<String, dynamic> toJson() => <String, dynamic>{');
       for (final f in fields) {
         final key = GeneratorUtils.str(f.wire);
+        final raw = rawFields.contains(f);
         if (f.optional) {
-          b.writeln('    if (${f.dart} case final v?) $key: ${m.encode(f.type, 'v')},');
+          final enc = m.encode(f.type, 'v');
+          b.writeln(
+            '    if (${f.dart} case final v?) $key: ${raw ? '_rawOr(this, $key, () => $enc)' : enc},',
+          );
         } else {
-          b.writeln('    $key: ${m.encode(f.type, f.dart)},');
+          final enc = m.encode(f.type, f.dart);
+          b.writeln(
+            '    $key: ${raw ? '_rawOr(this, $key, () => $enc)' : enc},',
+          );
         }
       }
       b.writeln('  };');
@@ -418,7 +536,9 @@ abstract final class AxiomGeneratedCodec {
           b.writeln('    ${t.endsWith('?') ? t : '$t?'} ${f.dart},');
         }
       }
-      b.writeln('  }) => $name(');
+      b.writeln(
+        rawFields.isEmpty ? '  }) => $name(' : '  }) => _carryRaw(this, $name(',
+      );
       for (final f in fields) {
         final t = m.dartType(f.type);
         if (f.optional) {
@@ -433,7 +553,17 @@ abstract final class AxiomGeneratedCodec {
           b.writeln('    ${f.dart}: ${f.dart} ?? this.${f.dart},');
         }
       }
-      b.writeln('  );');
+      if (rawFields.isEmpty) {
+        b.writeln('  );');
+      } else {
+        final changed = [
+          for (final f in rawFields)
+            f.optional
+                ? 'if (!identical(${f.dart}, _unset)) ${GeneratorUtils.str(f.wire)}'
+                : 'if (${f.dart} != null) ${GeneratorUtils.str(f.wire)}',
+        ];
+        b.writeln('  ), [${changed.join(', ')}]);');
+      }
     }
     b.writeln();
 
@@ -478,7 +608,10 @@ abstract final class AxiomGeneratedCodec {
     // toString
     b.writeln('  @override');
     final parts = fields
-        .map((f) => '${f.dart.replaceAll('\$', '')}: ${GeneratorUtils.interp(f.dart)}')
+        .map(
+          (f) =>
+              '${f.dart.replaceAll('\$', '')}: ${GeneratorUtils.interp(f.dart)}',
+        )
         .join(', ');
     b.writeln("  String toString() => '$name($parts)';");
     extra?.call(b);
@@ -486,7 +619,8 @@ abstract final class AxiomGeneratedCodec {
     b.writeln();
   }
 
-  bool _simpleEq(TypeNode t) => t is PrimType && t.kind != 'bytes' || t is RefType;
+  bool _simpleEq(TypeNode t) =>
+      t is PrimType && t.kind != 'bytes' || t is RefType;
 
   // ---------------------------------------------------------------------------
 
@@ -495,31 +629,44 @@ abstract final class AxiomGeneratedCodec {
     for (final f in model.fields) {
       final v = f.validate;
       if (v == null) continue;
-      if (v['type'] == 'string' || v['type'] == 'number' || v['type'] == 'enum') {
+      if (v['type'] == 'string' ||
+          v['type'] == 'number' ||
+          v['type'] == 'enum') {
         rules[f] = v;
       }
     }
     if (rules.isEmpty) return;
-    final cls = '${model.dartName}Validators';
-    b.writeln('/// Form validators for [${model.dartName}] built from the contract field');
+    final cls = schema.validatorClasses[model.dartName]!;
+    final used = <String>{'all', ...GeneratorUtils.objectMembers};
+    final names = {
+      for (final f in rules.keys) f: GeneratorUtils.unique(f.dart, used),
+    };
+    b.writeln(
+      '/// Form validators for [${model.dartName}] built from the contract field',
+    );
     b.writeln('/// rules. Each has the `TextFormField.validator` signature.');
     b.writeln('abstract final class $cls {');
     for (final entry in rules.entries) {
-      _writeValidator(b, entry.key, entry.value);
+      _writeValidator(b, names[entry.key]!, entry.key, entry.value);
     }
     b.writeln('  /// All validators by wire field name.');
     b.writeln('  static const Map<String, String? Function(String?)> all = {');
     for (final f in rules.keys) {
-      b.writeln('    ${GeneratorUtils.str(f.wire)}: ${f.dart},');
+      b.writeln('    ${GeneratorUtils.str(f.wire)}: ${names[f]},');
     }
     b.writeln('  };');
     b.writeln('}');
     b.writeln();
   }
 
-  void _writeValidator(StringBuffer b, FieldSpec f, Map<String, dynamic> v) {
+  void _writeValidator(
+    StringBuffer b,
+    String fn,
+    FieldSpec f,
+    Map<String, dynamic> v,
+  ) {
     final rule = v['type'];
-    b.writeln('  static String? ${f.dart}(String? value) {');
+    b.writeln('  static String? $fn(String? value) {');
     if (f.optional) {
       b.writeln('    if (value == null || value.isEmpty) return null;');
     } else {
@@ -530,22 +677,33 @@ abstract final class AxiomGeneratedCodec {
     if (rule == 'string') {
       final min = n('min'), max = n('max'), len = n('length');
       if (len != null) {
-        b.writeln("    if (value.length != ${len.toInt()}) return 'Must be exactly ${len.toInt()} characters';");
+        b.writeln(
+          "    if (value.length != ${len.toInt()}) return 'Must be exactly ${len.toInt()} characters';",
+        );
       }
-      if (min != null) {
-        b.writeln("    if (value.length < ${min.toInt()}) return 'Must be at least ${min.toInt()} characters';");
+      if (min != null && min > 1) {
+        // min <= 1 is covered by the empty check above.
+        b.writeln(
+          "    if (value.length < ${min.toInt()}) return 'Must be at least ${min.toInt()} characters';",
+        );
       }
       if (max != null) {
-        b.writeln("    if (value.length > ${max.toInt()}) return 'Must be at most ${max.toInt()} characters';");
+        b.writeln(
+          "    if (value.length > ${max.toInt()}) return 'Must be at most ${max.toInt()} characters';",
+        );
       }
       if (v['email'] == true) {
-        b.writeln(r"    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value)) {");
+        b.writeln(
+          r"    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value)) {",
+        );
         b.writeln("      return 'Must be a valid email address';");
         b.writeln('    }');
       }
       if (v['url'] == true) {
         b.writeln('    final uri = Uri.tryParse(value);');
-        b.writeln("    if (uri == null || !uri.hasScheme || uri.host.isEmpty) return 'Must be a valid URL';");
+        b.writeln(
+          "    if (uri == null || !uri.hasScheme || uri.host.isEmpty) return 'Must be a valid URL';",
+        );
       }
       if (v['uuid'] == true) {
         b.writeln(
@@ -555,30 +713,39 @@ abstract final class AxiomGeneratedCodec {
         b.writeln('    }');
       }
       if (v['regex'] is String) {
-        b.writeln('    if (!RegExp(${GeneratorUtils.str(v['regex'] as String)}).hasMatch(value)) {');
+        b.writeln(
+          '    if (!RegExp(${GeneratorUtils.str(v['regex'] as String)}).hasMatch(value)) {',
+        );
         b.writeln("      return 'Invalid format';");
         b.writeln('    }');
       }
       if (v['starts_with'] is String) {
         final s = GeneratorUtils.str(v['starts_with'] as String);
         b.writeln('    if (!value.startsWith($s)) {');
-        b.writeln("      return ${GeneratorUtils.str('Must start with ${v['starts_with']}')};");
+        b.writeln(
+          "      return ${GeneratorUtils.str('Must start with ${v['starts_with']}')};",
+        );
         b.writeln('    }');
       }
       if (v['ends_with'] is String) {
         final s = GeneratorUtils.str(v['ends_with'] as String);
         b.writeln('    if (!value.endsWith($s)) {');
-        b.writeln("      return ${GeneratorUtils.str('Must end with ${v['ends_with']}')};");
+        b.writeln(
+          "      return ${GeneratorUtils.str('Must end with ${v['ends_with']}')};",
+        );
         b.writeln('    }');
       }
       if (v['includes'] is String) {
         final s = GeneratorUtils.str(v['includes'] as String);
         b.writeln('    if (!value.contains($s)) {');
-        b.writeln("      return ${GeneratorUtils.str('Must contain ${v['includes']}')};");
+        b.writeln(
+          "      return ${GeneratorUtils.str('Must contain ${v['includes']}')};",
+        );
         b.writeln('    }');
       }
     } else if (rule == 'number') {
-      final isInt = v['int'] == true ||
+      final isInt =
+          v['int'] == true ||
           (f.type is PrimType && (f.type as PrimType).kind == 'int');
       b.writeln('    final number = num.tryParse(value.trim());');
       b.writeln("    if (number == null) return 'Must be a number';");
@@ -587,10 +754,14 @@ abstract final class AxiomGeneratedCodec {
       }
       final min = n('min'), max = n('max');
       if (min != null) {
-        b.writeln("    if (number < ${lit(min)}) return 'Must be at least ${lit(min)}';");
+        b.writeln(
+          "    if (number < ${lit(min)}) return 'Must be at least ${lit(min)}';",
+        );
       }
       if (max != null) {
-        b.writeln("    if (number > ${lit(max)}) return 'Must be at most ${lit(max)}';");
+        b.writeln(
+          "    if (number > ${lit(max)}) return 'Must be at most ${lit(max)}';",
+        );
       }
     } else if (rule == 'enum') {
       final values = (v['values'] as List).map((e) => '$e').toList();
@@ -598,7 +769,9 @@ abstract final class AxiomGeneratedCodec {
         '    const allowed = {${values.map(GeneratorUtils.str).join(', ')}};',
       );
       b.writeln('    if (!allowed.contains(value)) {');
-      b.writeln("      return ${GeneratorUtils.str('Must be one of: ${values.join(', ')}')};");
+      b.writeln(
+        "      return ${GeneratorUtils.str('Must be one of: ${values.join(', ')}')};",
+      );
       b.writeln('    }');
     }
     b.writeln('    return null;');
@@ -610,7 +783,9 @@ abstract final class AxiomGeneratedCodec {
 
   void _writeFailures(StringBuffer b) {
     if (schema.failures.isEmpty) return;
-    b.writeln('/// A typed failure declared by the contract (`failure` / `errors(...)`).');
+    b.writeln(
+      '/// A typed failure declared by the contract (`failure` / `errors(...)`).',
+    );
     b.writeln('sealed class ContractFailure {');
     b.writeln('  const ContractFailure();');
     b.writeln();
@@ -621,7 +796,9 @@ abstract final class AxiomGeneratedCodec {
     b.writeln();
     b.writeln('  /// Decodes the failure carried by [error], or null.');
     b.writeln('  static ContractFailure? fromError(AxiomError error) {');
-    b.writeln('    final (code, payload) = AxiomGeneratedCodec.failureParts(error);');
+    b.writeln(
+      '    final (code, payload) = AxiomGeneratedCodec.failureParts(error);',
+    );
     b.writeln('    switch (code) {');
     for (final code in schema.failures.keys.toList()..sort()) {
       final f = schema.failures[code]!;
@@ -632,7 +809,9 @@ abstract final class AxiomGeneratedCodec {
     b.writeln('    return null;');
     b.writeln('  }');
     b.writeln();
-    b.writeln('  /// Registers every failure decoder with [AxiomFailureRegistry].');
+    b.writeln(
+      '  /// Registers every failure decoder with [AxiomFailureRegistry].',
+    );
     b.writeln('  static void registerAll({String? namespace}) {');
     for (final code in schema.failures.keys.toList()..sort()) {
       final f = schema.failures[code]!;
@@ -646,10 +825,9 @@ abstract final class AxiomGeneratedCodec {
 
     // Per-endpoint sealed interfaces.
     final epNames = schema.endpointFailures.keys.toList()..sort();
-    final ifaceOf = <String, String>{};
+    final ifaceOf = schema.endpointInterfaces;
     for (final ep in epNames) {
-      final iface = '${GeneratorUtils.pascalCase(ep)}Errors';
-      ifaceOf[ep] = iface;
+      final iface = ifaceOf[ep]!;
       b.writeln('/// Failures the `$ep` endpoint can return.');
       b.writeln('sealed class $iface implements ContractFailure {}');
       b.writeln();
@@ -657,7 +835,9 @@ abstract final class AxiomGeneratedCodec {
 
     for (final code in schema.failures.keys.toList()..sort()) {
       final f = schema.failures[code]!;
-      final ifaces = (f.endpoints.toList()..sort()).map((e) => ifaceOf[e]!).toList();
+      final ifaces = (f.endpoints.toList()..sort())
+          .map((e) => ifaceOf[e]!)
+          .toList();
       _writeRecordClass(
         b,
         name: f.dartName,
@@ -667,7 +847,9 @@ abstract final class AxiomGeneratedCodec {
             ' extends ContractFailure${ifaces.isEmpty ? '' : ' implements ${ifaces.join(', ')}'}',
         extra: (b) {
           b.writeln();
-          b.writeln('  static const String failureCode = ${GeneratorUtils.str(code)};');
+          b.writeln(
+            '  static const String failureCode = ${GeneratorUtils.str(code)};',
+          );
           b.writeln();
           b.writeln('  @override');
           b.writeln('  String get code => failureCode;');
@@ -679,30 +861,52 @@ abstract final class AxiomGeneratedCodec {
     b.writeln('/// Typed access to contract failures on [AxiomError].');
     b.writeln('extension AxiomErrorContractFailures on AxiomError {');
     b.writeln('  /// The typed contract failure, or null for other errors.');
-    b.writeln('  ContractFailure? get contractFailure => ContractFailure.fromError(this);');
+    b.writeln(
+      '  ContractFailure? get contractFailure => ContractFailure.fromError(this);',
+    );
     b.writeln();
+    final members = <String>{
+      'contractFailure',
+      ...GeneratorUtils.objectMembers,
+    };
     for (final ep in epNames) {
       final codes = schema.endpointFailures[ep]!;
       final iface = ifaceOf[ep]!;
-      final fn = 'when${GeneratorUtils.pascalCase(ep)}';
+      final fn = GeneratorUtils.unique(
+        'when${GeneratorUtils.pascalCase(ep)}',
+        members,
+      );
+      final getter = GeneratorUtils.unique(
+        '${GeneratorUtils.camelCase(ep)}Failure',
+        members,
+      );
+      final params = <String>{'orElse'};
+      final handlers = {
+        for (final code in codes)
+          code: GeneratorUtils.uniqueIdentifier(code, params),
+      };
       b.writeln('  /// Failure of `$ep` as [$iface], or null.');
-      b.writeln('  $iface? get ${GeneratorUtils.camelCase(ep)}Failure {');
+      b.writeln('  $iface? get $getter {');
       b.writeln('    final f = contractFailure;');
       b.writeln('    return f is $iface ? f : null;');
       b.writeln('  }');
       b.writeln();
-      b.writeln('  /// Pattern match on the failures of `$ep`; [orElse] gets any other error.');
+      b.writeln(
+        '  /// Pattern match on the failures of `$ep`; [orElse] gets any other error.',
+      );
       b.writeln('  R $fn<R>({');
       for (final code in codes) {
         final f = schema.failures[code]!;
-        b.writeln('    required R Function(${f.dartName} failure) ${GeneratorUtils.identifier(code)},');
+        b.writeln(
+          '    required R Function(${f.dartName} failure) ${handlers[code]},',
+        );
       }
       b.writeln('    required R Function(AxiomError error) orElse,');
       b.writeln('  }) {');
-      b.writeln('    return switch (${GeneratorUtils.camelCase(ep)}Failure) {');
+      b.writeln('    return switch ($getter) {');
       for (final code in codes) {
         final f = schema.failures[code]!;
-        b.writeln('      final ${f.dartName} f => ${GeneratorUtils.identifier(code)}(f),');
+        b.writeln('      final ${f.dartName} f => ${handlers[code]}(f),');
       }
       b.writeln('      null => orElse(this),');
       b.writeln('    };');
