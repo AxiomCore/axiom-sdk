@@ -286,4 +286,19 @@ void main() {
         reason: '${states.map((s) => s.status)}');
     expect(rt.cancel(987654321), isFalse);
   });
+
+  test('WebSocket failure on a too-old runtime says so', () async {
+    // The local server is plain HTTP: the upgrade fails.
+    final r = rt.callStream(
+      namespace: 'fx',
+      endpointId: 1471516720,
+      method: 'WS',
+      path: '/stream/ws',
+      requestBytes: Uint8List(0),
+    );
+    final s = await settle(r.stream);
+    expect(s.hasError, isTrue);
+    expect(s.error!.message.contains('without the WebSocket fixes'), _published,
+        reason: s.error!.message);
+  });
 }

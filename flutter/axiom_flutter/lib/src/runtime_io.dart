@@ -264,6 +264,9 @@ class _Call {
   /// An auth error arrived and [retryAuth] runs when its Complete arrives.
   bool authRetryPending = false;
 
+  /// WebSocket call (method `WS`).
+  bool isWebSocket = false;
+
   _Call(this.controller, this.namespace, this.endpointId, this.publicId)
     : nativeId = publicId;
 }
@@ -603,6 +606,10 @@ class AxiomRuntimeIo implements AxiomRuntime {
   final Set<(String, String)> _providerStoredTokens = {};
 
   late final bool _hasAuthV2 = _has('axiom_register_auth_provider_v2');
+
+  /// Runtime older than the WebSocket header/text-frame fixes (detected by
+  /// the absence of the exports added with them).
+  late final bool _wsRuntimeTooOld = !_has('axiom_call_with_options');
 
   void _readEndpointAuth(String namespace, Uint8List bytes) {
     _endpointAuth.remove(namespace);
@@ -1029,6 +1036,23 @@ class AxiomRuntimeIo implements AxiomRuntime {
           code: const NetworkTimeout(),
           message: 'Request timed out (per-call timeout)',
           retryable: true,
+        );
+      }
+      if (call.isWebSocket && !richError.isCancelled && _wsRuntimeTooOld) {
+        richError = AxiomError(
+          stage: richError.stage,
+          category: richError.category,
+          code: richError.code,
+          message:
+              'WebSocket failed on a runtime without the WebSocket fixes '
+              '(published 0.148.6 ABI: the upgrade carries no request '
+              'headers, auth or Origin, and messages go as binary frames; '
+              'needs axiom-runtime with axiom_call_with_options, flutter/r2 '
+              'or later): ${richError.message}',
+          retryable: richError.retryable,
+          details: richError.details,
+          failureCode: richError.failureCode,
+          failurePayload: richError.failurePayload,
         );
       }
       _logTransaction('IN', requestId, 'error ${richError.message}');
@@ -1465,7 +1489,8 @@ class AxiomRuntimeIo implements AxiomRuntime {
   }) {
     final requestId = _nextRequestId++;
     final controller = StreamController<AxiomState<Uint8List>>.broadcast();
-    final call = _Call(controller, namespace, endpointId, requestId);
+    final call = _Call(controller, namespace, endpointId, requestId)
+      ..isWebSocket = method.toUpperCase() == 'WS';
     _calls[requestId] = call;
     controller.add(AxiomState.loading());
 
