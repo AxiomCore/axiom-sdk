@@ -25,6 +25,7 @@ import 'query.dart';
 import 'query_manager.dart';
 import 'internal/auth_headers.dart';
 import 'internal/axiom_codec.dart';
+import 'internal/object_cache.dart';
 import 'internal/sse.dart';
 import 'internal/contract_metadata.dart';
 import 'internal/query_key.dart';
@@ -329,9 +330,13 @@ void _axiomCallbackHandler(Pointer<AxiomResponseBuffer> responsePtr) {
       }
     }
     // Native ownership ends in this callback. Send owned Dart bytes, never addresses.
-    final data = response.data.ptr == nullptr || response.data.len == 0
+    // One copy into a transfer buffer; the main isolate receives it without
+    // a second copy (a plain Uint8List would be copied again by send).
+    final Object data = response.data.ptr == nullptr || response.data.len == 0
         ? Uint8List(0)
-        : Uint8List.fromList(response.data.ptr.asTypedList(response.data.len));
+        : TransferableTypedData.fromList([
+            response.data.ptr.asTypedList(response.data.len),
+          ]);
     final error =
         response.errorMessage.ptr == nullptr || response.errorMessage.len == 0
         ? Uint8List(0)
@@ -943,7 +948,10 @@ class AxiomRuntimeIo implements AxiomRuntime {
         message[0] as int,
         message[1] as int,
         message[2] as int,
-        message[3] as Uint8List,
+        switch (message[3]) {
+          final TransferableTypedData t => t.materialize().asUint8List(),
+          final other => other as Uint8List,
+        },
         message[4] as Uint8List,
       );
     });
@@ -1325,6 +1333,10 @@ class AxiomRuntimeIo implements AxiomRuntime {
   ) async {
     final watch = Stopwatch()..start();
     debug = config.debug;
+    decodeIsolateThreshold = config.decodeIsolateThreshold;
+    objectCache
+      ..maxEntries = config.objectCacheMaxEntries
+      ..maxBytes = config.objectCacheMaxBytes;
     final info = runtimeInfo;
     if (!info.isCompatible) {
       final result = AxiomInitResult(
@@ -1752,6 +1764,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
           cancel: cancel,
           forceRefresh: options?.cacheMode == AxiomCacheMode.refresh,
           create: (force) => _rawStream(
+            objectCacheKey: keyFor(customHeaders),
             namespace: namespace,
             endpointId: endpointId,
             method: method,
@@ -1811,7 +1824,15 @@ class AxiomRuntimeIo implements AxiomRuntime {
     );
   }
 
+  /// Bodies of at least this many bytes decode on a background isolate
+  /// (C1.3, see [AxiomConfig.decodeIsolateThreshold]); null/0 = inline.
+  int? decodeIsolateThreshold = 256 * 1024;
+
+  /// Decoded models by query key, reused only for identical bodies (C2.1).
+  final AxiomObjectCache objectCache = AxiomObjectCache();
+
   AxiomActiveStream<T> _rawStream<T>({
+    String? objectCacheKey,
     required String namespace,
     required int endpointId,
     required String method,
@@ -1836,26 +1857,51 @@ class AxiomRuntimeIo implements AxiomRuntime {
     );
     final requestId = response.requestId;
 
-    final mappedStream = response.stream.map((state) {
+    AxiomState<T> failed(Object e) {
+      final err = AxiomError(
+        stage: ErrorStage.deserialize,
+        category: ErrorCategory.serialization,
+        code: const CodecError(),
+        message: e.toString(),
+        retryable: false,
+      );
+      _reportError(err, namespace, endpointId, requestId);
+      return AxiomState<T>.error(err);
+    }
+
+    final mappedStream = response.stream.asyncMap<AxiomState<T>>((state) {
       if (state.hasError) return state.map((_) => null as T);
-      if (state.data != null) {
+      final bytes = state.data;
+      if (bytes != null) {
+        AxiomState<T> ok(T value) => AxiomState<T>.success(
+          value,
+          state.source,
+          isFetching: state.isFetching,
+          isStreaming: state.isStreaming,
+        );
+        final cacheKey = state.isStreaming || objectCache.maxEntries <= 0
+            ? null
+            : objectCacheKey;
+        if (cacheKey != null) {
+          final hit = objectCache.lookup<T>(cacheKey, bytes, decoder);
+          if (hit != null) return ok(hit);
+        }
+        final threshold = decodeIsolateThreshold;
+        if (threshold != null &&
+            threshold > 0 &&
+            bytes.length >= threshold &&
+            !state.isStreaming) {
+          return decodeOffIsolate<T>(bytes, decoder).then((value) {
+            if (cacheKey != null) objectCache.store(cacheKey, bytes, decoder, value);
+            return ok(value);
+          }, onError: (Object e) => failed(e));
+        }
         try {
-          return AxiomState<T>.success(
-            AxiomCodec.decode(state.data!, decoder),
-            state.source,
-            isFetching: state.isFetching,
-            isStreaming: state.isStreaming,
-          );
+          final value = AxiomCodec.decode(bytes, decoder);
+          if (cacheKey != null) objectCache.store(cacheKey, bytes, decoder, value);
+          return ok(value);
         } catch (e) {
-          final err = AxiomError(
-            stage: ErrorStage.deserialize,
-            category: ErrorCategory.serialization,
-            code: const CodecError(),
-            message: e.toString(),
-            retryable: false,
-          );
-          _reportError(err, namespace, endpointId, requestId);
-          return AxiomState<T>.error(err);
+          return failed(e);
         }
       }
       return state.map((_) => null as T);
@@ -2038,6 +2084,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
     // Without axiom_reset_session the old requests keep running natively:
     // keep pumping until their Completes arrive (ids stay tracked).
     _closeAllCalls('Request cancelled by resetSession');
+    objectCache.removeWhere();
     // Let the Cancelled events reach query listeners before disposing.
     await Future<void>.delayed(Duration.zero);
     AxiomQueryManager().clear();
@@ -2121,6 +2168,8 @@ class AxiomRuntimeIo implements AxiomRuntime {
     int? endpointId,
     Map<String, dynamic>? args,
   }) {
+    // Entries are byte-verified, so this only frees memory early.
+    objectCache.removeWhere('${namespace}_');
     final manager = AxiomQueryManager();
     if (endpointId != null && args != null) {
       manager.invalidateWhere(
@@ -2211,12 +2260,14 @@ class AxiomRuntimeIo implements AxiomRuntime {
   @override
   Future<void> clearCache([String? namespace]) async {
     _clearNativeCache(namespace);
+    objectCache.removeWhere(namespace == null ? null : '${namespace}_');
     AxiomQueryManager().clearNamespace(namespace, refetch: true);
   }
 
   @override
   Future<void> purgeCache([String? namespace]) async {
     _clearNativeCache(namespace);
+    objectCache.removeWhere(namespace == null ? null : '${namespace}_');
     AxiomQueryManager().clearNamespace(namespace, refetch: false);
   }
 

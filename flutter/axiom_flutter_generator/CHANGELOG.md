@@ -1,3 +1,12 @@
+## 0.150.1 (unreleased)
+
+Changed
+- Faster generated decoders: `String`/`bool` fields decode with an inline
+  cast instead of a helper call, optional fields read the JSON map once, and
+  lists are created with their final length (`List.generate`, still
+  growable). Model build time for 10 000 items: about 3.4 ms -> 2.0 ms (Dart
+  VM AOT). Regenerate to get it; the output API is unchanged.
+
 ## 0.150.0 - 2026-11-21
 
 Rewritten on the `axiom_flutter` 0.150.0 API. Regenerate your client after

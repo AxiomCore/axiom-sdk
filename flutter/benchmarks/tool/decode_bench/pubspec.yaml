@@ -1,0 +1,10 @@
+name: axiom_decode_bench
+description: Dart VM decode harness (generated models vs json_serializable vs manual). Not published.
+publish_to: none
+environment:
+  sdk: ^3.5.0
+dependencies:
+  bench_dio_client:
+    path: ../../api/dio_client
+  bench_http_client:
+    path: ../../api/http_client
