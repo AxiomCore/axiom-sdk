@@ -132,9 +132,37 @@ A complete app with a mutation is in
 ### Benchmarks
 
 <!-- BENCHMARKS:START -->
-_Not published yet. This block is filled by
-`flutter/benchmarks/tool/render_readme.py --insert README.md`; do not edit it
-by hand. Method: [flutter/benchmarks/README.md](flutter/benchmarks/README.md)._
+Measured 2026-11-20 on a 4 vCPU Linux container: release web build in headless
+Chrome 158, Flutter 3.32.0, local loopback server, three full runs. Each value
+is the median of the three run medians, and only metrics whose runs agree
+within 10% are shown. These are not physical-device numbers. All three clients
+call the same server.
+
+| Measurement | Axiom | dio + retrofit | package:http |
+| --- | --- | --- | --- |
+| Client generation, cold | 1.4 s (`axiom pull` 2.5 s) | 25.1 s (`build_runner`) | none |
+| Client generation, warm | 1.2 s (`axiom pull` 2.2 s) | 2.7 s (`build_runner`) | none |
+| Cold start to first data | 262 ms | 221 ms | 219 ms |
+| List of 1 000 items (91 KB), p50 | 5.3 ms | 3.4 ms | 3.1 ms |
+| List of 10 000 items (938 KB), p50 | 33.2 ms | 18.6 ms | 13.2 ms |
+| Repeat call served from cache, 1 000 items, p50 | 5.0 ms | 26.4 ms (`dio_cache_interceptor`) | not applicable |
+| Decode only, 10 000 items, p50 | 10.8 ms | 12.5 ms (`json_serializable`) | 9.5 ms (manual `fromJson`) |
+| Hand-written client code | 70 lines | 57 lines (plus 171 generated) | 65 lines |
+
+Size added to an app:
+
+| Target | Added |
+| --- | --- |
+| Android APK, arm64-v8a | 11.0 MB (runtime library 9.9 MB) |
+| Android APK, armeabi-v7a | 8.2 MB (runtime library 7.1 MB) |
+| Android APK, x86_64 | 13.3 MB (runtime library 12.2 MB) |
+| Web | 2.5 MB (0.9 MB gzip), almost all of it the wasm runtime |
+
+Small calls (about 2 ms for every client) and WebSocket throughput did not
+repeat within 10% between runs, so they are not listed. The full table,
+including the unstable metrics, the method and how to reproduce it, is in
+[`flutter/benchmarks`](flutter/benchmarks/README.md) and
+[`flutter/benchmarks/results/README-TABLE.md`](flutter/benchmarks/results/README-TABLE.md).
 <!-- BENCHMARKS:END -->
 
 ### Packages
