@@ -42,7 +42,7 @@ class _MemoryStorage extends AuthStorageAdapter {
 AuthStorageAdapter secureStorage({FlutterSecureStorage? storage}) =>
     _SecureStorage(storage ??
         const FlutterSecureStorage(
-          aOptions: AndroidOptions(encryptedSharedPreferences: true),
+          aOptions: AndroidOptions(),
           iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock_this_device),
           mOptions: MacOsOptions(accessibility: KeychainAccessibility.first_unlock_this_device),
         ));
