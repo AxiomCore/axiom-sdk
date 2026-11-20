@@ -3,7 +3,6 @@
 // bench: dev.axiomcore.bench 1.0.0 variant default schema 82a84e0daf09
 
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:axiom_flutter/axiom_flutter.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -80,6 +79,11 @@ class AxiomSdk {
 class BenchModule {
   BenchModule._(this._runtime, this._namespace)
     : axiom = BenchModuleAxiomNamespace._(_runtime, _namespace);
+
+  /// Binds this client to another namespace of [runtime], for example the same
+  /// contract loaded a second time with a different base URL.
+  BenchModule(AxiomRuntime runtime, String namespace)
+    : this._(runtime, namespace);
 
   final AxiomRuntime _runtime;
   final String _namespace;
