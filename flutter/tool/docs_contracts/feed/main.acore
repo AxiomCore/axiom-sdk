@@ -1,0 +1,16 @@
+project(id: "docs.feed", version: "1.0.0")
+variant default(include: ["*"])
+
+model Cursor { last: Optional<String> }
+model Tick { id: String value: Int32 }
+
+action ticks(kind: ActionKind.stream, input: Models.Cursor, output: Models.Tick) {
+  managed { return {id: "t1", value: 1} }
+}
+endpoint ticks(method: GET, path: "/ticks") {
+  request { header("last-event-id", type: String, optional: true) }
+  handle(action: Actions.ticks, input: {last: Input.header["last-event-id"]})
+  response(type: Models.Tick)
+  streaming(SseStreamDef(responseType: Models.Tick))
+}
+streamPolicy ticks(endpoint: Routes.ticks, buffer: 2, maxFrameBytes: 16384, maxFrames: 100, heartbeat: 10s, stallTimeout: 5s, maxConnections: 16, idField: .id)

@@ -1,0 +1,496 @@
+{
+  "endpoints": {
+    "claim": {
+      "id": 1661516722,
+      "errors": [
+        "conflict"
+      ],
+      "method": "POST",
+      "parameters": [
+        {
+          "isOptional": false,
+          "name": "name",
+          "source": "body",
+          "typeRef": {
+            "kind": "string"
+          }
+        }
+      ],
+      "path": "/claims",
+      "returnIsOptional": false,
+      "returnType": {
+        "kind": "named",
+        "value": "Task"
+      },
+      "name": "claim"
+    },
+    "createTask": {
+      "id": 3875406526,
+      "method": "POST",
+      "parameters": [
+        {
+          "isOptional": false,
+          "name": "title",
+          "source": "body",
+          "typeRef": {
+            "kind": "string"
+          }
+        }
+      ],
+      "path": "/tasks",
+      "returnIsOptional": false,
+      "returnType": {
+        "kind": "named",
+        "value": "Task"
+      },
+      "name": "createTask"
+    },
+    "listTasks": {
+      "id": 3053063721,
+      "method": "GET",
+      "path": "/tasks",
+      "returnIsOptional": false,
+      "returnType": {
+        "kind": "named",
+        "value": "TaskList"
+      },
+      "name": "listTasks"
+    }
+  },
+  "models": {
+    "ClaimIn": {
+      "fields": {
+        "name": {
+          "isOptional": false,
+          "name": "name",
+          "typeRef": {
+            "kind": "string"
+          }
+        }
+      },
+      "name": "ClaimIn"
+    },
+    "Conflict": {
+      "fields": {
+        "existingId": {
+          "isOptional": false,
+          "name": "existingId",
+          "typeRef": {
+            "kind": "string"
+          }
+        },
+        "message": {
+          "isOptional": false,
+          "name": "message",
+          "typeRef": {
+            "kind": "string"
+          }
+        }
+      },
+      "name": "Conflict"
+    },
+    "NewTask": {
+      "fields": {
+        "title": {
+          "isOptional": false,
+          "name": "title",
+          "typeRef": {
+            "kind": "string"
+          }
+        }
+      },
+      "name": "NewTask"
+    },
+    "Task": {
+      "fields": {
+        "id": {
+          "isOptional": false,
+          "name": "id",
+          "typeRef": {
+            "kind": "string"
+          }
+        },
+        "title": {
+          "isOptional": false,
+          "name": "title",
+          "typeRef": {
+            "kind": "string"
+          }
+        }
+      },
+      "name": "Task"
+    },
+    "TaskList": {
+      "fields": {
+        "tasks": {
+          "isOptional": false,
+          "name": "tasks",
+          "typeRef": {
+            "kind": "list",
+            "value": {
+              "kind": "named",
+              "value": "Task"
+            }
+          }
+        }
+      },
+      "name": "TaskList"
+    }
+  },
+  "project": {
+    "id": "docs.tasks",
+    "version": "1.0.0"
+  },
+  "server": {
+    "actions": {
+      "claim": {
+        "implementation": {
+          "handler": "claim",
+          "kind": "managed"
+        },
+        "input": {
+          "kind": "named",
+          "value": "ClaimIn"
+        },
+        "kind": "command",
+        "output": {
+          "kind": "named",
+          "value": "Task"
+        },
+        "program": {
+          "flow": [
+            {
+              "provenance": {
+                "end": 1202,
+                "origin": "inferred",
+                "source": "action.claim",
+                "start": 1109
+              },
+              "statement": {
+                "condition": {
+                  "kind": "binary",
+                  "left": {
+                    "kind": "field",
+                    "name": "name",
+                    "optional": false,
+                    "target": {
+                      "kind": "name",
+                      "name": "Input"
+                    }
+                  },
+                  "operator": "!=",
+                  "right": {
+                    "kind": "literal",
+                    "value": "taken"
+                  }
+                },
+                "kind": "if",
+                "no": [
+                  {
+                    "provenance": {
+                      "end": 1202,
+                      "origin": "inferred",
+                      "source": "action.claim",
+                      "start": 1142
+                    },
+                    "statement": {
+                      "code": "conflict",
+                      "kind": "fail",
+                      "payload": {
+                        "fields": [
+                          [
+                            "message",
+                            {
+                              "kind": "literal",
+                              "value": "taken"
+                            }
+                          ],
+                          [
+                            "existingId",
+                            {
+                              "kind": "literal",
+                              "value": "t0"
+                            }
+                          ]
+                        ],
+                        "kind": "record"
+                      }
+                    }
+                  }
+                ],
+                "yes": []
+              }
+            },
+            {
+              "provenance": {
+                "end": 1243,
+                "origin": "inferred",
+                "source": "action.claim",
+                "start": 1207
+              },
+              "statement": {
+                "kind": "return",
+                "value": {
+                  "fields": [
+                    [
+                      "id",
+                      {
+                        "kind": "literal",
+                        "value": "t3"
+                      }
+                    ],
+                    [
+                      "title",
+                      {
+                        "kind": "field",
+                        "name": "name",
+                        "optional": false,
+                        "target": {
+                          "kind": "name",
+                          "name": "Input"
+                        }
+                      }
+                    ]
+                  ],
+                  "kind": "record"
+                }
+              }
+            }
+          ],
+          "result": {
+            "kind": "literal",
+            "value": null
+          },
+          "steps": []
+        },
+        "settings": {
+          "admission": {},
+          "guards": [],
+          "scopes": [],
+          "successStatus": null,
+          "typedFailures": [
+            "conflict"
+          ]
+        }
+      },
+      "createTask": {
+        "implementation": {
+          "handler": "createTask",
+          "kind": "managed"
+        },
+        "input": {
+          "kind": "named",
+          "value": "NewTask"
+        },
+        "kind": "command",
+        "output": {
+          "kind": "named",
+          "value": "Task"
+        },
+        "program": {
+          "flow": [
+            {
+              "provenance": {
+                "end": 765,
+                "origin": "inferred",
+                "source": "action.createTask",
+                "start": 728
+              },
+              "statement": {
+                "kind": "return",
+                "value": {
+                  "fields": [
+                    [
+                      "id",
+                      {
+                        "kind": "literal",
+                        "value": "t2"
+                      }
+                    ],
+                    [
+                      "title",
+                      {
+                        "kind": "field",
+                        "name": "title",
+                        "optional": false,
+                        "target": {
+                          "kind": "name",
+                          "name": "Input"
+                        }
+                      }
+                    ]
+                  ],
+                  "kind": "record"
+                }
+              }
+            }
+          ],
+          "result": {
+            "kind": "literal",
+            "value": null
+          },
+          "steps": []
+        },
+        "settings": {
+          "admission": {},
+          "guards": [],
+          "scopes": [],
+          "successStatus": null,
+          "typedFailures": []
+        }
+      },
+      "listTasks": {
+        "implementation": {
+          "handler": "listTasks",
+          "kind": "managed"
+        },
+        "input": {
+          "kind": "void"
+        },
+        "kind": "query",
+        "output": {
+          "kind": "named",
+          "value": "TaskList"
+        },
+        "program": {
+          "flow": [
+            {
+              "provenance": {
+                "end": 499,
+                "origin": "inferred",
+                "source": "action.listTasks",
+                "start": 450
+              },
+              "statement": {
+                "kind": "return",
+                "value": {
+                  "fields": [
+                    [
+                      "tasks",
+                      {
+                        "items": [
+                          {
+                            "fields": [
+                              [
+                                "id",
+                                {
+                                  "kind": "literal",
+                                  "value": "t1"
+                                }
+                              ],
+                              [
+                                "title",
+                                {
+                                  "kind": "literal",
+                                  "value": "Write docs"
+                                }
+                              ]
+                            ],
+                            "kind": "record"
+                          }
+                        ],
+                        "kind": "list"
+                      }
+                    ]
+                  ],
+                  "kind": "record"
+                }
+              }
+            }
+          ],
+          "result": {
+            "kind": "literal",
+            "value": null
+          },
+          "steps": []
+        },
+        "settings": {
+          "admission": {},
+          "guards": [],
+          "scopes": [],
+          "successStatus": null,
+          "typedFailures": []
+        }
+      }
+    },
+    "endpointPolicies": {
+      "claim": {
+        "admission": {},
+        "failureExposures": {
+          "conflict": {
+            "audiences": [
+              "web"
+            ],
+            "fields": [
+              "existingId",
+              "message"
+            ]
+          }
+        },
+        "guards": [],
+        "handle": {
+          "action": "claim",
+          "input": {
+            "name": {
+              "name": "name",
+              "source": "body"
+            }
+          }
+        },
+        "scopes": [],
+        "successStatus": null,
+        "typedFailures": [
+          "conflict"
+        ]
+      },
+      "createTask": {
+        "admission": {},
+        "guards": [],
+        "handle": {
+          "action": "createTask",
+          "input": {
+            "title": {
+              "name": "title",
+              "source": "body"
+            }
+          }
+        },
+        "scopes": [],
+        "successStatus": 201,
+        "typedFailures": []
+      },
+      "listTasks": {
+        "admission": {},
+        "guards": [],
+        "handle": {
+          "action": "listTasks",
+          "input": {}
+        },
+        "scopes": [],
+        "successStatus": null,
+        "typedFailures": []
+      }
+    },
+    "failures": {
+      "conflict": {
+        "category": "domain",
+        "payload": {
+          "kind": "named",
+          "value": "Conflict"
+        },
+        "retryable": false,
+        "status": 409
+      }
+    },
+    "language": {
+      "enabled": true
+    }
+  },
+  "variants": {
+    "default": {
+      "include": [
+        "*"
+      ]
+    }
+  }
+}

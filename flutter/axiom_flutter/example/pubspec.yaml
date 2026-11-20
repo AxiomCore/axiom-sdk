@@ -1,0 +1,31 @@
+name: axiom_flutter_example
+description: Minimal axiom_flutter app with one query and one mutation.
+publish_to: none
+version: 1.0.0
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  axiom_flutter: ^0.150.0
+
+# Local development: resolve the Axiom packages from this repository.
+dependency_overrides:
+  axiom_flutter:
+    path: ../
+  axiom_flutter_generator:
+    path: ../../axiom_flutter_generator
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  axiom_flutter_generator: ^0.150.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/axiom/todos.axiom
+    - assets/axiom/

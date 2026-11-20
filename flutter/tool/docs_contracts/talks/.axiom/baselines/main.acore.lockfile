@@ -1,0 +1,442 @@
+{
+  "endpoints": {
+    "createTalk": {
+      "id": 694853128,
+      "method": "POST",
+      "parameters": [
+        {
+          "isOptional": false,
+          "name": "title",
+          "source": "body",
+          "typeRef": {
+            "kind": "string"
+          }
+        },
+        {
+          "isOptional": false,
+          "name": "speaker",
+          "source": "body",
+          "typeRef": {
+            "kind": "string"
+          }
+        }
+      ],
+      "path": "/talks",
+      "returnIsOptional": false,
+      "returnType": {
+        "kind": "named",
+        "value": "Talk"
+      },
+      "name": "createTalk"
+    },
+    "getTalk": {
+      "id": 311085823,
+      "method": "GET",
+      "parameters": [
+        {
+          "isOptional": false,
+          "name": "id",
+          "source": "path",
+          "typeRef": {
+            "kind": "string"
+          }
+        }
+      ],
+      "path": "/talks/{id}",
+      "returnIsOptional": false,
+      "returnType": {
+        "kind": "named",
+        "value": "Talk"
+      },
+      "name": "getTalk"
+    },
+    "listTalks": {
+      "id": 510019231,
+      "cache": {
+        "strategy": "stale_while_revalidate",
+        "ttlSeconds": 60
+      },
+      "method": "GET",
+      "path": "/talks",
+      "returnIsOptional": false,
+      "returnType": {
+        "kind": "named",
+        "value": "TalkList"
+      },
+      "name": "listTalks"
+    }
+  },
+  "models": {
+    "NewTalk": {
+      "fields": {
+        "speaker": {
+          "isOptional": false,
+          "name": "speaker",
+          "typeRef": {
+            "kind": "string"
+          }
+        },
+        "title": {
+          "isOptional": false,
+          "name": "title",
+          "typeRef": {
+            "kind": "string"
+          }
+        }
+      },
+      "name": "NewTalk"
+    },
+    "Talk": {
+      "fields": {
+        "id": {
+          "isOptional": false,
+          "name": "id",
+          "typeRef": {
+            "kind": "string"
+          }
+        },
+        "speaker": {
+          "isOptional": false,
+          "name": "speaker",
+          "typeRef": {
+            "kind": "string"
+          }
+        },
+        "title": {
+          "isOptional": false,
+          "name": "title",
+          "typeRef": {
+            "kind": "string"
+          }
+        }
+      },
+      "name": "Talk"
+    },
+    "TalkList": {
+      "fields": {
+        "talks": {
+          "isOptional": false,
+          "name": "talks",
+          "typeRef": {
+            "kind": "list",
+            "value": {
+              "kind": "named",
+              "value": "Talk"
+            }
+          }
+        }
+      },
+      "name": "TalkList"
+    },
+    "TalkRef": {
+      "fields": {
+        "id": {
+          "isOptional": false,
+          "name": "id",
+          "typeRef": {
+            "kind": "string"
+          }
+        }
+      },
+      "name": "TalkRef"
+    }
+  },
+  "project": {
+    "id": "docs.talks",
+    "version": "1.0.0"
+  },
+  "server": {
+    "actions": {
+      "createTalk": {
+        "implementation": {
+          "handler": "createTalk",
+          "kind": "managed"
+        },
+        "input": {
+          "kind": "named",
+          "value": "NewTalk"
+        },
+        "kind": "command",
+        "output": {
+          "kind": "named",
+          "value": "Talk"
+        },
+        "program": {
+          "flow": [
+            {
+              "provenance": {
+                "end": 1121,
+                "origin": "inferred",
+                "source": "action.createTalk",
+                "start": 1060
+              },
+              "statement": {
+                "kind": "return",
+                "value": {
+                  "fields": [
+                    [
+                      "id",
+                      {
+                        "kind": "literal",
+                        "value": "t3"
+                      }
+                    ],
+                    [
+                      "title",
+                      {
+                        "kind": "field",
+                        "name": "title",
+                        "optional": false,
+                        "target": {
+                          "kind": "name",
+                          "name": "Input"
+                        }
+                      }
+                    ],
+                    [
+                      "speaker",
+                      {
+                        "kind": "field",
+                        "name": "speaker",
+                        "optional": false,
+                        "target": {
+                          "kind": "name",
+                          "name": "Input"
+                        }
+                      }
+                    ]
+                  ],
+                  "kind": "record"
+                }
+              }
+            }
+          ],
+          "result": {
+            "kind": "literal",
+            "value": null
+          },
+          "steps": []
+        },
+        "settings": {
+          "admission": {},
+          "guards": [],
+          "scopes": [],
+          "successStatus": null,
+          "typedFailures": []
+        }
+      },
+      "getTalk": {
+        "implementation": {
+          "handler": "getTalk",
+          "kind": "managed"
+        },
+        "input": {
+          "kind": "named",
+          "value": "TalkRef"
+        },
+        "kind": "query",
+        "output": {
+          "kind": "named",
+          "value": "Talk"
+        },
+        "program": {
+          "flow": [
+            {
+              "provenance": {
+                "end": 767,
+                "origin": "inferred",
+                "source": "action.getTalk",
+                "start": 698
+              },
+              "statement": {
+                "kind": "return",
+                "value": {
+                  "fields": [
+                    [
+                      "id",
+                      {
+                        "kind": "field",
+                        "name": "id",
+                        "optional": false,
+                        "target": {
+                          "kind": "name",
+                          "name": "Input"
+                        }
+                      }
+                    ],
+                    [
+                      "title",
+                      {
+                        "kind": "literal",
+                        "value": "Typed APIs in Flutter"
+                      }
+                    ],
+                    [
+                      "speaker",
+                      {
+                        "kind": "literal",
+                        "value": "Ada"
+                      }
+                    ]
+                  ],
+                  "kind": "record"
+                }
+              }
+            }
+          ],
+          "result": {
+            "kind": "literal",
+            "value": null
+          },
+          "steps": []
+        },
+        "settings": {
+          "admission": {},
+          "guards": [],
+          "scopes": [],
+          "successStatus": null,
+          "typedFailures": []
+        }
+      },
+      "listTalks": {
+        "implementation": {
+          "handler": "listTalks",
+          "kind": "managed"
+        },
+        "input": {
+          "kind": "void"
+        },
+        "kind": "query",
+        "output": {
+          "kind": "named",
+          "value": "TalkList"
+        },
+        "program": {
+          "flow": [
+            {
+              "provenance": {
+                "end": 411,
+                "origin": "inferred",
+                "source": "action.listTalks",
+                "start": 335
+              },
+              "statement": {
+                "kind": "return",
+                "value": {
+                  "fields": [
+                    [
+                      "talks",
+                      {
+                        "items": [
+                          {
+                            "fields": [
+                              [
+                                "id",
+                                {
+                                  "kind": "literal",
+                                  "value": "t1"
+                                }
+                              ],
+                              [
+                                "title",
+                                {
+                                  "kind": "literal",
+                                  "value": "Typed APIs in Flutter"
+                                }
+                              ],
+                              [
+                                "speaker",
+                                {
+                                  "kind": "literal",
+                                  "value": "Ada"
+                                }
+                              ]
+                            ],
+                            "kind": "record"
+                          }
+                        ],
+                        "kind": "list"
+                      }
+                    ]
+                  ],
+                  "kind": "record"
+                }
+              }
+            }
+          ],
+          "result": {
+            "kind": "literal",
+            "value": null
+          },
+          "steps": []
+        },
+        "settings": {
+          "admission": {},
+          "guards": [],
+          "scopes": [],
+          "successStatus": null,
+          "typedFailures": []
+        }
+      }
+    },
+    "endpointPolicies": {
+      "createTalk": {
+        "admission": {},
+        "guards": [],
+        "handle": {
+          "action": "createTalk",
+          "input": {
+            "speaker": {
+              "name": "speaker",
+              "source": "body"
+            },
+            "title": {
+              "name": "title",
+              "source": "body"
+            }
+          }
+        },
+        "scopes": [],
+        "successStatus": 201,
+        "typedFailures": []
+      },
+      "getTalk": {
+        "admission": {},
+        "guards": [],
+        "handle": {
+          "action": "getTalk",
+          "input": {
+            "id": {
+              "name": "id",
+              "source": "path"
+            }
+          }
+        },
+        "scopes": [],
+        "successStatus": null,
+        "typedFailures": []
+      },
+      "listTalks": {
+        "admission": {},
+        "guards": [],
+        "handle": {
+          "action": "listTalks",
+          "input": {}
+        },
+        "scopes": [],
+        "successStatus": null,
+        "typedFailures": []
+      }
+    },
+    "language": {
+      "enabled": true
+    }
+  },
+  "variants": {
+    "default": {
+      "include": [
+        "*"
+      ]
+    }
+  }
+}

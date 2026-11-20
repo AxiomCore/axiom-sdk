@@ -1,0 +1,489 @@
+// GENERATED CODE - DO NOT EDIT.
+// axiom_flutter_generator 0.150.0
+// collisions: collisions 0.0.1
+
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:axiom_flutter/axiom_flutter.dart';
+import 'package:flutter/services.dart' show rootBundle;
+
+import 'models.dart' as models;
+
+/// Contract configuration written by `axiom pull`.
+abstract final class AxiomDefaultConfig {
+  static const AxiomConfig config = AxiomConfig(
+    contracts: {
+      'collisions': AxiomContractConfig(
+        // Neither the contract nor the pull config names a base URL;
+        // override with AxiomEnvironment or --dart-define=AXIOM_BASE_URL.
+        baseUrl: 'http://localhost:8000',
+        assetPath: 'assets/axiom/collisions.axiom',
+      ),
+    },
+  );
+}
+
+/// Entry point of the generated client.
+class AxiomSdk {
+  /// Wraps an already initialized [runtime] (tests, custom start-up).
+  AxiomSdk.fromRuntime(
+    this.runtime, [
+    this.initResult = const AxiomInitResult(ok: true),
+  ]) : collisions = CollisionsModule._(runtime, 'collisions');
+
+  final AxiomRuntime runtime;
+
+  /// Outcome of runtime start-up and contract loading.
+  final AxiomInitResult initResult;
+
+  /// Endpoints of the `collisions` contract.
+  final CollisionsModule collisions;
+
+  /// Starts the runtime and loads the contracts.
+  ///
+  /// Base URL priority: [baseUrlOverrides] > [environment] (or the
+  /// config's, else `--dart-define=AXIOM_ENV` / `AXIOM_BASE_URL`) >
+  /// the generated default. Throws when initialization fails.
+  static Future<AxiomSdk> create({
+    AxiomConfig? config,
+    AxiomEnvironment? environment,
+    Map<String, String>? baseUrlOverrides,
+    AxiomAssetLoader? assetLoader,
+  }) async {
+    final base = config ?? AxiomDefaultConfig.config;
+    final cfg = base.copyWith(
+      environment:
+          environment ?? base.environment ?? AxiomEnvironment.fromDartDefines(),
+      baseUrlOverrides: baseUrlOverrides,
+    );
+    final runtime = AxiomRuntime();
+    runtime.debug = cfg.debug;
+    models.ContractFailure.registerAll();
+    AxiomInitResult result;
+    try {
+      result = await runtime.initialize(cfg, assetLoader: assetLoader);
+    } on UnimplementedError {
+      // Runtime package without initialize(): legacy start-up.
+      result = await _legacyInit(runtime, cfg, assetLoader);
+    }
+    result.requireOk();
+    return AxiomSdk.fromRuntime(runtime, result);
+  }
+}
+
+/// Client for the `collisions` contract (collisions 0.0.1).
+class CollisionsModule {
+  CollisionsModule._(this._runtime, this._namespace)
+    : axiom = CollisionsModuleAxiomNamespace._(_runtime, _namespace);
+
+  /// Binds this client to another namespace of [runtime], for example the same
+  /// contract loaded a second time with a different base URL.
+  CollisionsModule(AxiomRuntime runtime, String namespace)
+    : this._(runtime, namespace);
+
+  final AxiomRuntime _runtime;
+  final String _namespace;
+
+  /// Auth tokens and cache control for this namespace.
+  final CollisionsModuleAxiomNamespace axiom;
+
+  /// Endpoint ids by contract endpoint name.
+  static const Map<String, int> endpointIds = {
+    'axiom': 4,
+    'feed': 7,
+    'feed_stream': 8,
+    'get-user': 3,
+    'getUser': 2,
+    'get_user': 1,
+    'hash_code': 5,
+    'runtime': 6,
+    'save': 9,
+  };
+
+  /// Endpoint ids by contract cache identity.
+  static const Map<String, List<int>> cacheIdentities = {};
+
+  /// Auth method names declared by the contract.
+  static const List<String> authMethods = [];
+
+  /// `GET /a`.
+  AxiomQuery<models.Todo> axiom2({AxiomCallOptions? options}) {
+    return _runtime.send<models.Todo>(
+      namespace: _namespace,
+      endpointId: 4,
+      method: 'GET',
+      path: '/a',
+      headers: options?.mergeHeaders(null),
+      args: <String, dynamic>{},
+      decoder: models.Todo.fromJson,
+      options: options,
+    );
+  }
+
+  /// `GET /feed` (sse).
+  AxiomQuery<models.Todo> feed({AxiomCallOptions? options}) {
+    return _streamQuery<models.Todo>(
+      '${_namespace}_7_stream_${jsonEncode(<String, dynamic>{})}',
+      _runtime,
+      (extra) => _runtime.callStream(
+        namespace: _namespace,
+        endpointId: 7,
+        method: 'GET',
+        path: '/feed',
+        headers: {...?(options?.mergeHeaders(null)), ...extra},
+        requestBytes: Uint8List(0),
+        options: options,
+      ),
+      models.Todo.fromJson,
+    );
+  }
+
+  /// Frames of `feed` as a typed stream. Cancelling the subscription
+  /// cancels the request.
+  Stream<models.Todo> feedStream({AxiomCallOptions? options}) {
+    final response = _runtime.callStream(
+      namespace: _namespace,
+      endpointId: 7,
+      method: 'GET',
+      path: '/feed',
+      headers: options?.mergeHeaders(null),
+      requestBytes: Uint8List(0),
+      options: options,
+    );
+    return _frames(response, _runtime, models.Todo.fromJson);
+  }
+
+  /// `GET /feed2`.
+  AxiomQuery<models.Todo> feedStream2({AxiomCallOptions? options}) {
+    return _runtime.send<models.Todo>(
+      namespace: _namespace,
+      endpointId: 8,
+      method: 'GET',
+      path: '/feed2',
+      headers: options?.mergeHeaders(null),
+      args: <String, dynamic>{},
+      decoder: models.Todo.fromJson,
+      options: options,
+    );
+  }
+
+  /// `GET /u3`.
+  AxiomQuery<models.Todo> getUser2({AxiomCallOptions? options}) {
+    return _runtime.send<models.Todo>(
+      namespace: _namespace,
+      endpointId: 3,
+      method: 'GET',
+      path: '/u3',
+      headers: options?.mergeHeaders(null),
+      args: <String, dynamic>{},
+      decoder: models.Todo.fromJson,
+      options: options,
+    );
+  }
+
+  /// `GET /u2`.
+  AxiomQuery<models.Todo> getUser({AxiomCallOptions? options}) {
+    return _runtime.send<models.Todo>(
+      namespace: _namespace,
+      endpointId: 2,
+      method: 'GET',
+      path: '/u2',
+      headers: options?.mergeHeaders(null),
+      args: <String, dynamic>{},
+      decoder: models.Todo.fromJson,
+      options: options,
+    );
+  }
+
+  /// `GET /u/{user_id}`.
+  ///
+  /// Typed failures: [models.NotFoundFailure2], [models.NotFoundFailure]; match with `error.whenGetUser(...)`.
+  AxiomQuery<models.Todo> getUser3({
+    required String userId2,
+    required String userId,
+    required String $headers,
+    required String $options,
+    required String $models,
+    required String $e,
+    required String $jsonEncode,
+    required String $class,
+    AxiomCallOptions? options,
+  }) {
+    final headers = <String, String>{'headers': $headers};
+    return _runtime.send<models.Todo>(
+      namespace: _namespace,
+      endpointId: 1,
+      method: 'GET',
+      path: '/u/{user_id}',
+      headers: options?.mergeHeaders(headers) ?? headers,
+      pathParams: {'user_id': Uri.encodeComponent(userId2)},
+      queryParams: {
+        'userId': userId,
+        'options': $options,
+        'models': $models,
+        'e': $e,
+        'json_encode': $jsonEncode,
+        'class': $class,
+      },
+      args: <String, dynamic>{
+        'user_id': userId2,
+        'userId': userId,
+        'headers': $headers,
+        'options': $options,
+        'models': $models,
+        'e': $e,
+        'json_encode': $jsonEncode,
+        'class': $class,
+      },
+      decoder: models.Todo.fromJson,
+      options: options,
+    );
+  }
+
+  /// `GET /h`.
+  AxiomQuery<models.Todo> $hashCode({AxiomCallOptions? options}) {
+    return _runtime.send<models.Todo>(
+      namespace: _namespace,
+      endpointId: 5,
+      method: 'GET',
+      path: '/h',
+      headers: options?.mergeHeaders(null),
+      args: <String, dynamic>{},
+      decoder: models.Todo.fromJson,
+      options: options,
+    );
+  }
+
+  /// `GET /r`.
+  AxiomQuery<models.Todo> runtime({AxiomCallOptions? options}) {
+    return _runtime.send<models.Todo>(
+      namespace: _namespace,
+      endpointId: 6,
+      method: 'GET',
+      path: '/r',
+      headers: options?.mergeHeaders(null),
+      args: <String, dynamic>{},
+      decoder: models.Todo.fromJson,
+      options: options,
+    );
+  }
+
+  /// `PUT /save`.
+  AxiomQuery<models.Todo> save({
+    required models.Todo todo,
+    String? idempotencyKey,
+    AxiomCallOptions? options,
+  }) {
+    final headers = <String, String>{
+      if (idempotencyKey case final k?) 'Idempotency-Key': k,
+    };
+    return _runtime.sendMutation<models.Todo>(
+      namespace: _namespace,
+      endpointId: 9,
+      method: 'PUT',
+      path: '/save',
+      headers: options?.mergeHeaders(headers) ?? headers,
+      body: jsonEncode(todo.toJson()),
+      args: <String, dynamic>{'todo': todo.toJson()},
+      decoder: models.Todo.fromJson,
+      options: options,
+    );
+  }
+
+  /// Refetches the active queries of every endpoint with [identity].
+  void invalidateIdentity(String identity) {
+    final ids = cacheIdentities[identity];
+    if (ids == null) return;
+    _invalidateEndpoints(_runtime, _namespace, ids);
+  }
+}
+
+/// Namespace-level runtime controls for `collisions`.
+class CollisionsModuleAxiomNamespace {
+  CollisionsModuleAxiomNamespace._(this._runtime, this._namespace);
+
+  final AxiomRuntime _runtime;
+  final String _namespace;
+
+  void setAuthToken(String methodName, String token) {
+    _runtime.setAuthToken(
+      namespace: _namespace,
+      methodName: methodName,
+      token: token,
+    );
+  }
+
+  void clearAuthToken(String methodName) {
+    _runtime.clearAuthToken(namespace: _namespace, methodName: methodName);
+  }
+
+  /// Sets [token] for every auth method of this namespace.
+  void setNamespaceToken(String token) {
+    _runtime.setNamespaceAuthToken(namespace: _namespace, token: token);
+  }
+
+  void clearNamespaceToken() {
+    _runtime.clearNamespaceAuthToken(namespace: _namespace);
+  }
+
+  /// Marks every cached query of this namespace stale and refetches.
+  void invalidateAll() {
+    _runtime.invalidate(namespace: _namespace);
+  }
+}
+
+/// Start-up for axiom_flutter versions whose initialize() is not
+/// implemented yet: init + loadContract per namespace.
+Future<AxiomInitResult> _legacyInit(
+  AxiomRuntime runtime,
+  AxiomConfig cfg,
+  AxiomAssetLoader? assetLoader,
+) async {
+  final load =
+      assetLoader ??
+      (String path) async => (await rootBundle.load(path)).buffer.asUint8List();
+  await runtime.init(cfg.dbPath);
+  final contracts = <String, AxiomContractLoadResult>{};
+  for (final entry in cfg.contracts.entries) {
+    final baseUrl = cfg.resolveBaseUrl(entry.key);
+    runtime.loadContract(
+      namespace: entry.key,
+      baseUrl: baseUrl,
+      contractBytes: await load(entry.value.assetPath),
+      signature: entry.value.signature,
+      publicKey: entry.value.publicKey,
+    );
+    contracts[entry.key] = AxiomContractLoadResult(
+      namespace: entry.key,
+      baseUrl: baseUrl,
+      status: entry.value.signature == null ? -1 : 0,
+      trust: entry.value.signature == null
+          ? AxiomContractTrust.unsigned
+          : AxiomContractTrust.signed,
+    );
+  }
+  return AxiomInitResult(ok: true, contracts: contracts);
+}
+
+/// Refetches active queries of [endpointIds] after a mutation (the runtime
+/// already dropped their cached responses).
+void _invalidateEndpoints(
+  AxiomRuntime runtime,
+  String namespace,
+  List<int> endpointIds,
+) {
+  for (final id in endpointIds) {
+    try {
+      runtime.invalidate(namespace: namespace, endpointId: id);
+    } on UnimplementedError {
+      return;
+    }
+  }
+}
+
+/// An [AxiomQuery] over a streaming endpoint: one success state per frame.
+AxiomQuery<T> _streamQuery<T>(
+  String key,
+  AxiomRuntime runtime,
+  AxiomStreamResponse Function(Map<String, String> extra) open,
+  T Function(Object?) decode,
+) {
+  return AxiomQuery<T>(key, (extra) {
+    final response = open(extra);
+    final states = response.stream.expand<AxiomState<T>>((state) {
+      final error = state.error;
+      if (error != null) return [AxiomState<T>.error(error)];
+      final data = state.data;
+      if (data == null || data.isEmpty) {
+        return state.isLoading ? [AxiomState<T>.loading()] : const [];
+      }
+      try {
+        return [
+          for (final frame in _splitFrames(utf8.decode(data)))
+            AxiomState<T>.success(
+              decode(frame),
+              state.source,
+              isStreaming: true,
+            ),
+        ];
+      } on FormatException catch (e) {
+        return [
+          AxiomState<T>.error(
+            AxiomError(
+              stage: ErrorStage.deserialize,
+              category: ErrorCategory.serialization,
+              code: const CodecError(),
+              message: e.message,
+              retryable: false,
+            ),
+          ),
+        ];
+      }
+    }).asBroadcastStream();
+    return AxiomActiveStream<T>(response.requestId, states);
+  }, runtime: runtime);
+}
+
+/// Decodes stream chunks (JSON, NDJSON or SSE `data:` lines) into frames.
+Stream<T> _frames<T>(
+  AxiomStreamResponse response,
+  AxiomRuntime runtime,
+  T Function(Object?) decode,
+) async* {
+  var finished = false;
+  try {
+    await for (final state in response.stream) {
+      final error = state.error;
+      if (error != null) {
+        finished = true;
+        if (error.isCancelled) return;
+        throw error;
+      }
+      final data = state.data;
+      if (data != null && data.isNotEmpty) {
+        for (final frame in _splitFrames(utf8.decode(data))) {
+          yield decode(frame);
+        }
+      }
+    }
+    finished = true;
+  } finally {
+    if (!finished) {
+      try {
+        runtime.cancel(response.requestId);
+      } on UnimplementedError {
+        // Runtime without cancel support.
+      }
+    }
+  }
+}
+
+List<Object?> _splitFrames(String text) {
+  final trimmed = text.trim();
+  if (trimmed.isEmpty) return const [];
+  if (!trimmed.startsWith('data:') &&
+      !trimmed.startsWith('event:') &&
+      !trimmed.startsWith('id:') &&
+      !trimmed.startsWith(':')) {
+    try {
+      return [jsonDecode(trimmed)];
+    } on FormatException {
+      return [
+        for (final line in trimmed.split('\n'))
+          if (line.trim().isNotEmpty) jsonDecode(line),
+      ];
+    }
+  }
+  final frames = <Object?>[];
+  final data = <String>[];
+  for (final line in '$trimmed\n\n'.split('\n')) {
+    if (line.startsWith('data:')) {
+      data.add(line.substring(5).trimLeft());
+    } else if (line.trim().isEmpty && data.isNotEmpty) {
+      frames.add(jsonDecode(data.join('\n')));
+      data.clear();
+    }
+  }
+  return frames;
+}

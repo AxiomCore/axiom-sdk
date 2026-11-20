@@ -1,0 +1,9 @@
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock
+backend/backend.axiom
+backend/backend.server.json
+backend/deployment.json
+backend/.axiom/

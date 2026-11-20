@@ -1,0 +1,105 @@
+{
+  "machine": {
+    "cpu_count": 4,
+    "os": "Linux-4.19.0-gvisor-x86_64-with-glibc2.36",
+    "python": "3.11.2"
+  },
+  "tools": {
+    "axiom": "axiom 0.156.0",
+    "dart": "Dart SDK version: 3.8.0 (stable) (Wed May 14 09:07:14 2025 -0700) on \"linux_x64\"",
+    "flutter": "Flutter 3.32.0 \u2022 channel stable \u2022 https://github.com/flutter/flutter.git"
+  },
+  "method": "Client generation time: `axiom pull` end to end and the Axiom generator alone vs\n`dart run build_runner build` for the retrofit/json_serializable client. 5 runs each, cold and warm.\n\n  python3 tool/bench_tooling.py [--runs 5] [--out results/tooling.json]\n\ncold  = tool caches removed first: the generator's compiled snapshot\n        (app/.dart_tool/pub/bin/axiom_flutter_generator) for Axiom, `build_runner clean`\n        (compiled build script + asset graph) for build_runner. pub's package cache stays warm.\nwarm  = caches present. Axiom always regenerates every file (no incremental mode). For\n        build_runner a comment in api.dart and models.dart is changed before every warm run so\n        it has to regenerate both .g.dart files (an unchanged warm run is a no-op and is\n        reported separately as warm_noop).\nDiscarded caches are moved to build/trash (never deleted).",
+  "results": {
+    "axiom_pull": {
+      "cold": {
+        "runs_s": [
+          2.46,
+          2.47,
+          2.46,
+          2.409,
+          2.469
+        ],
+        "median_s": 2.46,
+        "min_s": 2.409,
+        "max_s": 2.47
+      },
+      "warm": {
+        "runs_s": [
+          2.205,
+          2.163,
+          2.188,
+          2.178,
+          2.144
+        ],
+        "median_s": 2.178,
+        "min_s": 2.144,
+        "max_s": 2.205
+      }
+    },
+    "axiom_generator": {
+      "cold": {
+        "runs_s": [
+          1.475,
+          1.397,
+          1.403,
+          1.405,
+          1.414
+        ],
+        "median_s": 1.405,
+        "min_s": 1.397,
+        "max_s": 1.475
+      },
+      "warm": {
+        "runs_s": [
+          1.168,
+          1.178,
+          1.155,
+          1.211,
+          1.162
+        ],
+        "median_s": 1.168,
+        "min_s": 1.155,
+        "max_s": 1.211
+      }
+    },
+    "build_runner": {
+      "cold": {
+        "runs_s": [
+          26.361,
+          25.023,
+          25.052,
+          24.947,
+          25.458
+        ],
+        "median_s": 25.052,
+        "min_s": 24.947,
+        "max_s": 26.361
+      },
+      "warm": {
+        "runs_s": [
+          2.649,
+          2.714,
+          2.545,
+          2.769,
+          2.569
+        ],
+        "median_s": 2.649,
+        "min_s": 2.545,
+        "max_s": 2.769
+      },
+      "warm_noop": {
+        "runs_s": [
+          2.44,
+          2.318,
+          2.401,
+          2.313,
+          2.338
+        ],
+        "median_s": 2.338,
+        "min_s": 2.313,
+        "max_s": 2.44
+      }
+    }
+  }
+}

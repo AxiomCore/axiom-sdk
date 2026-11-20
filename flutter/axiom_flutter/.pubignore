@@ -1,0 +1,35 @@
+# A .pubignore replaces .gitignore for publishing in this folder, so it
+# repeats the .gitignore rules before the publish-only exclusions.
+.DS_Store
+*.class
+*.log
+*.pyc
+*.swp
+*.iml
+*.ipr
+*.iws
+.idea/
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+/pubspec.lock
+**/doc/api/
+build/
+.summary_files/
+pubspec_overrides.yaml
+receipts/
+
+# Downloaded at pod install time, never published.
+ios/AxiomRuntime.xcframework
+macos/AxiomRuntime.xcframework
+*.zip
+
+# Development only: host tests that need a locally built runtime, and the
+# maintainer script that refreshes the bundled Android libraries.
+test/native/
+tool/

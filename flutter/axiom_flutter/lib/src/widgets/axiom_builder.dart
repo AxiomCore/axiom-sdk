@@ -3,19 +3,25 @@ import 'package:flutter/widgets.dart';
 import '../state.dart';
 import '../query.dart';
 
+/// Builds the UI for [data]. [state] has the status flags.
 typedef AxiomDataWidgetBuilder<R> =
     Widget Function(BuildContext context, AxiomState<R> state, R data);
 
+/// Builds the UI for [error].
 typedef AxiomErrorWidgetBuilder =
     Widget Function(BuildContext context, AxiomError error);
 
+/// Builds the UI while the first request runs.
 typedef AxiomLoadingWidgetBuilder = Widget Function(BuildContext context);
 
-/// A powerful builder that handles Axiom query state, data transformation, and build optimization.
+/// Subscribes to an [AxiomQuery] and builds the loading, error or data UI.
+///
+/// Rebuilds only when the selected data changes (see [selector]).
 ///
 /// [T] is the raw type coming from the SDK (e.g. models.User).
 /// [R] is the transformed type used in the UI (e.g. String). Defaults to [T].
 class AxiomBuilder<T, R> extends StatefulWidget {
+  /// The query to show.
   final AxiomQuery<T> query;
 
   /// Optional: Transform the data before it reaches the builder or selector.
@@ -29,10 +35,16 @@ class AxiomBuilder<T, R> extends StatefulWidget {
   /// Example: `selector: (user) => [user.name, user.role]`
   final Object? Function(R data)? selector;
 
+  /// Builds the UI when data is available.
   final AxiomDataWidgetBuilder<R> builder;
+
+  /// Builds the UI on error. Defaults to a [Text] with the message.
   final AxiomErrorWidgetBuilder? error;
+
+  /// Builds the UI while loading. Defaults to an empty box.
   final AxiomLoadingWidgetBuilder? loading;
 
+  /// Creates the builder.
   const AxiomBuilder({
     super.key,
     required this.query,

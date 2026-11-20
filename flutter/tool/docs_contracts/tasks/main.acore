@@ -1,0 +1,40 @@
+project(id: "docs.tasks", version: "1.0.0")
+variant default(include: ["*"])
+
+model Task { id: String title: String }
+model TaskList { tasks: List<Models.Task> }
+model NewTask { title: String }
+model ClaimIn { name: String }
+model Conflict { message: String existingId: String }
+
+failure conflict(payload: Models.Conflict, status: 409, category: FailureCategory.domain)
+
+action listTasks(kind: ActionKind.query, output: Models.TaskList) {
+  managed { return {tasks: [{id: "t1", title: "Write docs"}]} }
+}
+endpoint listTasks(method: GET, path: "/tasks") {
+  handle(action: Actions.listTasks)
+  response(type: Models.TaskList)
+}
+action createTask(kind: ActionKind.command, input: Models.NewTask, output: Models.Task) {
+  managed { return {id: "t2", title: Input.title} }
+}
+endpoint createTask(method: POST, path: "/tasks") {
+  request { body("title", type: String) }
+  handle(action: Actions.createTask, input: {title: Input.body.title})
+  response(type: Models.Task, status: 201)
+}
+action claim(kind: ActionKind.command, input: Models.ClaimIn, output: Models.Task) {
+  errors(Failures.conflict)
+  managed {
+    guard Input.name != "taken" else fail Failures.conflict({message: "taken", existingId: "t0"})
+    return {id: "t3", title: Input.name}
+  }
+}
+endpoint claim(method: POST, path: "/claims") {
+  request { body("name", type: String) }
+  handle(action: Actions.claim, input: {name: Input.body.name})
+  response(type: Models.Task)
+  errors(Failures.conflict)
+  exposeFailure(failure: Failures.conflict, fields: [.message, .existingId], audiences: ["web"])
+}

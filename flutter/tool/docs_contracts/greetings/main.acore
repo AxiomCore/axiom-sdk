@@ -1,0 +1,9 @@
+project(id: "docs.fastapi.greeting", version: "1.0.0")
+variant default(include: ["*"])
+
+model Greeting { message: String }
+
+endpoint greet(method: GET, path: "/greet/{name}") {
+  request { path("name", type: String) }
+  response(type: Models.Greeting)
+}

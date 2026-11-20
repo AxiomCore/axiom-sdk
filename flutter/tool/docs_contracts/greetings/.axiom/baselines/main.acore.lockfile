@@ -1,0 +1,50 @@
+{
+  "endpoints": {
+    "greet": {
+      "id": 3696776424,
+      "method": "GET",
+      "parameters": [
+        {
+          "isOptional": false,
+          "name": "name",
+          "source": "path",
+          "typeRef": {
+            "kind": "string"
+          }
+        }
+      ],
+      "path": "/greet/{name}",
+      "returnIsOptional": false,
+      "returnType": {
+        "kind": "named",
+        "value": "Greeting"
+      },
+      "name": "greet"
+    }
+  },
+  "models": {
+    "Greeting": {
+      "fields": {
+        "message": {
+          "isOptional": false,
+          "name": "message",
+          "typeRef": {
+            "kind": "string"
+          }
+        }
+      },
+      "name": "Greeting"
+    }
+  },
+  "project": {
+    "id": "docs.fastapi.greeting",
+    "version": "1.0.0"
+  },
+  "variants": {
+    "default": {
+      "include": [
+        "*"
+      ]
+    }
+  }
+}

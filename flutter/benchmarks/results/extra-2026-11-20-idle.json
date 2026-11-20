@@ -1,0 +1,17 @@
+{
+  "machine": {
+    "description": "4 vCPU x86_64 container (gVisor), Debian 12 (bookworm), 32 GB RAM, no GPU",
+    "chrome": "Google Chrome 158.0.8127.36 (headless=new, fresh --user-data-dir per launch)",
+    "quiet_check": "top -bn1 before each web run and before tooling: no cargo/rustc/gradle/other chrome; only idle background processes (two `axiom run` fixture servers of unit c at ~6% CPU of one core each, a python http.server). Gradle daemons were stopped after the APK builds and before the web runs."
+  },
+  "sdk_commit": "6cd7d9f (origin/flutter/parity) + benchmark-only changes on flutter/l2",
+  "sdk_base": "axiom-sdk origin/flutter/parity 6cd7d9f",
+  "runtime": {
+    "wasm_runtime_commit": "axiom-runtime 1265a1c (flutter/h: host notify + WS send fixes)",
+    "wasm_sha256": "4e9e5e5579b6c4a8e03415eb330dd652db65f114aa5f1dea3ba7c36d368eab83",
+    "android_so": "axiom-runtime flutter/r 539bd68, NDK 26.3.11579264, API 24 (runtime-pin.json)",
+    "runtime_version": "0.148.6"
+  },
+  "flutter_version": "3.32.0",
+  "generator_path_used_by_axiom_pull": "Released CLI 0.156.0 does not read AXIOM_FLUTTER_SDK_PATH (the string is not in the binary; axiom-build/src/core/utils.rs runs `dart run axiom_flutter_generator:generate` in the app). That resolves through app/pubspec.yaml, whose dev_dependency is a path dependency on ../../axiom_flutter_generator, so `axiom pull` ran the branch generator (not the published one)."
+}

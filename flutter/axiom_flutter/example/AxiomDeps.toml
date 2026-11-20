@@ -1,0 +1,6 @@
+framework = "flutter"
+
+[contracts]
+
+[contracts.todos]
+source = "backend/backend.axiom"

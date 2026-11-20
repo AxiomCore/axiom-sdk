@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "runtime_version": "0.148.6",
+  "apple": {
+    "archive": "AxiomRuntime.xcframework.zip",
+    "url": "https://github.com/AxiomCore/AxiomCore/releases/download/v0.148.6/AxiomRuntime.xcframework.zip",
+    "sha256": "f8b394fe7be49091face20e142ae2c3f2c4ad2a47235d736c137493bbe014db6"
+  },
+  "android": {
+    "distribution": "bundled",
+    "path": "flutter/axiom_flutter/android/src/main/jniLibs/<abi>/libaxiom_runtime.so",
+    "source": "axiom-runtime flutter/r2 4e1ce85cc930d8218442dd7da526d039de1faeff (= flutter/parity), scripts/build-android-so.sh, NDK 26.3.11579264, API 24, 16 KB pages",
+    "archive": null,
+    "url": null,
+    "sha256": null,
+    "libraries": {
+      "arm64-v8a": {
+        "sha256": "c2b396be7f46737d85160fb3e9276b46abca1c5b69f70d4c19da5c5d3e0d6b03",
+        "bytes": 10101352
+      },
+      "armeabi-v7a": {
+        "sha256": "6d7e73d5c47af0bb41bd4ba6a36bfebaf63bf9b7d090a377b2112e1a36050a1d",
+        "bytes": 7261332
+      },
+      "x86_64": {
+        "sha256": "dc9d6fa89ca9572bce8a19a448d0d93f43be33f401aae332c95333dd90f3c057",
+        "bytes": 12479928
+      }
+    }
+  },
+  "wasm": {
+    "runtime_commit": "4e1ce85",
+    "runtime_branch": "axiom-runtime flutter/r2 4e1ce85cc930d8218442dd7da526d039de1faeff (= flutter/parity; adds web WS initial message and quiet release console), scripts/build-wasm-flutter.sh",
+    "axiom_runtime_js_sha256": "6d9fb1d7946c5d42943916f021998977e8d7201ac75b553faeeaa98f68c5c550",
+    "axiom_runtime_bg_wasm_sha256": "7a0cc9413f68a2f494c26c342a0bd9d7442189b2aaa618483eaab5c793561d65"
+  }
+}

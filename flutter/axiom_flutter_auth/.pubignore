@@ -1,0 +1,30 @@
+# A .pubignore replaces .gitignore for publishing in this folder, so it
+# repeats the .gitignore rules before the publish-only exclusions.
+.DS_Store
+*.class
+*.log
+*.pyc
+*.swp
+*.iml
+*.ipr
+*.iws
+.idea/
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+/pubspec.lock
+**/doc/api/
+build/
+.summary_files/
+pubspec_overrides.yaml
+receipts/
+
+# Development only: emulator and headless-browser scripts and the test that
+# needs a running `axiom auth emulate`.
+tool/
+test/emulator_test.dart

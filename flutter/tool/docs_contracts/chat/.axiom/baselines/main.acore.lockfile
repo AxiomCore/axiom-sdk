@@ -1,0 +1,209 @@
+{
+  "endpoints": {
+    "room": {
+      "id": 1026430928,
+      "method": "WS",
+      "parameters": [
+        {
+          "isOptional": false,
+          "name": "message",
+          "source": "body",
+          "typeRef": {
+            "kind": "named",
+            "value": "Outgoing"
+          }
+        }
+      ],
+      "path": "/room",
+      "returnIsOptional": false,
+      "returnType": {
+        "kind": "named",
+        "value": "Message"
+      },
+      "streaming": {
+        "client": {
+          "model": {
+            "kind": "named",
+            "value": "Outgoing"
+          }
+        },
+        "direction": "bidirectional",
+        "reconnect": "auto",
+        "server": {
+          "model": {
+            "kind": "named",
+            "value": "Message"
+          }
+        },
+        "type": "websocket"
+      },
+      "name": "room"
+    }
+  },
+  "models": {
+    "Message": {
+      "fields": {
+        "text": {
+          "isOptional": false,
+          "name": "text",
+          "typeRef": {
+            "kind": "string"
+          }
+        }
+      },
+      "name": "Message"
+    },
+    "Outgoing": {
+      "fields": {
+        "text": {
+          "isOptional": false,
+          "name": "text",
+          "typeRef": {
+            "kind": "string"
+          }
+        }
+      },
+      "name": "Outgoing"
+    },
+    "RoomIn": {
+      "fields": {
+        "message": {
+          "isOptional": false,
+          "name": "message",
+          "typeRef": {
+            "kind": "named",
+            "value": "Outgoing"
+          }
+        }
+      },
+      "name": "RoomIn"
+    }
+  },
+  "project": {
+    "id": "docs.chat",
+    "version": "1.0.0"
+  },
+  "server": {
+    "actions": {
+      "room": {
+        "implementation": {
+          "handler": "room",
+          "kind": "managed"
+        },
+        "input": {
+          "kind": "named",
+          "value": "RoomIn"
+        },
+        "kind": "stream",
+        "output": {
+          "kind": "named",
+          "value": "Message"
+        },
+        "program": {
+          "flow": [
+            {
+              "provenance": {
+                "end": 393,
+                "origin": "inferred",
+                "source": "action.room",
+                "start": 360
+              },
+              "statement": {
+                "kind": "return",
+                "value": {
+                  "fields": [
+                    [
+                      "text",
+                      {
+                        "kind": "field",
+                        "name": "text",
+                        "optional": false,
+                        "target": {
+                          "kind": "field",
+                          "name": "message",
+                          "optional": false,
+                          "target": {
+                            "kind": "name",
+                            "name": "Input"
+                          }
+                        }
+                      }
+                    ]
+                  ],
+                  "kind": "record"
+                }
+              }
+            }
+          ],
+          "result": {
+            "kind": "literal",
+            "value": null
+          },
+          "steps": []
+        },
+        "settings": {
+          "admission": {},
+          "guards": [
+            "signedIn"
+          ],
+          "scopes": [],
+          "successStatus": null,
+          "typedFailures": []
+        }
+      }
+    },
+    "endpointPolicies": {
+      "room": {
+        "admission": {},
+        "guards": [],
+        "handle": {
+          "action": "room",
+          "input": {
+            "message": {
+              "name": "message",
+              "source": "body"
+            }
+          }
+        },
+        "scopes": [],
+        "successStatus": null,
+        "typedFailures": []
+      }
+    },
+    "guards": {
+      "signedIn": {
+        "kind": "authenticated"
+      }
+    },
+    "integrations": {
+      "caches": {},
+      "outbound": {},
+      "streams": {
+        "room": {
+          "buffer": 2,
+          "endpoint": "room",
+          "heartbeatMs": 10000,
+          "idField": null,
+          "maxConnections": 16,
+          "maxFrameBytes": 16384,
+          "maxFrames": 100,
+          "origins": [
+            "http://localhost:5000"
+          ],
+          "stallTimeoutMs": 5000
+        }
+      },
+      "uploads": {}
+    },
+    "language": {
+      "enabled": true
+    }
+  },
+  "variants": {
+    "default": {
+      "include": [
+        "*"
+      ]
+    }
+  }
+}
