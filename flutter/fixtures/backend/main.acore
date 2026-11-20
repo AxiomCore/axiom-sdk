@@ -1,0 +1,261 @@
+project(id: "dev.axiomcore.fixture", version: "1.0.0")
+variant default(include: ["*"])
+
+model Scalars {
+  s: String
+  b: Bool
+  i32: Int32
+  i64: Int64
+  f32: Float32
+  f64: Float64
+  bytes: Bytes
+  at: DateTime
+  json: Json
+}
+model Inner { label: String depth: Int32 }
+model Everything {
+  id: String
+  scalars: Models.Scalars
+  tags: List<String>
+  counts: Optional<Map<String, Int64>>
+  note: Optional<String>
+  inner: Models.Inner
+  inners: List<Models.Inner>
+  color: Field(validate: {type: "enum", values: ["red", "green", "blue"]}, type: String)
+}
+model Item { id: String name: String qty: Int32 }
+model ItemInput { name: String qty: Int32 }
+model ItemUpdate { id: String name: String qty: Int32 }
+model ItemRef { id: String }
+model Deleted { id: String deleted: Bool }
+model Echo { path: String q: String limit: Int32 flag: Optional<Bool> }
+model EchoIn { path: String q: String limit: Int32 flag: Optional<Bool> }
+model Conflict { message: String existingId: String }
+model ClaimIn { name: String }
+model Stamp { strategy: String key: String }
+model StampIn { strategy: String key: String }
+model NonceIn { key: String }
+model RetryIn { attempt: Int32 }
+model Retried { ok: Bool attempt: Int32 }
+model KeyIn { key: String }
+model Who { method: String ok: Bool }
+model Problem { message: String }
+model BytesIn { data: Bytes }
+model BytesOut { size: Int32 data: Bytes }
+model Ping { text: String seq: Int32 }
+model Tick { id: String seq: Int32 }
+model Cursor { last: Optional<String> }
+model SocketIn { message: Models.Ping }
+
+failure conflict(payload: Models.Conflict, status: 409, category: FailureCategory.domain)
+failure unauthorized(payload: Models.Problem, status: 401, category: FailureCategory.unauthenticated)
+
+guard signedIn(kind: GuardKind.authenticated)
+
+cors(origins: ["http://127.0.0.1:8792", "http://localhost:8792"], methods: [GET, POST, PUT, DELETE], headers: ["content-type", "authorization", "x-api-key", "x-axiom-cache-mode"], credentials: false, maxAge: 10m)
+
+// ---- unary ----
+action echo(kind: ActionKind.query, input: Models.EchoIn, output: Models.Echo) {
+  managed { return {path: Input.path, q: Input.q, limit: Input.limit, flag: Input.flag} }
+}
+endpoint echo(method: GET, path: "/echo/{path}") {
+  request {
+    path("path", type: String)
+    query("q", type: String)
+    query("limit", type: Int32)
+    query("flag", type: Bool, optional: true)
+  }
+  handle(action: Actions.echo, input: {path: Input.path.path, q: Input.query.q, limit: Input.query.limit, flag: Input.query.flag})
+  response(type: Models.Echo)
+}
+
+action everything(kind: ActionKind.query, output: Models.Everything) {
+  managed {
+    return {
+      id: "e1",
+      scalars: {s: "hello", b: true, i32: 2147483647, i64: 9007199254740993, f32: 1.5, f64: 3.141592653589793, bytes: "AQID", at: "2026-11-20T12:00:00Z", json: {nested: {k: "v"}, list: ["a", "b"]}},
+      tags: ["a", "b"],
+      inner: {label: "in", depth: 1},
+      inners: [{label: "i0", depth: 0}, {label: "i1", depth: 1}],
+      color: "green"
+    }
+  }
+}
+endpoint everything(method: GET, path: "/types/everything") {
+  handle(action: Actions.everything)
+  response(type: Models.Everything)
+}
+
+action createItem(kind: ActionKind.command, input: Models.ItemInput, output: Models.Item) {
+  managed { return {id: "item-1", name: Input.name, qty: Input.qty} }
+}
+endpoint createItem(method: POST, path: "/items") {
+  request { body("name", type: String) body("qty", type: Int32) }
+  handle(action: Actions.createItem, input: {name: Input.body.name, qty: Input.body.qty})
+  response(type: Models.Item, status: 201)
+}
+
+action updateItem(kind: ActionKind.command, input: Models.ItemUpdate, output: Models.Item) {
+  managed { return {id: Input.id, name: Input.name, qty: Input.qty} }
+}
+endpoint updateItem(method: PUT, path: "/items/{id}") {
+  request { path("id", type: String) body("name", type: String) body("qty", type: Int32) }
+  handle(action: Actions.updateItem, input: {id: Input.path.id, name: Input.body.name, qty: Input.body.qty})
+  response(type: Models.Item)
+}
+
+action deleteItem(kind: ActionKind.command, input: Models.ItemRef, output: Models.Deleted) {
+  managed { return {id: Input.id, deleted: true} }
+}
+endpoint deleteItem(method: DELETE, path: "/items/{id}") {
+  request { path("id", type: String) }
+  handle(action: Actions.deleteItem, input: {id: Input.path.id})
+  response(type: Models.Deleted)
+}
+
+action uploadBytes(kind: ActionKind.command, input: Models.BytesIn, output: Models.BytesOut) {
+  managed { return {size: 0, data: Input.data} }
+}
+endpoint uploadBytes(method: POST, path: "/bytes") {
+  request { body("data", type: Bytes) }
+  handle(action: Actions.uploadBytes, input: {data: Input.body.data})
+  response(type: Models.BytesOut)
+}
+
+// ---- typed failure ----
+action claim(kind: ActionKind.command, input: Models.ClaimIn, output: Models.Item) {
+  errors(Failures.conflict)
+  managed {
+    guard Input.name != "taken" else fail Failures.conflict({message: "name already taken", existingId: "item-0"})
+    return {id: "item-2", name: Input.name, qty: 1}
+  }
+}
+endpoint claim(method: POST, path: "/claims") {
+  request { body("name", type: String) }
+  handle(action: Actions.claim, input: {name: Input.body.name})
+  response(type: Models.Item)
+  errors(Failures.conflict)
+  exposeFailure(failure: Failures.conflict, fields: [.message, .existingId], audiences: ["web"])
+}
+
+// ---- client cache policies ----
+// No mutable state or clock is available to managed code, so each response
+// echoes the optional `x-fixture-nonce` request header: a cached hit returns
+// the old nonce, a network hit returns the new one.
+action stamp(kind: ActionKind.query, input: Models.NonceIn, output: Models.Stamp) {
+  managed { return {strategy: "nonce", key: Input.key} }
+}
+action itemStamp(kind: ActionKind.query, input: Models.StampIn, output: Models.Stamp) {
+  managed { return {strategy: Input.strategy, key: Input.key} }
+}
+endpoint cacheNetworkOnly(method: GET, path: "/cache/network-only") {
+  request { header("x-fixture-nonce", type: String) }
+  handle(action: Actions.stamp, input: {key: Input.header["x-fixture-nonce"]})
+  response(type: Models.Stamp)
+  cache(strategy: CacheStrategy.networkOnly, ttl: 1m)
+}
+endpoint cacheCacheFirst(method: GET, path: "/cache/cache-first") {
+  request { header("x-fixture-nonce", type: String) }
+  handle(action: Actions.stamp, input: {key: Input.header["x-fixture-nonce"]})
+  response(type: Models.Stamp)
+  cache(strategy: CacheStrategy.cacheFirst, ttl: 1m)
+}
+endpoint cacheNetworkFirst(method: GET, path: "/cache/network-first") {
+  request { header("x-fixture-nonce", type: String) }
+  handle(action: Actions.stamp, input: {key: Input.header["x-fixture-nonce"]})
+  response(type: Models.Stamp)
+  cache(strategy: CacheStrategy.networkFirst, ttl: 1m)
+}
+endpoint cacheStale(method: GET, path: "/cache/stale-while-revalidate") {
+  request { header("x-fixture-nonce", type: String) }
+  handle(action: Actions.stamp, input: {key: Input.header["x-fixture-nonce"]})
+  response(type: Models.Stamp)
+  cache(strategy: CacheStrategy.staleWhileRevalidate, ttl: 1m)
+}
+endpoint cachedItem(method: GET, path: "/cache/items/{id}") {
+  request { path("id", type: String) header("x-fixture-nonce", type: String) }
+  handle(action: Actions.itemStamp, input: {strategy: Input.path.id, key: Input.header["x-fixture-nonce"]})
+  response(type: Models.Stamp)
+  cache(strategy: CacheStrategy.cacheFirst, ttl: 5m)
+  cacheIdentity("fixture.item")
+}
+endpoint touchItem(method: POST, path: "/cache/items/{id}/touch") {
+  request { path("id", type: String) header("x-fixture-nonce", type: String) }
+  handle(action: Actions.itemStamp, input: {strategy: Input.path.id, key: Input.header["x-fixture-nonce"]})
+  response(type: Models.Stamp)
+  invalidates("fixture.item")
+}
+
+// ---- retry ----
+action retried(kind: ActionKind.query, input: Models.RetryIn, output: Models.Retried) {
+  managed { return {ok: true, attempt: Input.attempt} }
+}
+endpoint retried(method: GET, path: "/retry") {
+  request { query("attempt", type: Int32) }
+  handle(action: Actions.retried, input: {attempt: Input.query.attempt})
+  response(type: Models.Retried)
+  retry(attempts: 3, onStatus: [502, 503, 504], onTimeout: true, backoff: Exponential())
+}
+
+// ---- auth ----
+action whoBearer(kind: ActionKind.query, output: Models.Who) {
+  require(guard: Guards.signedIn)
+  managed { return {method: "bearer", ok: true} }
+}
+endpoint authBearer(method: GET, path: "/auth/bearer") {
+  require(guard: Guards.signedIn)
+  handle(action: Actions.whoBearer)
+  response(type: Models.Who)
+}
+action checkKey(kind: ActionKind.query, input: Models.KeyIn, output: Models.Who) {
+  errors(Failures.unauthorized)
+  managed {
+    guard Input.key == "fixture-api-key" else fail Failures.unauthorized({message: "bad api key"})
+    return {method: "apiKey", ok: true}
+  }
+}
+endpoint authApiKeyHeader(method: GET, path: "/auth/api-key-header") {
+  request { header("x-api-key", type: String) }
+  handle(action: Actions.checkKey, input: {key: Input.header["x-api-key"]})
+  response(type: Models.Who)
+  errors(Failures.unauthorized)
+  exposeFailure(failure: Failures.unauthorized, fields: [.message], audiences: ["web"])
+}
+endpoint authApiKeyQuery(method: GET, path: "/auth/api-key-query") {
+  request { query("api_key", type: String) }
+  handle(action: Actions.checkKey, input: {key: Input.query.api_key})
+  response(type: Models.Who)
+  errors(Failures.unauthorized)
+  exposeFailure(failure: Failures.unauthorized, fields: [.message], audiences: ["web"])
+}
+
+// ---- streams (managed stream actions emit one typed frame per call) ----
+action ticks(kind: ActionKind.stream, input: Models.Cursor, output: Models.Tick) {
+  managed { return {id: "t1", seq: 1} }
+}
+endpoint sse(method: GET, path: "/stream/sse") {
+  request { header("last-event-id", type: String, optional: true) }
+  handle(action: Actions.ticks, input: {last: Input.header["last-event-id"]})
+  response(type: Models.Tick)
+  streaming(SseStreamDef(responseType: Models.Tick))
+}
+endpoint chunked(method: GET, path: "/stream/chunked") {
+  request { query("last", type: String, optional: true) }
+  handle(action: Actions.ticks, input: {last: Input.query.last})
+  response(type: Models.Tick)
+  streaming(HttpStreamDef(responseType: Models.Tick, framing: "message", encoding: "json"))
+}
+action echoSocket(kind: ActionKind.stream, input: Models.SocketIn, output: Models.Ping) {
+  require(guard: Guards.signedIn)
+  managed { return {text: Input.message.text, seq: Input.message.seq} }
+}
+endpoint wsEcho(method: WS, path: "/stream/ws") {
+  request { body("message", type: Models.Ping) }
+  handle(action: Actions.echoSocket, input: {message: Input.body.message})
+  response(type: Models.Ping)
+  streaming(WebSocketDef(direction: "bidirectional", reconnect: "auto",
+    client: WsMessageDef(model: Models.Ping), server: WsMessageDef(model: Models.Ping)))
+}
+streamPolicy sse(endpoint: Routes.sse, buffer: 2, maxFrameBytes: 16384, maxFrames: 100, heartbeat: 10s, stallTimeout: 5s, maxConnections: 16, idField: .id)
+streamPolicy chunked(endpoint: Routes.chunked, buffer: 2, maxFrameBytes: 16384, maxFrames: 100, heartbeat: 10s, stallTimeout: 5s, maxConnections: 16)
+streamPolicy wsEcho(endpoint: Routes.wsEcho, maxFrameBytes: 16384, maxFrames: 100, heartbeat: 10s, stallTimeout: 5s, maxConnections: 16, origins: ["http://127.0.0.1:8792", "http://localhost:8792"])
