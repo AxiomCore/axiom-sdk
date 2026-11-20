@@ -332,6 +332,10 @@ class FfiError {
   static const int initializationFailed = 13;
   static const int internalError = 14;
 
+  /// Request cancelled by `axiom_cancel` / reset. The error message is plain
+  /// text (`Request cancelled by host`), not AxiomError JSON.
+  static const int cancelled = 15;
+
   static String name(int code) {
     return switch (code) {
       successUnverified => 'SuccessUnverified',
@@ -350,6 +354,7 @@ class FfiError {
       contractNotLoaded => 'ContractNotLoaded',
       initializationFailed => 'InitializationFailed',
       internalError => 'InternalError',
+      cancelled => 'Cancelled',
       _ => 'UnrecognizedErrorCode',
     };
   }
