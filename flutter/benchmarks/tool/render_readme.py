@@ -309,10 +309,11 @@ def _size_table(st):
     v = st.get("variants", {})
     base = v.get("baseline", {})
     rows = []
-    for name, label in (("axiom", "Axiom (lean runtime, default)"), ("axiom_extensions", "Axiom + `axiom_flutter_extensions`")):
-        x = v.get(name)
-        if not x:
+    names = {"axiom": "Axiom (runtime bundled by axiom_flutter)", "axiom_extensions": "Axiom + `axiom_flutter_extensions`"}
+    for name, x in v.items():
+        if name == "baseline":
             continue
+        label = names.get(name, f"Axiom, runtime `{name}`")
         if x.get("status") != "ok":
             rows.append([label, "not available on this branch", "", ""])
             continue
