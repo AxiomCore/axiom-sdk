@@ -71,11 +71,20 @@ memory.
 | Adapter | Where | Trade-off |
 | --- | --- | --- |
 | `memoryStorage()` (default) | process memory | Nothing touches disk. The user signs in again after a restart (or a reload on web). |
-| `secureStorage()` | `flutter_secure_storage`: iOS/macOS Keychain (`first_unlock_this_device`), Android Keystore-backed encrypted preferences | The recommended choice on mobile and desktop. macOS needs the Keychain Sharing entitlement. |
+| `secureStorage()` | `flutter_secure_storage` 10: iOS/macOS Keychain (`first_unlock_this_device`), Android Keystore-backed ciphers | The recommended choice on mobile and desktop. macOS needs the Keychain Sharing entitlement. |
 | `sessionStorageAdapter()` | web `window.sessionStorage` (per tab, survives a reload) | Same trade-off as auth-web: **any script on the page (XSS) can read the refresh token.** Use it only with a strict Content-Security-Policy. Otherwise keep `memoryStorage()`. Do not use `secureStorage()` on web: it encrypts with a key kept beside the data in `localStorage`. |
 | `platformStorage()` | `sessionStorageAdapter()` on web, `secureStorage()` elsewhere | |
 
 You can also implement `AuthStorageAdapter` (`get`/`set`/`remove`) yourself.
+
+## Platform requirements
+
+- **Android**: `minSdk = 23` and `compileSdk = 36` in `android/app/build.gradle.kts`
+  (required by `flutter_secure_storage` 10). Gradle also suggests `ndkVersion = "27.0.12077973"`.
+- **Web with dart2wasm** (`flutter build web --wasm`) works: `flutter_secure_storage` 10's web
+  part uses `package:web`, not `dart:html`. Version 9 broke wasm builds of any app using this package.
+- Upgrading from `flutter_secure_storage` 9 on Android: v10 migrates entries stored with
+  `encryptedSharedPreferences` to its own ciphers on first access.
 
 ## Redirect flows (provider, hosted, magic link)
 
