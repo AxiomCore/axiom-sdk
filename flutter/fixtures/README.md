@@ -23,7 +23,8 @@ Test credentials (fixture only, never use elsewhere):
   `integration_app/lib/checks/ctx.dart`).
 - API key: `fixture-api-key`.
 
-CORS allows `http://127.0.0.1:8792` and `http://localhost:8792` (the web runner's origin).
+CORS allows `http://127.0.0.1:8792`, `http://localhost:8792`, `http://127.0.0.1:8802` and
+`http://localhost:8802` (the web runner's origins).
 
 ## Endpoints
 
@@ -77,3 +78,30 @@ CORS allows `http://127.0.0.1:8792` and `http://localhost:8792` (the web runner'
   works (verified with a raw Node client sending `Origin: http://127.0.0.1:8792` and the bearer
   token), but browser HTTP calls fail CORS. Report to the CLI owners.
 - **Literals in `handle(input:)`.** Input mappings accept only `Input.path/query/header/body` values.
+
+## Additions by unit g
+
+- **Signed contracts.** `tool/sign.sh [contract.axiom] [out.json]` signs the contract the way
+  axiom-runtime verifies it: `signature = base64(Ed25519(SHA-256(bytes)))`, `publicKey` = base64 of
+  the raw 32-byte key, `sha256` = hex. Default: signs `integration_app/assets/axiom/fixture.axiom`
+  and writes `integration_app/assets/axiom/fixture.signed.json` (also a `wrongPublicKey`). The key
+  pair `tool/fixture-signing-key.pem` is a committed FIXTURE-ONLY key. Re-run after `tool/regen.sh`
+  if the contract bytes change (the build is deterministic). (`axiom-keygen sign` signs the raw
+  bytes in hex, which the runtime does not accept.)
+- **Auth metadata.** `authmeta/` is a second contract with the same `/auth/*` routes plus
+  `auth(EndpointAuth(...))` on each endpoint; CLI 0.156.0 publishes that in `endpoints[].auth`
+  directly from a native backend contract (no FastAPI `amends`). `authmeta/build.sh` builds it into
+  `integration_app/assets/axiom/authmeta.axiom`; the app loads it as namespace `g_authmeta` against
+  the running main fixture. The main contract still has `"auth": null` (only `require(guard:)`),
+  which is why `auth.bearer_token` fails: adding the same `auth(...)` line to `authBearer` in
+  `backend/main.acore` would fix it (not done, to keep endpoint metadata stable for other units).
+- **WebSocket on web.** The CLI rejects an unguarded WebSocket (`AXB006 ... per-message
+  authorization`; `GuardKind` has only `authenticated`), and the JWT provider reads only
+  `Authorization`, which a browser cannot set on the upgrade. `FIXTURE_CORS=0 FIXTURE_AUTH=session
+  ./backend/run.sh 8803` serves a copy with a cookie-session provider (`tool/session.py`): the page
+  sets cookie `axiom_fixture_session`, which the browser sends on the upgrade. The server also
+  demands a CSRF proof header on the upgrade (it sees method `WS`, not `GET`) and forbids `origin`
+  as that header, so the fixture names `sec-websocket-extensions`, whose value browsers send
+  verbatim. That defeats CSRF and is fixture only. Product findings: (1) cookie-session WebSockets
+  cannot carry a real CSRF proof from a browser; (2) bearer-only deployments cannot serve browser
+  WebSockets at all.

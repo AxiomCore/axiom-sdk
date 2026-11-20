@@ -15,7 +15,8 @@ set -euo pipefail
 APP="$(cd "$(dirname "$0")/.." && pwd)"
 WEB_PORT="${WEB_PORT:-8792}"
 BASE="${FIXTURE_BASE_URL:-http://127.0.0.1:8791}"
-# Second fixture instance without cors() for WebSocket checks (FIXTURE_CORS=0 ./run.sh 8793).
+# Second fixture instance without cors() for WebSocket checks (FIXTURE_CORS=0 ./run.sh 8793;
+# for web WebSockets use FIXTURE_CORS=0 FIXTURE_AUTH=session ./run.sh 8803, see fixtures/README.md).
 WS_BASE="${FIXTURE_WS_BASE_URL:-}"
 CHROME="${CHROME:-$(command -v google-chrome || command -v chrome || command -v chromium)}"
 TIMEOUT="${TIMEOUT:-120}"

@@ -5,8 +5,13 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:axiom_flutter/axiom_flutter.dart';
+// ignore: depend_on_referenced_packages
+import 'package:crypto/crypto.dart' as crypto; // via axiom_flutter_auth
 import 'package:flutter/services.dart' show rootBundle;
 
+import '../axiom_generated/axiom_sdk.dart';
+import '../axiom_generated/models.dart';
+import 'checks_g_stub.dart' if (dart.library.js_interop) 'checks_g_web.dart';
 import 'ctx.dart';
 
 const _echoId = 1421147111;
@@ -137,6 +142,24 @@ Future<(bool ok, Object? value)> _get(Ctx c, String ns, int id, String path,
   final d = states.where((s) => s.hasData).toList();
   if (d.isNotEmpty) return (true, jsonDecode(utf8.decode(d.last.data!)));
   return (false, states.map((s) => s.error).whereType<AxiomError>().firstOrNull);
+}
+
+// ---- item 4: WebSocket on web through a cookie session ----
+const _sessionCookie = 'axiom_fixture_session';
+
+/// Same derivation as fixtures/backend/tool/session.py `token(origin, family)`.
+String _sessionToken(String origin, String family) =>
+    'fixture-session-${crypto.sha256.convert(utf8.encode('$family $origin')).toString().substring(0, 16)}';
+
+Future<FixtureModule> _wsSessionApi(Ctx c) async {
+  if (!gIsWeb) {
+    skip('web only: native sends Authorization on the upgrade (stream.websocket_echo, gen.ws_channel)');
+  }
+  if (fixtureWsBaseUrl.isEmpty) {
+    skip('set FIXTURE_WS_BASE_URL to a FIXTURE_CORS=0 FIXTURE_AUTH=session fixture instance');
+  }
+  gSetCookie(_sessionCookie, _sessionToken(gPageOrigin()!, gBrowserFamily()));
+  return c.wsApi();
 }
 
 final List<CheckDef> checksG = [
@@ -280,5 +303,50 @@ final List<CheckDef> checksG = [
       rt.setAuthProvider(null);
       rt.clearAuthToken(namespace: _amNs, methodName: 'Authorization');
     }
+  }),
+  CheckDef('g.websocket_echo_web_session', 'streams', (c) async {
+    final api = await _wsSessionApi(c);
+    final channel = api.wsEchoChannel();
+    try {
+      final reply = channel.stream
+          .firstWhere((s) => s.data != null || s.error != null)
+          .timeout(const Duration(seconds: 10),
+              onTimeout: () => throw CheckFailure('no echo within 10 s'));
+      // Runtime gap (axiom-runtime engine.rs, wasm handle_websocket): a
+      // message sent while the socket is still CONNECTING is dropped
+      // (send_with_str error ignored, no wait for onopen). Resend until the
+      // first reply so the check proves the authenticated round trip.
+      var sent = 0;
+      var got = false;
+      unawaited(reply.then((_) => got = true, onError: (_) => got = true));
+      while (!got && sent < 20) {
+        if (!channel.isClosed) channel.send(const Ping(text: 'web', seq: 11));
+        sent++;
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+      final s = await reply;
+      expectThat(s.error == null, 'channel error: ${s.error}');
+      expectEq(s.data?.text, 'web', 'echo text');
+      expectEq(s.data?.seq, 11, 'echo seq');
+    } finally {
+      await channel.close();
+    }
+  }),
+  CheckDef('g.websocket_initial_message_web_session', 'streams', (c) async {
+    // The one-shot form stream.websocket_echo uses: the request body is the
+    // first client message. Known runtime gap: the engine never sends
+    // req.payload on a WebSocket (all platforms), so this times out until
+    // axiom-runtime sends it after onopen.
+    final api = await _wsSessionApi(c);
+    final AxiomState<Ping> s;
+    try {
+      s = await settle(api.wsEcho(message: const Ping(text: 'first', seq: 12)),
+          timeout: const Duration(seconds: 5));
+    } on CheckFailure {
+      throw CheckFailure('no reply in 5 s: runtime does not send the initial WebSocket message '
+          '(engine.rs handle_websocket ignores req.payload); upgrade + auth succeeded');
+    }
+    expectThat(s.error == null, 'error: ${s.error}');
+    expectEq(s.data?.text, 'first', 'echo text');
   }),
 ];

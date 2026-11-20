@@ -21,8 +21,16 @@ cd "$SRC"
 "$AXIOM" build main.acore --out "$OUT/backend.axiom"
 "$AXIOM" server deployment "$OUT/backend.axiom" "$OUT/backend.server.json" --output "$OUT/deployment.json.new" --static-key >/dev/null
 mv -f "$OUT/deployment.json.new" "$OUT/deployment.json"
-python3 -I "$HERE/tool/jwt.py" patch "$OUT/deployment.json"
-export AXIOM_FIXTURE_JWT_SECRET="$(python3 -I "$HERE/tool/jwt.py" secret)"
-echo "fixture bearer token: $(python3 -I "$HERE/tool/jwt.py" token)"
+if [ "${FIXTURE_AUTH:-jwt}" = "session" ]; then
+  # Cookie sessions instead of bearer JWT: browsers send cookies on a WebSocket upgrade but cannot
+  # send Authorization. Use with FIXTURE_CORS=0 (cors() refuses upgrades) for web WebSocket checks.
+  python3 -I "$HERE/tool/session.py" patch "$OUT/deployment.json" "$OUT/sessions.json"
+  export AXIOM_FIXTURE_SESSION_REGISTRY="$OUT/sessions.json"
+  echo "fixture session cookie (page http://127.0.0.1:8802): axiom_fixture_session=$(python3 -I "$HERE/tool/session.py" token http://127.0.0.1:8802)"
+else
+  python3 -I "$HERE/tool/jwt.py" patch "$OUT/deployment.json"
+  export AXIOM_FIXTURE_JWT_SECRET="$(python3 -I "$HERE/tool/jwt.py" secret)"
+  echo "fixture bearer token: $(python3 -I "$HERE/tool/jwt.py" token)"
+fi
 echo "fixture api key:      fixture-api-key"
 exec "$AXIOM" run main.acore --deployment "$OUT/deployment.json" --host 127.0.0.1 --port "$PORT"
