@@ -1,6 +1,7 @@
 import 'auth.dart';
 import 'cache.dart';
 import 'checks_b.dart';
+import 'checks_c.dart';
 import 'checks_d.dart';
 import 'checks_f.dart';
 import 'ctx.dart';
@@ -17,6 +18,7 @@ final List<CheckDef> allChecks = [
   ...authChecks,
   ...streamChecks,
   ...runtimeChecks,
+  ...checksC,
   ...dChecks,
   ...checksF,
   ...checksB, // keep last: ends with b.shutdown_restart
