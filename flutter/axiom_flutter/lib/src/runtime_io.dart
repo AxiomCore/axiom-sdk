@@ -663,7 +663,11 @@ class AxiomRuntimeIo implements AxiomRuntime {
     }
     return _namespaceTokens[namespace] ??
         _globalToken ??
-        (explicit != null && explicit.length == 1 ? explicit.values.first : null);
+        // v1 callback (no method name): a namespace with exactly one
+        // explicit per-method token answers with it.
+        (methodName.isEmpty && explicit != null && explicit.length == 1
+            ? explicit.values.first
+            : null);
   }
 
   void _provideToken(int requestId, String token) {
@@ -699,6 +703,12 @@ class AxiomRuntimeIo implements AxiomRuntime {
     // A previous Dart generation (hot restart) may have left its callback
     // registered; drop it before the new event loop registers its own.
     _clearCallbackFfi?.call();
+    // Same for an auth provider callable of a dead generation.
+    if (_clearAuthProviderFfi != null) {
+      _clearAuthProviderFfi();
+      _authRegistered = false;
+      if (_authProvider != null) setAuthProvider(_authProvider);
+    }
 
     final ready = Completer<void>();
     final mainIsolatePort = ReceivePort();
