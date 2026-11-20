@@ -115,3 +115,17 @@ CORS allows `http://127.0.0.1:8792`, `http://localhost:8792`, `http://127.0.0.1:
   same way). `axiom explain --variant mobile` does list only the three endpoints. Product finding:
   managed backend variants cannot be built. Adding a variant line does not change the default
   build's bytes (same sha256), so it is safe to add to `main.acore` once the CLI accepts it.
+- **Observability.** `observability/build.sh` builds the main fixture plus
+  `observability(enabled: true, telemetryUrl: "http://127.0.0.1:8804/v1/traces", sampleRate: 1.0)`
+  into `integration_app/assets/axiom/observed.axiom` and signs it (`observed.signed.json`): the
+  runtime starts the OTLP exporter **only for a verified (signed) contract**, so unsigned
+  development contracts never export. `python3 observability/sink.py 8804` records OTLP posts and
+  answers `/echo/*`, so the app points the observed namespace's base URL at it and can read the
+  request headers back (`GET /records`). Checks: `g.observability_trace_export` (an OTLP POST arrives
+  after one call), `g.traceparent_forwarded` (the backend request carries a W3C `traceparent`; the
+  Dart SDK generates it per call on web and native).
+  **Turning sampling off:** `observability(enabled: false)` or `sampleRate: 0.0` in the contract
+  (rebuild with `SAMPLE_RATE=0.0 observability/build.sh`); the runtime uses a trace-id ratio
+  sampler, and the exporter is configured once per process (page) from the first verified contract
+  with an enabled block. Not verified here: that `sampleRate: 0.0` exports nothing (only 1.0 was run).
+  `traceparent` is sent regardless of sampling: it comes from the Dart SDK, not the exporter.

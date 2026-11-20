@@ -8,6 +8,7 @@ import 'package:axiom_flutter/axiom_flutter.dart';
 // ignore: depend_on_referenced_packages
 import 'package:crypto/crypto.dart' as crypto; // via axiom_flutter_auth
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:http/http.dart' as http;
 
 import '../axiom_generated/axiom_sdk.dart';
 import '../axiom_generated/models.dart';
@@ -160,6 +161,50 @@ Future<FixtureModule> _wsSessionApi(Ctx c) async {
   }
   gSetCookie(_sessionCookie, _sessionToken(gPageOrigin()!, gBrowserFamily()));
   return c.wsApi();
+}
+
+// ---- item 6: observability (fixtures/observability: sink.py + signed observed contract) ----
+const String otlpSinkUrl =
+    String.fromEnvironment('OTLP_SINK_URL', defaultValue: 'http://127.0.0.1:8804');
+const _obsNs = 'g_obs';
+bool _obsLoaded = false;
+
+Future<List<Map<String, dynamic>>> _sinkRecords() async {
+  final r = await http.get(Uri.parse('$otlpSinkUrl/records'));
+  return (jsonDecode(r.body) as List).cast<Map<String, dynamic>>();
+}
+
+/// Loads the signed observed contract (namespace g_obs, base URL = the sink,
+/// which answers /echo/*) and makes one echo call.
+Future<void> _observedCall(Ctx c) async {
+  try {
+    await http.delete(Uri.parse('$otlpSinkUrl/records'));
+  } catch (e) {
+    skip('OTLP sink not reachable at $otlpSinkUrl: run python3 fixtures/observability/sink.py ($e)');
+  }
+  if (!_obsLoaded) {
+    final ByteData raw;
+    final Map<String, dynamic> proof;
+    try {
+      raw = await rootBundle.load('assets/axiom/observed.axiom');
+      proof = jsonDecode(await rootBundle.loadString('assets/axiom/observed.signed.json'))
+          as Map<String, dynamic>;
+    } catch (e) {
+      skip('observed contract missing: run fixtures/observability/build.sh ($e)');
+    }
+    final r = c.sdk.runtime.tryLoadContract(
+      namespace: _obsNs,
+      baseUrl: otlpSinkUrl,
+      contractBytes: raw.buffer.asUint8List(),
+      signature: proof['signature'] as String,
+      publicKey: proof['publicKey'] as String,
+    );
+    // The runtime starts the exporter only for a verified contract.
+    expectThat(r.ok && r.status == 0, 'signed observed contract did not verify: $r');
+    _obsLoaded = true;
+  }
+  final res = await _get(c, _obsNs, _echoId, '/echo/obs', query: {'q': 'trace', 'limit': 1});
+  expectThat(res.$1, 'echo through the sink failed: ${res.$2}');
 }
 
 final List<CheckDef> checksG = [
@@ -348,5 +393,31 @@ final List<CheckDef> checksG = [
     }
     expectThat(s.error == null, 'error: ${s.error}');
     expectEq(s.data?.text, 'first', 'echo text');
+  }),
+  CheckDef('g.observability_trace_export', 'observability', (c) async {
+    await _observedCall(c);
+    // Batch exporter: allow a few export intervals.
+    final until = DateTime.now().add(const Duration(seconds: 25));
+    var exports = <Map<String, dynamic>>[];
+    while (DateTime.now().isBefore(until)) {
+      exports = (await _sinkRecords())
+          .where((r) => r['method'] == 'POST' && (r['path'] as String).startsWith('/v1/traces'))
+          .toList();
+      if (exports.isNotEmpty) break;
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    expectThat(exports.isNotEmpty, 'no OTLP POST /v1/traces reached the sink within 25 s');
+    expectThat((exports.first['bytes'] as int) > 0, 'empty OTLP export');
+  }),
+  CheckDef('g.traceparent_forwarded', 'observability', (c) async {
+    await _observedCall(c);
+    final calls = (await _sinkRecords())
+        .where((r) => (r['path'] as String).startsWith('/echo/obs'))
+        .toList();
+    expectThat(calls.isNotEmpty, 'the echo call did not reach the sink');
+    final tp = (calls.last['headers'] as Map)['traceparent'] as String?;
+    expectThat(tp != null, 'no traceparent header on the backend request: ${calls.last['headers']}');
+    expectThat(RegExp(r'^00-[0-9a-f]{32}-[0-9a-f]{16}-0[0-9a-f]$').hasMatch(tp!),
+        'malformed traceparent: $tp');
   }),
 ];

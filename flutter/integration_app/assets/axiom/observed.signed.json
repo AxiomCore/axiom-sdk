@@ -1,0 +1,8 @@
+{
+  "contract": "observed.axiom",
+  "sha256": "32b30cda8777f394a183833389366ed156462a7a646be669a883a70610d6df8f",
+  "signature": "Y4jSurSXImngv33M7GeDK+H42xSsmM049WuNXGPW+11vHT6jedb/2Zc1Xj8lNE5IMTOUyb4gTD4P0OMfpIPcDg==",
+  "publicKey": "G+setT2Qe+Y3HOK1k6ZdQ/dIFmG+r9aEVpRNpJi7SIs=",
+  "wrongPublicKey": "T1gfpV7TXbCwz2f+JPLMThx66PXehyTGp0mz66s/+9o=",
+  "note": "fixture-only key (flutter/fixtures/tool/fixture-signing-key.pem); signature = base64(Ed25519(SHA-256(bytes)))"
+}
