@@ -23,8 +23,8 @@ api/dio_client/   retrofit + json_serializable client (generated *.g.dart commit
 api/http_client/  package:http client
 app/              Flutter app (android, ios, macos, web): runner printing AXIOM_BENCH lines
 baseline_app/     Same screen as app/lib/size_main.dart without the Axiom dependency (size baseline)
-tool/             server.sh, run_web.sh, bench_tooling.py, bench_size.py, count_loc.py,
-                  collect_results.py, render_readme.py
+tool/             server.sh, run_web.sh, run_record.sh, vm_bench.dart, bench_tooling.py, bench_size.py,
+                  size_table.py, count_loc.py, collect_results.py, render_readme.py
 results/          raw and merged results
 ```
 
@@ -132,6 +132,45 @@ python3 tool/render_readme.py results/2026-11-20-linux-chrome-idle.json > result
 
 A full web run takes about 80 s on this box. To add a platform, merge its JSONL with
 `tool/collect_results.py --label <platform>` and pass every results file to `tool/render_readme.py`.
+
+## Scenarios added for 0.150.1 (unit bench2)
+
+Selected like the others (`BENCH=` / `?bench=`; `extra` = all five), code in `app/lib/bench_extra.dart`:
+
+| Name | What it measures |
+| --- | --- |
+| `parallel` | 20 calls started together, wall time until all returned typed data (getItem; listItems with n = 1000..1019 so no two calls are identical, identical in-flight Axiom queries would be shared) |
+| `offline` | repeat call after the data is cached, then time to first data while the server drops every data connection (`/_ctl/offline?on=1`). Axiom: contract `cacheFirst`; dio: `dio_cache_interceptor` `refreshForceCache` + `hitCacheOnNetworkFailure`; http: no cache (reported as `no_data`) |
+| `jank` | longest gap between ticks of a 1 ms periodic timer on the UI isolate while a 10 000-item list is fetched and decoded to typed models (10 calls; `idle` row = timer alone) |
+| `ttfi` | time to first item of the 10 000-item list for clients that can stream (`/items.ndjson`, http `StreamedResponse`, dio `ResponseType.stream`). Axiom: `not_available` (the generated client has no streaming list call) |
+| `clients` | per-call latency for every client incl. `dio_compute` (bytes, then `compute()` decode), `dio_http2` (`dio_http2_adapter`, native, h2 only), `cronet_http` (Android) and `cupertino_http` (iOS/macOS), selected at build time by conditional import (`app/lib/clients/`) |
+
+HTTP/2: `tool/server.sh 8851 8853` adds a TLS listener (ALPN h2 only, self-signed certificate in
+`api/server/certs/`, same routes and bodies). `BENCH_PROTO=h2` (web: `&proto=h2`) points every
+client at it; records carry `"proto": "h1" | "h2"`. Web: Chrome negotiates h2 for every client
+(`run_web.sh` adds `--ignore-certificate-errors` for the h2 pass only, `H2_BENCH=...`). Native:
+dart:io `HttpClient` has no HTTP/2, so the native h2 rows are Axiom, `dio_http2` and the platform
+stacks; the native Axiom runtime (rustls with built-in roots) does not accept the self-signed
+certificate, so its native h2 rows are `error` until the runtime can trust a custom CA. The Dart
+h2 listener itself is slower than the h1 one (TLS + package:http2), so compare clients within one
+protocol, not h1 against h2.
+
+Native Dart VM column (`app/test/vm_bench_test.dart`, driver `tool/vm_bench.dart`): the same
+BenchRunner in the `flutter_tester` process (Dart VM, JIT) with the host runtime library from
+`AXIOM_RUNTIME_LIB`. axiom_flutter imports the Flutter SDK, so plain `dart run` / `dart compile exe`
+cannot load it; this column is a Linux server CPU, not a phone.
+
+```bash
+tool/server.sh 8771 8773 &
+dart run tool/vm_bench.dart --lib /abs/libaxiom_runtime.so --base http://127.0.0.1:8771 --runs 3 --out results/raw-vm-<date>
+python3 tool/size_table.py --out results/size-table-<date>.json        # baseline / axiom / axiom_extensions
+AXIOM_RUNTIME_LIB=/abs/libaxiom_runtime.so DATE=<date> WEB_PORT_LOCK=/home/node/fp/web-port.lock \
+  LOCK_TRASH=<dir> tool/run_record.sh                                  # 3 web + 3 VM runs, merge, render
+python3 tool/render_readme.py --summary results/<date>-linux-chrome-idle.json --vm results/<date>-linux-vm.json \
+  --size-table results/size-table-<date>.json > results/README-SUMMARY.md
+python3 tool/render_readme.py --compare results/2026-11-20-linux-chrome-idle.json results/<date>-linux-chrome-idle.json
+python3 tool/render_readme.py --history results/history.jsonl --release 0.150.1 results/<date>-*.json
+```
 
 ## Method
 
