@@ -14,12 +14,56 @@ abstract final class AxiomGeneratedCodec {
   static Object? asJson(Object? v) => v;
   static void asVoid(Object? v) {}
 
+  /// Integers (Int32 and Int64). Native and dart2wasm hold every Int64
+  /// exactly, from a JSON number or a JSON string. dart2js holds integers
+  /// exactly only up to 2^53-1: a larger JSON number was already rounded by
+  /// the browser's JSON parser, and a larger JSON string cannot be held
+  /// exactly. Such a value is never returned silently: it is counted in
+  /// [unsafeIntegerCount], passed to [onUnsafeInteger], and with
+  /// [strictIntegers] it throws a [FormatException] instead.
   static int asInt(Object? v) => switch (v) {
-    int() => v,
+    int() => _jsNumbers && v.abs() > _maxSafe ? _unsafe(v, v) : v,
     num() => v.toInt(),
-    String() => int.parse(v),
+    String() => _parseInt(v),
     _ => throw FormatException('expected an integer, got $v'),
   };
+
+  /// True on dart2js, where int and double share JavaScript numbers.
+  static final bool _jsNumbers = identical(0, 0.0);
+  static const int _maxSafe = 9007199254740991; // 2^53 - 1
+
+  /// dart2js only: called with the wire value and the decoded (possibly
+  /// rounded) int whenever an integer outside +/-(2^53-1) is decoded.
+  static void Function(Object? wire, int decoded)? onUnsafeInteger;
+
+  /// dart2js only: number of integers decoded outside +/-(2^53-1).
+  static int unsafeIntegerCount = 0;
+
+  /// dart2js only: throw instead of returning a possibly rounded integer.
+  static bool strictIntegers = false;
+
+  static int _parseInt(String s) {
+    final v = int.parse(s);
+    if (_jsNumbers && v.abs() > _maxSafe) {
+      final t = s.trim();
+      final canonical = t.startsWith('+') ? t.substring(1) : t;
+      // Exactly representable (e.g. 2^60) only when it prints back the same.
+      if (BigInt.from(v) != BigInt.parse(canonical)) return _unsafe(s, v);
+    }
+    return v;
+  }
+
+  static int _unsafe(Object? wire, int decoded) {
+    unsafeIntegerCount++;
+    if (strictIntegers) {
+      throw FormatException(
+        'integer $wire is outside +/-(2^53-1) and may be rounded on dart2js; '
+        'send it as a JSON string or compile with dart2wasm',
+      );
+    }
+    onUnsafeInteger?.call(wire, decoded);
+    return decoded;
+  }
 
   static double asDouble(Object? v) => switch (v) {
     num() => v.toDouble(),
@@ -47,9 +91,11 @@ abstract final class AxiomGeneratedCodec {
   static Map<String, dynamic> asObject(Object? v) =>
       v is Map<String, dynamic> ? v : (v as Map).cast<String, dynamic>();
 
-  static List<T> asList<T>(Object? v, T Function(Object?) item) => [
-    for (final e in v as List) item(e),
-  ];
+  /// Built with its final length known (no regrowth while decoding).
+  static List<T> asList<T>(Object? v, T Function(Object?) item) {
+    final l = v as List;
+    return List<T>.generate(l.length, (i) => item(l[i]));
+  }
 
   static Map<String, T> asMap<T>(Object? v, T Function(Object?) value) => {
     for (final e in (v as Map).entries) e.key as String: value(e.value),
@@ -138,7 +184,7 @@ class Greeting {
 
   factory Greeting.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
-    return Greeting(message: AxiomGeneratedCodec.asString(map['message']));
+    return Greeting(message: (map['message'] as String));
   }
 
   final String message;
@@ -164,7 +210,7 @@ class GreetingIn {
 
   factory GreetingIn.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
-    return GreetingIn(name: AxiomGeneratedCodec.asString(map['name']));
+    return GreetingIn(name: (map['name'] as String));
   }
 
   final String name;
@@ -190,9 +236,9 @@ class Todo {
   factory Todo.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
     return Todo(
-      done: AxiomGeneratedCodec.asBool(map['done']),
-      id: AxiomGeneratedCodec.asString(map['id']),
-      title: AxiomGeneratedCodec.asString(map['title']),
+      done: (map['done'] as bool),
+      id: (map['id'] as String),
+      title: (map['title'] as String),
     );
   }
 
@@ -232,7 +278,7 @@ class TodoIn {
 
   factory TodoIn.fromJson(Object? json) {
     final map = AxiomGeneratedCodec.asObject(json);
-    return TodoIn(title: AxiomGeneratedCodec.asString(map['title']));
+    return TodoIn(title: (map['title'] as String));
   }
 
   final String title;
