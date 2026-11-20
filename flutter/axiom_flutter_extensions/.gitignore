@@ -1,0 +1,7 @@
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+/pubspec.lock
+build/
+example/pubspec.lock
+example/.dart_tool/
