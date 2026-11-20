@@ -12,9 +12,9 @@
     "sha256": null
   },
   "wasm": {
-    "runtime_commit": "822224b1886e6aeb21cf9eeb9627ca08131cc668",
-    "runtime_branch": "axiom-runtime flutter/c (flutter/parity + f4 + r merged, wasm wrappers for the 0.157 additive exports)",
-    "axiom_runtime_js_sha256": "727a02425559a97cb0ba86ab04e6cbfa678dca0f14e51e24caeb3c951fa4d26c",
-    "axiom_runtime_bg_wasm_sha256": "6f6916d917c853cceb548c1f72ec777c01680d019b9e75153c2d9784179b13d3"
+    "runtime_commit": "1265a1c",
+    "runtime_branch": "axiom-runtime flutter/h (flutter/parity 4578d68 + host notify + WS send fixes)",
+    "axiom_runtime_js_sha256": "95f381784da46c1ca656172159113512f8cd87e8ab9a175b258b65c3f3890077",
+    "axiom_runtime_bg_wasm_sha256": "4e9e5e5579b6c4a8e03415eb330dd652db65f114aa5f1dea3ba7c36d368eab83"
   }
 }

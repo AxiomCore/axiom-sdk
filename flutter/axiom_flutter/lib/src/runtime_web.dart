@@ -5,8 +5,11 @@
 // (`lib/assets/wasm/axiom_runtime.js` + `axiom_runtime_bg.wasm`, built by
 // `axiom-runtime/scripts/build-wasm-flutter.sh`). Dart calls the raw wasm
 // exports (`axiom_wasm_*`, flattened ptr/len arguments) and receives events
-// through the imported global `axiom_web_callback`, drained by a 16 ms timer
-// calling `axiom_process_responses`.
+// through the imported global `axiom_web_callback` when the host calls
+// `axiom_process_responses`. Runtimes that export
+// `axiom_wasm_host_notify_version` call the global `axiom_web_notify()` when a
+// response is queued and the host drains in a microtask (no polling floor);
+// a slow timer stays as a safety net. Older runtimes are polled every 16 ms.
 //
 // Loading is CSP friendly: the glue is added as `<script src>` (no inline
 // script, no eval) and the wasm is compiled with WebAssembly.instantiate,
@@ -464,10 +467,15 @@ class AxiomRuntimeWeb implements AxiomRuntime {
 
   void _start(String? dbPath) {
     _setupWebCallback();
+    _setupNotify();
     _pump?.cancel();
+    // Event-driven runtimes (axiom_wasm_host_notify_version) call
+    // `axiom_web_notify` when a response is queued, so the timer is only a
+    // safety net. Older bundled runtimes only queue: poll at 16 ms.
+    final eventDriven = _hasExport('axiom_wasm_host_notify_version');
     _pump = Timer.periodic(
-      const Duration(milliseconds: 16),
-      (_) => _wasmOrNull?.axiomProcessResponses(),
+      Duration(milliseconds: eventDriven ? 250 : 16),
+      (_) => _drain(),
     );
     if (!_started) {
       final db = _alloc(dbPath ?? '');
@@ -641,6 +649,26 @@ class AxiomRuntimeWeb implements AxiomRuntime {
                 data,
                 err,
               );
+            })
+            .toJS;
+  }
+
+  bool _drainScheduled = false;
+
+  void _drain() {
+    _drainScheduled = false;
+    _wasmOrNull?.axiomProcessResponses();
+  }
+
+  /// The runtime calls `axiom_web_notify()` (from inside wasm, at most once
+  /// per drain) when it queued a response. Draining re-entrantly there is not
+  /// allowed, so the drain runs in a microtask: no timer floor.
+  void _setupNotify() {
+    globalContext['axiom_web_notify'] =
+        (() {
+              if (_drainScheduled) return;
+              _drainScheduled = true;
+              scheduleMicrotask(_drain);
             })
             .toJS;
   }
