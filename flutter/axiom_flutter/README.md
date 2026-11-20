@@ -506,6 +506,7 @@ Details: [App size](https://docs.axiomcore.dev/sdks/flutter-app-size),
 
 - Documentation: <https://docs.axiomcore.dev>
 - Example app: [`example/`](example/)
+- More examples: [`flutter-quickstart`](https://github.com/AxiomCore/examples/tree/main/flutter-quickstart), [`flutter-auth`](https://github.com/AxiomCore/examples/tree/main/flutter-auth), [`flutter-offline-first`](https://github.com/AxiomCore/examples/tree/main/flutter-offline-first), [`flutter-minimal`](https://github.com/AxiomCore/examples/tree/main/flutter-minimal) (release sizes), [`stream/example`](https://github.com/AxiomCore/examples/tree/main/stream/example)
 - Generator: [`axiom_flutter_generator`](https://pub.dev/packages/axiom_flutter_generator)
 - Auth: [`axiom_flutter_auth`](https://pub.dev/packages/axiom_flutter_auth)
 - Full API reference with runtime notes: [`API.md`](API.md)

@@ -118,7 +118,9 @@ Platform setup (Android `INTERNET` permission, macOS network entitlement,
 deployment targets, CORS on web) is in the
 [`axiom_flutter` README](flutter/axiom_flutter/README.md#platform-setup).
 A complete app with a mutation is in
-[`flutter/axiom_flutter/example`](flutter/axiom_flutter/example).
+[`flutter/axiom_flutter/example`](flutter/axiom_flutter/example). More apps
+(quickstart, auth, offline-first, minimal with release sizes, streams) are in
+the [examples repository](https://github.com/AxiomCore/examples#flutter-examples).
 
 ### Features
 

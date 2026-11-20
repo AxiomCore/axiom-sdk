@@ -88,7 +88,10 @@ axiom run main.acore --deployment deployment.json --port 8080
 ```
 
 In a second terminal, `curl -s http://127.0.0.1:8080/talks` prints the two
-talks as JSON.
+talks as JSON. `axiom server deployment` never overwrites an existing
+`deployment.json` (`File exists (os error 17)`): when you repeat this step
+after a contract change, move the old file aside first
+(`mv deployment.json deployment.old.json`).
 
 ## 3. Create the app and add the packages
 
@@ -96,6 +99,7 @@ talks as JSON.
 cd ..   # talks/
 flutter create --platforms android,ios,macos,web talks_app
 cd talks_app
+rm test/widget_test.dart   # refers to the counter app's MyApp, which step 6 replaces
 flutter pub add axiom_flutter:^0.150.0 dev:axiom_flutter_generator:^0.150.0
 ```
 
@@ -115,6 +119,15 @@ to `assets/axiom/talks.axiom`, lists it in `pubspec.yaml`, runs
 `models.dart`. Pull again after every contract change. The only `axiom pull`
 options in 0.156.0 are `--contract`, `--contract-config`, `--framework`,
 `--name` and `--out`.
+
+Two CLI 0.156.0 details:
+
+- The pull records the contract in the app's `AxiomDeps.toml` as an
+  **absolute** path (`source = "/home/you/talks/talks-api/backend.axiom"`).
+  Before committing, change it to `source = "../talks-api/backend.axiom"`; every
+  pull writes the absolute path again.
+- Always pass the contract path. `axiom pull` without a source resolves the
+  contract through Axiom Cloud and asks you to sign in.
 
 ## 5. Platform setup
 
@@ -264,6 +277,15 @@ names `axiom_flutter_extensions`. On iOS and macOS nothing changes: they keep
 the full published runtime 0.148.6 until the next Apple runtime release. On
 the web extensions are not available with either package.
 <!-- VERIFY: lean default, add-on name/version, error text and "only one library per APK" are confirmed by /home/node/fp/pack/REPORT.md (unit pack, not DONE at time of writing) -->
+
+Finished, runnable versions of these steps are in the examples repository:
+[`flutter-quickstart`](https://github.com/AxiomCore/examples/tree/main/flutter-quickstart) (steps 1 to 6, with
+`run-backend.sh` and `tool/regen.sh` for the two CLI details above),
+[`flutter-auth`](https://github.com/AxiomCore/examples/tree/main/flutter-auth) (step 7 with `axiom_flutter_auth`),
+[`flutter-offline-first`](https://github.com/AxiomCore/examples/tree/main/flutter-offline-first) (step 8),
+[`flutter-minimal`](https://github.com/AxiomCore/examples/tree/main/flutter-minimal) (release sizes) and
+[`stream/example`](https://github.com/AxiomCore/examples/tree/main/stream/example) (SSE, chunked and WebSocket).
+<!-- VERIFY: example links resolve once examples perf/examples2 (5d20793) is merged to main -->
 
 Size and speed details: [`wasm-size.md`](wasm-size.md),
 [App size](https://docs.axiomcore.dev/sdks/flutter-app-size) and
