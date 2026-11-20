@@ -759,7 +759,8 @@ class AxiomRuntimeIo implements AxiomRuntime {
   }
 
   /// The runtime only creates its response cache and auth store when given a
-  /// database path, so default to `<app support>/axiom` (a temp directory
+  /// database path, so default to `<app support>/axiom` on every platform
+  /// (unit a's Android default, the app's private files directory; a temp directory
   /// when path_provider is unavailable, e.g. host tests).
   /// `AXIOM_DB_PATH` (environment, only when set) overrides the default.
   static Future<String> _resolveDbPath(String? dbPath) async {
@@ -2006,10 +2007,20 @@ class AxiomRuntimeIo implements AxiomRuntime {
     print(pen('${dir == 'OUT' ? '➔ CALL' : '← RESP'} [#$id] $details'));
   }
 
-  static DynamicLibrary _openPlatformLibrary() =>
-      Platform.isIOS || Platform.isMacOS
-      ? DynamicLibrary.process()
-      : DynamicLibrary.open('libaxiom_runtime.so');
+  static DynamicLibrary _openPlatformLibrary() {
+    if (Platform.isIOS || Platform.isMacOS) return DynamicLibrary.process();
+    try {
+      // Android: the plugin ships it in jniLibs/<abi>/, so the loader finds it
+      // by name in the app's native library directory.
+      return DynamicLibrary.open('libaxiom_runtime.so');
+    } on ArgumentError catch (e) {
+      throw StateError(
+        'axiom_flutter: could not load libaxiom_runtime.so on '
+        '${Platform.operatingSystem}. On Android the library is bundled for '
+        'arm64-v8a, armeabi-v7a and x86_64 only. Cause: $e',
+      );
+    }
+  }
 
   @override
   Future<void> startup({
