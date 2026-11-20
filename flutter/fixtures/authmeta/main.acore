@@ -1,0 +1,50 @@
+// Client auth metadata fixture. Same paths, guards and handlers as ../backend/main.acore, plus
+// endpoint-level `auth(EndpointAuth(...))`, which the CLI publishes into the public contract
+// (`endpoints[].auth`, `ir.endpoints.<name>.auth`). The runtime then injects tokens set with
+// setAuthToken(methodName: <AuthMethodDef.name>) and asks the auth provider for missing ones.
+// Clients load it as a second namespace against the running main fixture (same routes); it can
+// also be served alone with ../backend/run.sh semantics (see build.sh).
+project(id: "dev.axiomcore.fixture.authmeta", version: "1.0.0")
+variant default(include: ["*"])
+
+model Who { method: String ok: Bool }
+model KeyIn { key: String }
+model Problem { message: String }
+
+failure unauthorized(payload: Models.Problem, status: 401, category: FailureCategory.unauthenticated)
+guard signedIn(kind: GuardKind.authenticated)
+
+action whoBearer(kind: ActionKind.query, output: Models.Who) {
+  require(guard: Guards.signedIn)
+  managed { return {method: "bearer", ok: true} }
+}
+endpoint authBearer(method: GET, path: "/auth/bearer") {
+  require(guard: Guards.signedIn)
+  auth(EndpointAuth(required: true, methods: [AuthMethodDef(type: "bearer", name: "Authorization", scheme: "Bearer", location: "header")]))
+  handle(action: Actions.whoBearer)
+  response(type: Models.Who)
+}
+
+action checkKey(kind: ActionKind.query, input: Models.KeyIn, output: Models.Who) {
+  errors(Failures.unauthorized)
+  managed {
+    guard Input.key == "fixture-api-key" else fail Failures.unauthorized({message: "bad api key"})
+    return {method: "apiKey", ok: true}
+  }
+}
+endpoint authApiKeyHeader(method: GET, path: "/auth/api-key-header") {
+  request { header("x-api-key", type: String) }
+  auth(EndpointAuth(required: true, methods: [AuthMethodDef(type: "api_key", name: "x-api-key", location: "header")]))
+  handle(action: Actions.checkKey, input: {key: Input.header["x-api-key"]})
+  response(type: Models.Who)
+  errors(Failures.unauthorized)
+  exposeFailure(failure: Failures.unauthorized, fields: [.message], audiences: ["web"])
+}
+endpoint authApiKeyQuery(method: GET, path: "/auth/api-key-query") {
+  request { query("api_key", type: String) }
+  auth(EndpointAuth(required: true, methods: [AuthMethodDef(type: "api_key", name: "api_key", location: "query")]))
+  handle(action: Actions.checkKey, input: {key: Input.query.api_key})
+  response(type: Models.Who)
+  errors(Failures.unauthorized)
+  exposeFailure(failure: Failures.unauthorized, fields: [.message], audiences: ["web"])
+}

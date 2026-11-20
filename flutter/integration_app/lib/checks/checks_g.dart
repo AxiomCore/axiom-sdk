@@ -76,6 +76,69 @@ Future<void> _echoThrough(Ctx c, String ns) async {
   expectEq(body['path'], 'signed', 'echo path');
 }
 
+// ---- item 3: auth metadata (fixtures/authmeta, loaded as a second namespace) ----
+const _amBearerId = 3349796008;
+const _amKeyHeaderId = 2562402651;
+const _amKeyQueryId = 2366628782;
+const _amNs = 'g_authmeta';
+bool _amLoaded = false;
+
+Future<void> _authmeta(Ctx c) async {
+  if (_amLoaded) return;
+  final ByteData raw;
+  try {
+    raw = await rootBundle.load('assets/axiom/authmeta.axiom');
+  } catch (e) {
+    skip('assets/axiom/authmeta.axiom missing: run fixtures/authmeta/build.sh ($e)');
+  }
+  final r = _load(c, _amNs, raw.buffer.asUint8List());
+  expectThat(r.ok, 'loading authmeta failed: $r');
+  _amLoaded = true;
+}
+
+/// Earlier checks (auth_f binding, c.namespace_global_token) may leave a
+/// global token, which also applies to this namespace; start from none.
+void _noTokens(Ctx c) {
+  final rt = c.sdk.runtime;
+  try {
+    rt.clearGlobalAuthToken();
+  } on UnimplementedError {
+    // Runtime without global tokens: nothing to clear.
+  }
+  try {
+    rt.clearNamespaceAuthToken(namespace: _amNs);
+  } on UnimplementedError {
+    // ignore
+  }
+  for (final m in const ['Authorization', 'x-api-key', 'api_key']) {
+    rt.clearAuthToken(namespace: _amNs, methodName: m);
+  }
+}
+
+/// Raw GET through [ns]; returns (http-ish outcome, decoded body or error).
+Future<(bool ok, Object? value)> _get(Ctx c, String ns, int id, String path,
+    {Map<String, dynamic>? query, Map<String, String>? headers}) async {
+  final r = c.sdk.runtime.callStream(
+    namespace: ns,
+    endpointId: id,
+    method: 'GET',
+    path: path,
+    queryParams: query,
+    headers: headers,
+    requestBytes: Uint8List(0),
+  );
+  final states = <AxiomState<Uint8List>>[];
+  final done = Completer<void>();
+  r.stream.listen(states.add, onDone: done.complete, onError: (Object e) {
+    if (!done.isCompleted) done.complete();
+  });
+  await done.future.timeout(const Duration(seconds: 10),
+      onTimeout: () => throw CheckFailure('$path did not complete: $states'));
+  final d = states.where((s) => s.hasData).toList();
+  if (d.isNotEmpty) return (true, jsonDecode(utf8.decode(d.last.data!)));
+  return (false, states.map((s) => s.error).whereType<AxiomError>().firstOrNull);
+}
+
 final List<CheckDef> checksG = [
   // ---- item 2: signed and hash-locked contracts ----
   CheckDef('g.signed_load_trust_signed', 'contract-trust', (c) async {
@@ -142,4 +205,80 @@ final List<CheckDef> checksG = [
   }),
   // initialize() uses the same tryLoadContract path (runtime_web.dart
   // _initialize) and is idempotent, so it is not re-run here.
+  CheckDef('g.auth_metadata_in_contract', 'auth-metadata', (c) async {
+    final raw = await rootBundle.loadString('assets/axiom/authmeta.axiom').catchError(
+        (Object e) => skip('assets/axiom/authmeta.axiom missing: run fixtures/authmeta/build.sh'));
+    final eps = (jsonDecode(raw)['endpoints'] as List).cast<Map<String, dynamic>>();
+    final bearer = eps.firstWhere((e) => e['name'] == 'authBearer');
+    final auth = bearer['auth'] as Map<String, dynamic>?;
+    expectThat(auth != null, 'authBearer has "auth": null');
+    final m = (auth!['methods'] as List).first as Map<String, dynamic>;
+    expectEq(m['type'], 'bearer', 'method type');
+    expectEq(m['name'], 'Authorization', 'method name');
+    expectEq(bearer['id'], _amBearerId, 'endpoint id (update checks_g.dart after build.sh)');
+  }),
+  CheckDef('g.auth_set_token_injects_bearer', 'auth-metadata', (c) async {
+    await _authmeta(c);
+    _noTokens(c);
+    final rt = c.sdk.runtime;
+    rt.clearAuthToken(namespace: _amNs, methodName: 'Authorization');
+    final before = await _get(c, _amNs, _amBearerId, '/auth/bearer');
+    expectThat(!before.$1, 'authBearer answered without a token: ${before.$2}');
+    rt.setAuthToken(namespace: _amNs, methodName: 'Authorization', token: fixtureBearerToken);
+    try {
+      final after = await _get(c, _amNs, _amBearerId, '/auth/bearer');
+      expectThat(after.$1, 'authBearer with setAuthToken: ${after.$2}');
+      expectEq((after.$2 as Map)['method'], 'bearer', 'who.method');
+    } finally {
+      rt.clearAuthToken(namespace: _amNs, methodName: 'Authorization');
+    }
+    final cleared = await _get(c, _amNs, _amBearerId, '/auth/bearer');
+    expectThat(!cleared.$1, 'authBearer still answered after clearAuthToken');
+  }),
+  CheckDef('g.auth_set_token_injects_api_key_header', 'auth-metadata', (c) async {
+    await _authmeta(c);
+    _noTokens(c);
+    final rt = c.sdk.runtime;
+    rt.setAuthToken(namespace: _amNs, methodName: 'x-api-key', token: fixtureApiKey);
+    try {
+      // No x-api-key header passed by the caller: the runtime adds it.
+      final r = await _get(c, _amNs, _amKeyHeaderId, '/auth/api-key-header');
+      expectThat(r.$1, 'api key header not injected: ${r.$2}');
+      expectEq((r.$2 as Map)['method'], 'apiKey', 'who.method');
+    } finally {
+      rt.clearAuthToken(namespace: _amNs, methodName: 'x-api-key');
+    }
+  }),
+  CheckDef('g.auth_set_token_injects_api_key_query', 'auth-metadata', (c) async {
+    await _authmeta(c);
+    _noTokens(c);
+    final rt = c.sdk.runtime;
+    rt.setAuthToken(namespace: _amNs, methodName: 'api_key', token: fixtureApiKey);
+    try {
+      final r = await _get(c, _amNs, _amKeyQueryId, '/auth/api-key-query');
+      expectThat(r.$1, 'api key query not injected: ${r.$2}');
+    } finally {
+      rt.clearAuthToken(namespace: _amNs, methodName: 'api_key');
+    }
+  }),
+  CheckDef('g.auth_provider_injects_token', 'auth-metadata', (c) async {
+    await _authmeta(c);
+    _noTokens(c);
+    final rt = c.sdk.runtime;
+    rt.clearAuthToken(namespace: _amNs, methodName: 'Authorization');
+    final asked = <String>[];
+    rt.setAuthProvider((ns, method) async {
+      asked.add('$ns/$method');
+      return ns == _amNs ? fixtureBearerToken : null;
+    });
+    try {
+      final r = await _get(c, _amNs, _amBearerId, '/auth/bearer');
+      expectThat(asked.isNotEmpty, 'auth provider was never asked');
+      expectThat(asked.first.startsWith('$_amNs/'), 'provider asked for ${asked.first}');
+      expectThat(r.$1, 'authBearer with provider token: ${r.$2} (asked: $asked)');
+    } finally {
+      rt.setAuthProvider(null);
+      rt.clearAuthToken(namespace: _amNs, methodName: 'Authorization');
+    }
+  }),
 ];
