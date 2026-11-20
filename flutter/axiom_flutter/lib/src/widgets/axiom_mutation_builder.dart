@@ -61,6 +61,7 @@ class _AxiomMutationBuilderState<T, Args>
               data: newState.data,
               error: newState.error,
               source: newState.source,
+              validation: newState.validation,
               isFetching: false,
               isMutating: false, // Execution finished!
             );
