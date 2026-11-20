@@ -46,7 +46,11 @@ void main() {
         (e) => e.message ?? '',
         'message',
         lean
-            ? contains('Executable extensions need the axiom_flutter_extensions package')
+            // Off Android (this host test) the message must not point at the
+            // Android-only add-on (review M3).
+            ? (Platform.isAndroid
+                ? contains('Executable extensions need the axiom_flutter_extensions package')
+                : contains('Executable extensions are not compiled into this runtime library'))
             : isNot(contains('axiom_flutter_extensions')),
       );
 

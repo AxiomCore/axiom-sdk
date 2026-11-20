@@ -145,6 +145,10 @@ extension WasmExportsExt on WasmExports {
   @JS('axiom_wasm_cache_clear_namespace')
   external int axiomClearCache(int nPtr, int nLen);
 
+  // Optional export (runtime 0.150.1): response validation policy.
+  @JS('axiom_wasm_set_validation_policy')
+  external int axiomSetValidationPolicy(int nPtr, int nLen, int pPtr, int pLen);
+
   @JS('axiom_wasm_call_with_options')
   external int axiomCallWithOptions(
     JSNumber reqId,
@@ -553,8 +557,27 @@ class AxiomRuntimeWeb implements AxiomRuntime {
       _wasm.axiomInitialize(db.ptr, db.len);
       _free(db);
       _started = true;
+      _applyValidationPolicyDefine();
     }
     if (_authProvider != null) _applyAuthProvider();
+  }
+
+  /// `--dart-define=AXIOM_VALIDATION_POLICY=<json>` (e.g. `{"mode":"full"}`)
+  /// sets the runtime's global response validation policy. Ignored by
+  /// runtimes without `axiom_wasm_set_validation_policy`.
+  void _applyValidationPolicyDefine() {
+    const policy = String.fromEnvironment('AXIOM_VALIDATION_POLICY');
+    if (policy.isEmpty || !_hasExport('axiom_wasm_set_validation_policy')) {
+      return;
+    }
+    final n = _alloc('');
+    final p = _alloc(policy);
+    try {
+      _wasm.axiomSetValidationPolicy(n.ptr, n.len, p.ptr, p.len);
+    } finally {
+      _free(n);
+      _free(p);
+    }
   }
 
   @override

@@ -8,7 +8,7 @@ Behaviour changes
   x86_64) and the web the package bundles the lean runtime, built without
   executable extensions and without the telemetry (OTLP span) exporter.
   Queries, mutations, streams, auth, cache and cancellation are unchanged.
-  On a lean runtime `loadExtension`/`invokeExtension` throw
+  On a lean Android runtime `loadExtension`/`invokeExtension` throw
   `AxiomExtensionException` with "Executable extensions need the
   axiom_flutter_extensions package"; `extensionLifecycle` and
   `extensionAudit` still succeed. Old behaviour (Android): add

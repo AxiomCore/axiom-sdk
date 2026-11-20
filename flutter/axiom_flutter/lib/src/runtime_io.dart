@@ -550,6 +550,8 @@ class AxiomRuntimeIo implements AxiomRuntime {
     'axiom_clear_namespace_auth_tokens',
     'axiom_register_auth_provider_v2',
     'axiom_set_namespace_auth_token',
+    'axiom_set_validation_policy',
+    'axiom_call_timings',
   };
 
   /// Host tests only: `AXIOM_RUNTIME_ABI=published` (only when set) hides the
@@ -969,6 +971,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
     final status = using(
       (Arena arena) => _initFfi(_toAxiomString(resolvedDb, arena)),
     );
+    if (status == FfiError.success) _applyValidationPolicyDefine();
     if (status != FfiError.success) {
       _eventControl?.send('shutdown');
       try {
@@ -2239,6 +2242,25 @@ class AxiomRuntimeIo implements AxiomRuntime {
   final Set<String> _purgedNs = {};
   final Set<String> _refreshedAfterPurge = {};
 
+  /// `--dart-define=AXIOM_VALIDATION_POLICY=<json>` (e.g. `{"mode":"full"}`)
+  /// sets the runtime's global response validation policy. Runtimes without
+  /// `axiom_set_validation_policy` (published Apple 0.148.6) always validate
+  /// fully, so the define is ignored there.
+  void _applyValidationPolicyDefine() {
+    const policy = String.fromEnvironment('AXIOM_VALIDATION_POLICY');
+    if (policy.isEmpty || !_has('axiom_set_validation_policy')) return;
+    final setPolicy = _lib
+        .lookupFunction<_AxiomStr2StatusNative, _AxiomStr2Status>(
+          'axiom_set_validation_policy',
+        );
+    using(
+      (Arena arena) => setPolicy(
+        _toAxiomString('', arena),
+        _toAxiomString(policy, arena),
+      ),
+    );
+  }
+
   bool _clearNativeCache(String? namespace) {
     final native = _cacheClearNamespaceFfi;
     if (native == null) {
@@ -2323,8 +2345,14 @@ class AxiomRuntimeIo implements AxiomRuntime {
   static const String extensionsNeedAddonMessage =
       'Executable extensions need the axiom_flutter_extensions package: the '
       'runtime bundled with axiom_flutter is the lean build without '
-      'executable extensions. Add axiom_flutter_extensions to pubspec.yaml '
-      '(Android; iOS/macOS already ship the full runtime).';
+      'executable extensions. Add axiom_flutter_extensions to pubspec.yaml.';
+
+  /// Same condition off Android (only reachable with a lean host library,
+  /// e.g. `AXIOM_RUNTIME_LIB` in tests): iOS and macOS bundle the full
+  /// runtime, and the add-on only carries Android libraries.
+  static const String extensionsNotCompiledMessage =
+      'Executable extensions are not compiled into this runtime library '
+      '(lean build); load a full runtime build.';
 
   bool? _extensionsCompiled;
 
@@ -2363,7 +2391,11 @@ class AxiomRuntimeIo implements AxiomRuntime {
     throw AxiomExtensionException(
       operation,
       status,
-      notCompiled ? extensionsNeedAddonMessage : message,
+      notCompiled
+          ? (Platform.isAndroid
+                ? extensionsNeedAddonMessage
+                : extensionsNotCompiledMessage)
+          : message,
     );
   }
 
