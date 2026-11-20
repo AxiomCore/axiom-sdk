@@ -100,6 +100,9 @@ class SdkWriter {
     for (final c in contracts) {
       _writeModule(body, c);
     }
+    for (final c in contracts) {
+      _writeRpcs(body, c);
+    }
     _writeHelpers(body);
 
     final b = StringBuffer();
@@ -110,7 +113,7 @@ class SdkWriter {
       if (RegExp(r'jsonEncode|jsonDecode|utf8\.').hasMatch(text))
         'dart:convert',
       if (_usesIdempotency) 'dart:math',
-      if (text.contains('Uint8List')) 'dart:typed_data',
+      if (RegExp(r'\bUint8List\b').hasMatch(text)) 'dart:typed_data',
     ];
     for (final i in dartImports) {
       b.writeln("import '$i';");
@@ -602,6 +605,242 @@ class SdkWriter {
   }
 
   // ---------------------------------------------------------------------------
+
+  final Set<String> _rpcExtensions = {};
+
+  /// Model RPCs (`models.<Model>.rpcs.<name>`): an extension method on the
+  /// model that calls the mapped endpoint of [c] with a request built by the
+  /// resolver (`$args.<argument>`, `$this.<field>`, literals), e.g.
+  /// `person.getContacts(sdk.rpc, limit: 10)`.
+  void _writeRpcs(StringBuffer b, ContractInput c) {
+    final rawModels = c.ir['models'];
+    final entries = <String, Map<String, dynamic>>{};
+    if (rawModels is Map) {
+      rawModels.forEach((k, v) {
+        if (v is Map) entries['$k'] = v.cast<String, dynamic>();
+      });
+    } else if (rawModels is List) {
+      for (final v in rawModels) {
+        if (v is Map && v['name'] is String)
+          entries[v['name'] as String] = v.cast<String, dynamic>();
+      }
+    }
+    final endpoints = {for (final e in _endpoints(c)) e.name: e};
+    for (final rawName in entries.keys.toList()..sort()) {
+      final rpcs = entries[rawName]!['rpcs'];
+      if (rpcs is! Map || rpcs.isEmpty) continue;
+      final model = schema.models[GeneratorUtils.pascalCase(rawName)];
+      if (model == null) continue;
+      final ext = GeneratorUtils.unique('${model.dartName}Rpc', _rpcExtensions);
+      // Instance members shadow extension methods: never reuse them.
+      final members = <String>{
+        for (final f in model.fields) f.dart,
+        'toJson',
+        'copyWith',
+        'fromJson',
+        ...GeneratorUtils.objectMembers,
+      };
+      final methods = <String>[];
+      for (final rpcName in (rpcs.keys.map((k) => '$k').toList()..sort())) {
+        final rpc = rpcs[rpcName];
+        if (rpc is! Map) continue;
+        final e = endpoints[rpc['endpoint']];
+        if (e == null) {
+          throw GeneratorException(
+            'Model RPC ${model.raw}.$rpcName maps to endpoint "${rpc['endpoint']}", '
+            'which contract "${c.namespace}" does not declare.',
+          );
+        }
+        methods.add(
+          _rpcMethod(
+            c,
+            model,
+            rpcName,
+            rpc.cast<String, dynamic>(),
+            e,
+            members,
+          ),
+        );
+      }
+      if (methods.isEmpty) continue;
+      b.writeln(
+        '/// RPCs of [models.${model.dartName}] (`${c.namespace}` contract).',
+      );
+      b.writeln('extension $ext on models.${model.dartName} {');
+      b.write(methods.join('\n'));
+      b.writeln('}');
+      b.writeln();
+    }
+  }
+
+  String _rpcMethod(
+    ContractInput c,
+    ModelSpec model,
+    String rpcName,
+    Map<String, dynamic> rpc,
+    _Endpoint e,
+    Set<String> members,
+  ) {
+    final b = StringBuffer();
+    final name = GeneratorUtils.uniqueIdentifier(rpcName, members);
+    final rawArgs = rpc['arguments'] is Map
+        ? (rpc['arguments'] as Map).cast<String, dynamic>()
+        : <String, dynamic>{};
+    final argWires = rawArgs.keys.toList();
+    final argNames = GeneratorUtils.uniqueNames(
+      argWires,
+      <String>{},
+      // Fields stay reachable without `this.` (unnecessary_this lint).
+      avoid: {
+        'module',
+        'options',
+        'headers',
+        'query',
+        'e',
+        'k',
+        'v',
+        'json',
+        'models',
+        'jsonEncode',
+        for (final f in model.fields) f.dart,
+      },
+    );
+    final args = <String, (String, TypeNode, bool)>{};
+    for (final (i, w) in argWires.indexed) {
+      final t = (rawArgs[w] as Map).cast<String, dynamic>();
+      args[w] = (
+        argNames[i],
+        m.resolve(t),
+        t['isOptional'] == true || t['optional'] == true,
+      );
+    }
+
+    String value(Object? v) {
+      if (v is String && v.startsWith(r'$args.')) {
+        final a = args[v.substring(6)];
+        if (a == null) {
+          throw GeneratorException(
+            'Model RPC ${model.raw}.$rpcName refers to unknown argument "$v".',
+          );
+        }
+        final (dart, type, optional) = a;
+        return optional
+            ? (m.isIdentityEncode(type)
+                  ? dart
+                  : '$dart == null ? null : ${m.encode(type, '$dart!')}')
+            : m.encode(type, dart);
+      }
+      if (v is String && v.startsWith(r'$this.')) {
+        final wire = v.substring(6);
+        final f = model.fields.where((f) => f.wire == wire).firstOrNull;
+        if (f == null) {
+          throw GeneratorException(
+            'Model RPC ${model.raw}.$rpcName refers to unknown field "$v".',
+          );
+        }
+        final x =
+            const {'module', 'options', 'headers', 'query'}.contains(f.dart)
+            ? 'this.${f.dart}'
+            : f.dart;
+        return f.optional
+            ? (m.isIdentityEncode(f.type)
+                  ? x
+                  : '$x == null ? null : ${m.encode(f.type, '$x!')}')
+            : m.encode(f.type, x);
+      }
+      if (v is String) return GeneratorUtils.str(v);
+      if (v is Map) {
+        return '<String, dynamic>{${v.entries.map((en) => '${GeneratorUtils.str('${en.key}')}: ${value(en.value)}').join(', ')}}';
+      }
+      if (v is List) return '[${v.map(value).join(', ')}]';
+      return '$v';
+    }
+
+    String str(Object? v) {
+      final x = value(v);
+      return v is String && !v.startsWith(r'$') ? x : '\'\${$x}\'';
+    }
+
+    final resolver = rpc['resolver'] is Map
+        ? (rpc['resolver'] as Map).cast<String, dynamic>()
+        : const <String, dynamic>{};
+    Map<String, dynamic> section(String k) => resolver[k] is Map
+        ? (resolver[k] as Map).cast<String, dynamic>()
+        : const {};
+    final body = resolver['body'];
+    final query = section('query');
+    final path = section('path');
+    final headers = section('headers');
+
+    final rt = _returnType(e);
+    final params = [
+      for (final w in argWires)
+        args[w]!.$3
+            ? '${m.dartType(args[w]!.$2)}${m.dartType(args[w]!.$2).endsWith('?') ? '' : '?'} ${args[w]!.$1}'
+            : 'required ${m.dartType(args[w]!.$2)} ${args[w]!.$1}',
+      'AxiomCallOptions? options',
+    ];
+    final cls = _moduleClass(c);
+    b.writeln(
+      '  /// `${model.raw}.$rpcName`: calls `${e.name}` (`${e.method} ${e.path}`).',
+    );
+    b.writeln('  AxiomQuery<$rt> $name($cls module, {${params.join(', ')}}) {');
+    if (headers.isNotEmpty || (e.isMutation && e.idempotent)) {
+      if (e.isMutation && e.idempotent) _usesIdempotency = true;
+      b.writeln('    final headers = <String, String>{');
+      headers.forEach(
+        (k, v) => b.writeln('      ${GeneratorUtils.str(k)}: ${str(v)},'),
+      );
+      if (e.isMutation && e.idempotent)
+        b.writeln("      'Idempotency-Key': _newIdempotencyKey(),");
+      b.writeln('    };');
+    }
+    final call = e.isMutation ? 'sendMutation' : 'send';
+    final invalidated = e.invalidates.isNotEmpty;
+    b.writeln(
+      '    ${invalidated ? 'final query =' : 'return'} module._runtime.$call<$rt>(',
+    );
+    b.writeln('      namespace: module._namespace,');
+    b.writeln('      endpointId: ${e.id},');
+    b.writeln('      method: ${GeneratorUtils.str(e.method)},');
+    b.writeln('      path: ${GeneratorUtils.str(e.path)},');
+    b.writeln(
+      headers.isNotEmpty || (e.isMutation && e.idempotent)
+          ? '      headers: options?.mergeHeaders(headers) ?? headers,'
+          : '      headers: options?.mergeHeaders(null),',
+    );
+    if (path.isNotEmpty) {
+      b.writeln(
+        '      pathParams: {${path.entries.map((en) => '${GeneratorUtils.str(en.key)}: Uri.encodeComponent(${str(en.value)})').join(', ')}},',
+      );
+    }
+    if (query.isNotEmpty) {
+      b.writeln(
+        '      queryParams: {${query.entries.map((en) => '${GeneratorUtils.str(en.key)}: ${str(en.value)}').join(', ')}},',
+      );
+    }
+    if (body != null) b.writeln('      body: jsonEncode(${value(body)}),');
+    b.writeln('      args: <String, dynamic>{');
+    b.writeln("        'rpc': ${GeneratorUtils.str('${model.raw}.$rpcName')},");
+    if (body != null) b.writeln("        'body': ${value(body)},");
+    if (query.isNotEmpty) b.writeln("        'query': ${value(query)},");
+    if (path.isNotEmpty) b.writeln("        'path': ${value(path)},");
+    b.writeln('      },');
+    b.writeln('      decoder: ${_decoder(e)},');
+    b.writeln('      options: options,');
+    b.writeln('    );');
+    if (invalidated) {
+      b.writeln('    return _onSuccess(query, module._runtime, () {');
+      b.writeln(
+        '      for (final identity in const [${e.invalidates.map(GeneratorUtils.str).join(', ')}]) {',
+      );
+      b.writeln('        module.invalidateIdentity(identity);');
+      b.writeln('      }');
+      b.writeln('    });');
+    }
+    b.writeln('  }');
+    return b.toString();
+  }
 
   String _signature(
     _Endpoint e, {

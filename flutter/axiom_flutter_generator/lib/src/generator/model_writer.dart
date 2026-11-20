@@ -681,7 +681,8 @@ abstract interface class AxiomGeneratedEnum {
           "    if (value.length != ${len.toInt()}) return 'Must be exactly ${len.toInt()} characters';",
         );
       }
-      if (min != null) {
+      if (min != null && min > 1) {
+        // min <= 1 is covered by the empty check above.
         b.writeln(
           "    if (value.length < ${min.toInt()}) return 'Must be at least ${min.toInt()} characters';",
         );

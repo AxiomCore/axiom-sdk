@@ -313,7 +313,6 @@ abstract final class FormValidators {
 
   static String? all3(String? value) {
     if (value == null || value.isEmpty) return 'Required';
-    if (value.length < 1) return 'Must be at least 1 characters';
     return null;
   }
 
