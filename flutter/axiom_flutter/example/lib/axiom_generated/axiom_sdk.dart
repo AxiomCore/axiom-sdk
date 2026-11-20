@@ -1,5 +1,5 @@
 // GENERATED CODE - DO NOT EDIT.
-// axiom_flutter_generator 0.150.0
+// axiom_flutter_generator 0.150.1
 // todos: dev.axiomcore.example.todos 1.0.0 variant default schema 84a9b8da032b
 
 import 'dart:convert';
