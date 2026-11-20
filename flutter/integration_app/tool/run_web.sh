@@ -11,6 +11,9 @@
 #   WASM=1                  build with dart2wasm (flutter build web --wasm)
 #   RECEIPT=path            where to write the receipt (default receipt-web.json)
 #   SKIP_BUILD=1            reuse build/web
+#   H2_EMPTY_BASE_URL=url   server answering every request with an empty 204 (+ CORS), for
+#                           h2.empty_success_reaches_listeners (skipped when unset)
+#   CHROME_PROFILE=dir      Chrome --user-data-dir (default: a new temp dir)
 set -euo pipefail
 APP="$(cd "$(dirname "$0")/.." && pwd)"
 WEB_PORT="${WEB_PORT:-8792}"
@@ -29,13 +32,15 @@ cd "$APP"
 if [ "${SKIP_BUILD:-0}" != "1" ]; then
   args=(--"$MODE" --dart-define=FIXTURE_BASE_URL="$BASE" --base-href "$BASE_HREF")
   [ -n "$WS_BASE" ] && args+=(--dart-define=FIXTURE_WS_BASE_URL="$WS_BASE")
+  [ -n "${H2_EMPTY_BASE_URL:-}" ] && args+=(--dart-define=H2_EMPTY_BASE_URL="$H2_EMPTY_BASE_URL")
   [ "$CSP" = "1" ] && args+=(--no-web-resources-cdn --csp)
   [ "$WASM" = "1" ] && args+=(--wasm)
   # shellcheck disable=SC2086
   flutter build web "${args[@]}" ${WEB_BUILD_ARGS:-}
 fi
 LOG="$APP/build/web-chrome.log"
-PROFILE="$(mktemp -d)"
+PROFILE="${CHROME_PROFILE:-$(mktemp -d)}"
+mkdir -p "$PROFILE"
 python3 -I - "$WEB_PORT" "$APP/build/web" "$BASE_HREF" "$CSP" "$WASM" >"$APP/build/web-server.log" 2>&1 <<'PY' &
 import http.server, os, sys, functools
 port, root, base, csp, wasm = int(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4] == "1", sys.argv[5] == "1"
