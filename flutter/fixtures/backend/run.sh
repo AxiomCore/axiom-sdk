@@ -6,7 +6,17 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="${FIXTURE_OUT:-$HERE/.out}"
 AXIOM="${AXIOM:-axiom}"
 mkdir -p "$OUT"
-cd "$HERE"
+SRC="$HERE"
+if [ "${FIXTURE_CORS:-1}" = "0" ]; then
+  # CLI 0.156.0: a global cors() policy rejects WebSocket upgrades ("method is not allowed by
+  # CORS"), while WebSockets also require an Origin header. Build a copy without cors() so the
+  # WebSocket endpoint is reachable; browser HTTP calls then fail CORS.
+  SRC="$OUT/nocors"
+  mkdir -p "$SRC"
+  cp "$HERE/AxiomDeps.toml" "$SRC/"
+  grep -v '^cors(' "$HERE/main.acore" > "$SRC/main.acore"
+fi
+cd "$SRC"
 "$AXIOM" check main.acore
 "$AXIOM" build main.acore --out "$OUT/backend.axiom"
 "$AXIOM" server deployment "$OUT/backend.axiom" "$OUT/backend.server.json" --output "$OUT/deployment.json.new" --static-key >/dev/null

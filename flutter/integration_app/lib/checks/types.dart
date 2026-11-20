@@ -27,7 +27,7 @@ final typeChecks = <CheckDef>[
   CheckDef('types.enum_field', 'models', (c) async {
     final r = await data(c.api.everything());
     // The contract carries an enum validation rule; generator 0.146 emits String.
-    expectEq(r.color, 'green', 'enum value');
+    expectEq(r.color.toJson(), 'green', 'enum value');
   }),
   CheckDef('types.enum_generated_type', 'generator', (c) async {
     skip('pending: generator unit (enum rule emitted as String, not a Dart enum)');
