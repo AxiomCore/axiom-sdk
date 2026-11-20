@@ -43,7 +43,9 @@ flutter:
       macos:
         pluginClass: AxiomFlutterPlugin
 
-  # ADD THIS SECTION: Bundle Wasm files with the Web build
+  # Web runtime (wasm + JS glue). Flutter 3.32 has no per-platform assets, so
+  # native builds carry them too (~0.96 MB per Android APK): see
+  # doc/wasm-size.md for the app-side opt-out.
   assets:
     - lib/assets/wasm/axiom_runtime.js
     - lib/assets/wasm/axiom_runtime_bg.wasm
