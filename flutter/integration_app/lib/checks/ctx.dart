@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:axiom_flutter/axiom_flutter.dart';
+import 'package:flutter/services.dart' show rootBundle;
 
 import '../axiom_generated/axiom_sdk.dart';
 
@@ -9,6 +10,11 @@ const String fixtureBaseUrl = String.fromEnvironment(
   'FIXTURE_BASE_URL',
   defaultValue: 'http://127.0.0.1:8791',
 );
+
+/// Base URL of a second fixture instance started with `FIXTURE_CORS=0`
+/// (CLI 0.156.0 refuses WebSocket upgrades when a global cors() is set).
+/// Empty: WebSocket checks use [fixtureBaseUrl].
+const String fixtureWsBaseUrl = String.fromEnvironment('FIXTURE_WS_BASE_URL');
 
 /// Fixed HS256 token minted by `fixtures/backend/tool/jwt.py token`.
 const String fixtureBearerToken =
@@ -20,6 +26,23 @@ class Ctx {
   final AxiomSdk sdk;
   FixtureModule get api => sdk.fixture;
   String get baseUrl => fixtureBaseUrl;
+
+  FixtureModule? _ws;
+
+  /// The fixture module for WebSocket checks: namespace `fixture_ws` bound to
+  /// [fixtureWsBaseUrl] (falls back to [api] when that is not set).
+  Future<FixtureModule> wsApi() async {
+    if (fixtureWsBaseUrl.isEmpty) return api;
+    if (_ws != null) return _ws!;
+    final bytes = (await rootBundle.load('assets/axiom/fixture.axiom')).buffer.asUint8List();
+    final r = sdk.runtime.tryLoadContract(
+      namespace: 'fixture_ws',
+      baseUrl: fixtureWsBaseUrl,
+      contractBytes: bytes,
+    );
+    if (!r.ok) throw CheckFailure('loading fixture_ws failed: $r');
+    return _ws = FixtureModule(sdk.runtime, 'fixture_ws');
+  }
 }
 
 typedef Check = Future<void> Function(Ctx ctx);

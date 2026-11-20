@@ -1,0 +1,68 @@
+project(id: "dev.axiomcore.bench", version: "1.0.0")
+variant default(include: ["*"])
+
+// Benchmark API. The same four endpoints are hand-written in ../dio_client and ../http_client.
+// All three clients call the Dart server in ../server (Acore managed code cannot build lists of
+// 10 000 items: it has no loops or ranges). The managed bodies below only make the contract
+// buildable and runnable with `axiom run` for a sanity check of small payloads.
+
+model Item { id: String name: String price: Float64 qty: Int32 active: Bool tags: List<String> }
+model ItemList { items: List<Models.Item> total: Int32 }
+model ListIn { n: Int32 }
+model ItemRef { id: String }
+model ItemInput { name: String price: Float64 qty: Int32 }
+
+// WebSocket endpoints must declare a guard (checked by an Acore server only; the bench server ignores it).
+guard signedIn(kind: GuardKind.authenticated)
+cors(origins: ["*"], methods: [GET, POST], headers: ["accept", "authorization", "axiom-public-failures", "content-type", "traceparent", "tracestate", "x-axiom-cache-mode", "x-axiom-request-id", "x-axiom-submission-resolution"], credentials: false, maxAge: 10m)
+
+action listItems(kind: ActionKind.query, input: Models.ListIn, output: Models.ItemList) {
+  managed { return {items: [{id: "1", name: "item 1", price: 1.5, qty: 1, active: true, tags: ["a", "b"]}], total: Input.n} }
+}
+endpoint listItems(method: GET, path: "/items") {
+  request { query("n", type: Int32) }
+  handle(action: Actions.listItems, input: {n: Input.query.n})
+  response(type: Models.ItemList)
+  cache(strategy: CacheStrategy.networkOnly, ttl: 1m)
+}
+endpoint cachedItems(method: GET, path: "/cached/items") {
+  request { query("n", type: Int32) }
+  handle(action: Actions.listItems, input: {n: Input.query.n})
+  response(type: Models.ItemList)
+  cache(strategy: CacheStrategy.cacheFirst, ttl: 10m)
+}
+
+action getItem(kind: ActionKind.query, input: Models.ItemRef, output: Models.Item) {
+  managed { return {id: Input.id, name: "item", price: 1.5, qty: 1, active: true, tags: ["a", "b"]} }
+}
+endpoint getItem(method: GET, path: "/items/{id}") {
+  request { path("id", type: String) }
+  handle(action: Actions.getItem, input: {id: Input.path.id})
+  response(type: Models.Item)
+  cache(strategy: CacheStrategy.networkOnly, ttl: 1m)
+}
+
+action createItem(kind: ActionKind.command, input: Models.ItemInput, output: Models.Item) {
+  managed { return {id: "new", name: Input.name, price: Input.price, qty: Input.qty, active: true, tags: ["new"]} }
+}
+endpoint createItem(method: POST, path: "/items") {
+  request { body("name", type: String) body("price", type: Float64) body("qty", type: Int32) }
+  handle(action: Actions.createItem, input: {name: Input.body.name, price: Input.body.price, qty: Input.body.qty})
+  response(type: Models.Item, status: 201)
+}
+
+// ---- WebSocket echo (the bench server echoes every text frame) ----
+model Ping { text: String seq: Int32 }
+model SocketIn { message: Models.Ping }
+action echoSocket(kind: ActionKind.stream, input: Models.SocketIn, output: Models.Ping) {
+  require(guard: Guards.signedIn)
+  managed { return {text: Input.message.text, seq: Input.message.seq} }
+}
+endpoint wsEcho(method: WS, path: "/ws") {
+  request { body("message", type: Models.Ping) }
+  handle(action: Actions.echoSocket, input: {message: Input.body.message})
+  response(type: Models.Ping)
+  streaming(WebSocketDef(direction: "bidirectional", reconnect: "auto",
+    client: WsMessageDef(model: Models.Ping), server: WsMessageDef(model: Models.Ping)))
+}
+streamPolicy wsEcho(endpoint: Routes.wsEcho, maxFrameBytes: 16384, maxFrames: 10000, heartbeat: 10s, stallTimeout: 5s, maxConnections: 16, origins: ["http://127.0.0.1:8852", "http://localhost:8852"])

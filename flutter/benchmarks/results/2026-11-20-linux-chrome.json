@@ -1,0 +1,1110 @@
+{
+  "date": "2026-11-20",
+  "label": "linux-chrome",
+  "machine": {
+    "cpu": "",
+    "cores": 4,
+    "ram_gb": 32.0,
+    "os": "Debian GNU/Linux 12 (bookworm) (kernel 4.19.0-gvisor)",
+    "chrome": "Google Chrome 158.0.8127.36",
+    "virtualised": "gVisor sandbox / container (shared host)"
+  },
+  "flutter": "Flutter 3.32.0 \u2022 channel stable \u2022 https://github.com/flutter/flutter.git",
+  "dart": "Dart SDK version: 3.8.0 (stable) (Wed May 14 09:07:14 2025 -0700) on \"linux_x64\"",
+  "axiom_cli": "axiom 0.156.0",
+  "sdk_commit": "c0360c4",
+  "notes": [
+    "Web numbers: headless Chrome on a 4 vCPU Linux container (no GPU), release build (dart2js), server on 127.0.0.1. Not a physical device.",
+    "All three clients call the same local Dart server (api/server); see README for method.",
+    "PRELIMINARY: other jobs (Flutter/wasm builds of parallel work) were using the same 4 vCPUs during both web runs. Only the Axiom per-call medians (16 ms tick floor) and the cache medians were stable; cold start and decode medians moved by up to 85% between runs. The exit gate (second run within 10%) is NOT met: rerun on an idle machine before publishing these web numbers. Tooling, LOC and size numbers are deterministic or low-variance (see ranges)."
+  ],
+  "web": {
+    "cold": {
+      "axiom": {
+        "runs": 5,
+        "first_data_ms": [
+          301.899,
+          309.599,
+          294.201,
+          364.1,
+          344.5
+        ],
+        "median_ms": 309.6,
+        "init_median_ms": 291.6,
+        "method": "fresh launch; timer starts after runApp, before client construction; one listItems(n:1)"
+      },
+      "dio": {
+        "runs": 5,
+        "first_data_ms": [
+          256.9,
+          220.701,
+          249,
+          278.4,
+          320.3
+        ],
+        "median_ms": 256.9,
+        "init_median_ms": 0.3,
+        "method": "fresh launch; timer starts after runApp, before client construction; one listItems(n:1)"
+      },
+      "http": {
+        "runs": 5,
+        "first_data_ms": [
+          252.599,
+          207.799,
+          240.801,
+          314.7,
+          239.7
+        ],
+        "median_ms": 240.8,
+        "init_median_ms": 0,
+        "method": "fresh launch; timer starts after runApp, before client construction; one listItems(n:1)"
+      }
+    },
+    "latency": [
+      {
+        "mode": "release",
+        "case": "small_get_item",
+        "client": "axiom",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 16,
+        "p95_ms": 16.8,
+        "mean_ms": 16,
+        "min_ms": 14.901,
+        "max_ms": 17.099
+      },
+      {
+        "mode": "release",
+        "case": "small_get_item",
+        "client": "dio",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 2.5,
+        "p95_ms": 3.401,
+        "mean_ms": 2.597,
+        "min_ms": 1.9,
+        "max_ms": 4.5
+      },
+      {
+        "mode": "release",
+        "case": "small_get_item",
+        "client": "http",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 2.401,
+        "p95_ms": 3.7,
+        "mean_ms": 2.558,
+        "min_ms": 1.9,
+        "max_ms": 5.3
+      },
+      {
+        "mode": "release",
+        "case": "small_create_item",
+        "client": "axiom",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 16,
+        "p95_ms": 16.899,
+        "mean_ms": 16.155,
+        "min_ms": 14.8,
+        "max_ms": 31.3
+      },
+      {
+        "mode": "release",
+        "case": "small_create_item",
+        "client": "dio",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 3.1,
+        "p95_ms": 7.7,
+        "mean_ms": 4.486,
+        "min_ms": 2.399,
+        "max_ms": 41.5
+      },
+      {
+        "mode": "release",
+        "case": "small_create_item",
+        "client": "http",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 3.099,
+        "p95_ms": 5.401,
+        "mean_ms": 4.439,
+        "min_ms": 2.3,
+        "max_ms": 40.6
+      },
+      {
+        "mode": "release",
+        "case": "large_list_1000",
+        "client": "axiom",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 16.199,
+        "p95_ms": 32.2,
+        "mean_ms": 18.551,
+        "min_ms": 11.301,
+        "max_ms": 53.8
+      },
+      {
+        "mode": "release",
+        "case": "large_list_1000",
+        "client": "dio",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 7.401,
+        "p95_ms": 22.901,
+        "mean_ms": 9.8,
+        "min_ms": 3.899,
+        "max_ms": 51.401
+      },
+      {
+        "mode": "release",
+        "case": "large_list_1000",
+        "client": "http",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 5.7,
+        "p95_ms": 9.1,
+        "mean_ms": 6.312,
+        "min_ms": 3.899,
+        "max_ms": 27.8
+      },
+      {
+        "mode": "release",
+        "case": "large_list_10000",
+        "client": "axiom",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 71,
+        "p95_ms": 112.5,
+        "mean_ms": 71.582,
+        "min_ms": 28.201,
+        "max_ms": 187.2
+      },
+      {
+        "mode": "release",
+        "case": "large_list_10000",
+        "client": "dio",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 34.099,
+        "p95_ms": 84.099,
+        "mean_ms": 41.057,
+        "min_ms": 16.899,
+        "max_ms": 122.599
+      },
+      {
+        "mode": "release",
+        "case": "large_list_10000",
+        "client": "http",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 17.3,
+        "p95_ms": 52.699,
+        "mean_ms": 21.907,
+        "min_ms": 12.4,
+        "max_ms": 93.699
+      }
+    ],
+    "cache": [
+      {
+        "mode": "release",
+        "client": "axiom",
+        "case": "repeat_list_1000",
+        "status": "ok",
+        "sources": {
+          "cache": 50
+        },
+        "first_call_ms": 87.2,
+        "samples": 50,
+        "p50_ms": 15.399,
+        "p95_ms": 49.5,
+        "mean_ms": 20.986,
+        "min_ms": 5,
+        "max_ms": 64.399
+      },
+      {
+        "mode": "release",
+        "client": "dio_cache_interceptor",
+        "case": "repeat_list_1000",
+        "status": "ok",
+        "store": "MemCacheStore, CachePolicy.forceCache",
+        "first_call_ms": 86.399,
+        "samples": 50,
+        "p50_ms": 27.901,
+        "p95_ms": 76.5,
+        "mean_ms": 45.188,
+        "min_ms": 23.199,
+        "max_ms": 83.3
+      }
+    ],
+    "decode": [
+      {
+        "mode": "release",
+        "items": 1000,
+        "bytes": 90825,
+        "decoder": "json_only",
+        "status": "ok",
+        "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+        "samples": 50,
+        "p50_ms": 2.101,
+        "p95_ms": 3.901,
+        "mean_ms": 3.328,
+        "min_ms": 0.4,
+        "max_ms": 60.299
+      },
+      {
+        "mode": "release",
+        "items": 1000,
+        "bytes": 90825,
+        "decoder": "axiom_generated",
+        "status": "ok",
+        "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+        "samples": 50,
+        "p50_ms": 2.399,
+        "p95_ms": 49.8,
+        "mean_ms": 7.684,
+        "min_ms": 1.1,
+        "max_ms": 56.5
+      },
+      {
+        "mode": "release",
+        "items": 1000,
+        "bytes": 90825,
+        "decoder": "json_serializable",
+        "status": "ok",
+        "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+        "samples": 50,
+        "p50_ms": 2.7,
+        "p95_ms": 54,
+        "mean_ms": 8.078,
+        "min_ms": 1.4,
+        "max_ms": 59.599
+      },
+      {
+        "mode": "release",
+        "items": 1000,
+        "bytes": 90825,
+        "decoder": "manual_fromJson",
+        "status": "ok",
+        "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+        "samples": 50,
+        "p50_ms": 1.9,
+        "p95_ms": 5.101,
+        "mean_ms": 3.358,
+        "min_ms": 1.099,
+        "max_ms": 56
+      },
+      {
+        "mode": "release",
+        "items": 10000,
+        "bytes": 937929,
+        "decoder": "json_only",
+        "status": "ok",
+        "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+        "samples": 20,
+        "p50_ms": 7.599,
+        "p95_ms": 25.199,
+        "mean_ms": 12.42,
+        "min_ms": 5.599,
+        "max_ms": 60
+      },
+      {
+        "mode": "release",
+        "items": 10000,
+        "bytes": 937929,
+        "decoder": "axiom_generated",
+        "status": "ok",
+        "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+        "samples": 20,
+        "p50_ms": 53.1,
+        "p95_ms": 120.601,
+        "mean_ms": 60.375,
+        "min_ms": 14.5,
+        "max_ms": 177.899
+      },
+      {
+        "mode": "release",
+        "items": 10000,
+        "bytes": 937929,
+        "decoder": "json_serializable",
+        "status": "ok",
+        "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+        "samples": 20,
+        "p50_ms": 23.599,
+        "p95_ms": 57.701,
+        "mean_ms": 33.255,
+        "min_ms": 14.301,
+        "max_ms": 95.2
+      },
+      {
+        "mode": "release",
+        "items": 10000,
+        "bytes": 937929,
+        "decoder": "manual_fromJson",
+        "status": "ok",
+        "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+        "samples": 20,
+        "p50_ms": 11.299,
+        "p95_ms": 32.699,
+        "mean_ms": 15.745,
+        "min_ms": 8.899,
+        "max_ms": 52.099
+      }
+    ],
+    "ws": [
+      {
+        "mode": "release",
+        "client": "web_socket_channel",
+        "status": "ok",
+        "messages": 1000,
+        "round_trips_per_s": 1123.092,
+        "mean_rtt_ms": 0.89
+      },
+      {
+        "mode": "release",
+        "client": "axiom",
+        "status": "blocked",
+        "note": "openChannel not implemented on this branch: UnimplementedError: openChannel"
+      }
+    ],
+    "errors": [],
+    "mode": "release"
+  },
+  "web_repeat": {
+    "cold": {
+      "axiom": {
+        "runs": 5,
+        "first_data_ms": [
+          573.899,
+          810.9,
+          573.9,
+          467.7,
+          466.7
+        ],
+        "median_ms": 573.9,
+        "init_median_ms": 528.7,
+        "method": "fresh launch; timer starts after runApp, before client construction; one listItems(n:1)"
+      },
+      "dio": {
+        "runs": 5,
+        "first_data_ms": [
+          853.699,
+          394.2,
+          457,
+          320.5,
+          607.8
+        ],
+        "median_ms": 457,
+        "init_median_ms": 0.5,
+        "method": "fresh launch; timer starts after runApp, before client construction; one listItems(n:1)"
+      },
+      "http": {
+        "runs": 5,
+        "first_data_ms": [
+          344.5,
+          657.599,
+          278.1,
+          411.299,
+          1515
+        ],
+        "median_ms": 411.3,
+        "init_median_ms": 0,
+        "method": "fresh launch; timer starts after runApp, before client construction; one listItems(n:1)"
+      }
+    },
+    "latency": [
+      {
+        "mode": "release",
+        "case": "small_get_item",
+        "client": "axiom",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 16,
+        "p95_ms": 51.1,
+        "mean_ms": 21.594,
+        "min_ms": 4.801,
+        "max_ms": 64.101
+      },
+      {
+        "mode": "release",
+        "case": "small_get_item",
+        "client": "dio",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 2.899,
+        "p95_ms": 5.099,
+        "mean_ms": 4.37,
+        "min_ms": 2.099,
+        "max_ms": 43.5
+      },
+      {
+        "mode": "release",
+        "case": "small_get_item",
+        "client": "http",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 2.599,
+        "p95_ms": 6.5,
+        "mean_ms": 3.573,
+        "min_ms": 1.899,
+        "max_ms": 31.3
+      },
+      {
+        "mode": "release",
+        "case": "small_create_item",
+        "client": "axiom",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 16,
+        "p95_ms": 35,
+        "mean_ms": 19.037,
+        "min_ms": 4.601,
+        "max_ms": 256.199
+      },
+      {
+        "mode": "release",
+        "case": "small_create_item",
+        "client": "dio",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 2.7,
+        "p95_ms": 8.3,
+        "mean_ms": 4.67,
+        "min_ms": 2,
+        "max_ms": 71.3
+      },
+      {
+        "mode": "release",
+        "case": "small_create_item",
+        "client": "http",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 2.399,
+        "p95_ms": 5.101,
+        "mean_ms": 3.902,
+        "min_ms": 1.7,
+        "max_ms": 54
+      },
+      {
+        "mode": "release",
+        "case": "large_list_1000",
+        "client": "axiom",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 16.099,
+        "p95_ms": 32.399,
+        "mean_ms": 17.403,
+        "min_ms": 8,
+        "max_ms": 48.4
+      },
+      {
+        "mode": "release",
+        "case": "large_list_1000",
+        "client": "dio",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 4.5,
+        "p95_ms": 17.2,
+        "mean_ms": 6.542,
+        "min_ms": 3.3,
+        "max_ms": 61
+      },
+      {
+        "mode": "release",
+        "case": "large_list_1000",
+        "client": "http",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 3.699,
+        "p95_ms": 5.801,
+        "mean_ms": 4.248,
+        "min_ms": 2.899,
+        "max_ms": 29.799
+      },
+      {
+        "mode": "release",
+        "case": "large_list_10000",
+        "client": "axiom",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 28.899,
+        "p95_ms": 38.801,
+        "mean_ms": 30.451,
+        "min_ms": 25.1,
+        "max_ms": 84.099
+      },
+      {
+        "mode": "release",
+        "case": "large_list_10000",
+        "client": "dio",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 20.599,
+        "p95_ms": 39,
+        "mean_ms": 22.83,
+        "min_ms": 15.4,
+        "max_ms": 69.1
+      },
+      {
+        "mode": "release",
+        "case": "large_list_10000",
+        "client": "http",
+        "status": "ok",
+        "warmup": 20,
+        "samples": 200,
+        "p50_ms": 13,
+        "p95_ms": 19.601,
+        "mean_ms": 14.441,
+        "min_ms": 11.601,
+        "max_ms": 41.101
+      }
+    ],
+    "cache": [
+      {
+        "mode": "release",
+        "client": "axiom",
+        "case": "repeat_list_1000",
+        "status": "ok",
+        "sources": {
+          "cache": 50
+        },
+        "first_call_ms": 34.5,
+        "samples": 50,
+        "p50_ms": 15.801,
+        "p95_ms": 17.801,
+        "mean_ms": 15.944,
+        "min_ms": 11.9,
+        "max_ms": 20.6
+      },
+      {
+        "mode": "release",
+        "client": "dio_cache_interceptor",
+        "case": "repeat_list_1000",
+        "status": "ok",
+        "store": "MemCacheStore, CachePolicy.forceCache",
+        "first_call_ms": 40.3,
+        "samples": 50,
+        "p50_ms": 23.8,
+        "p95_ms": 26.2,
+        "mean_ms": 23.802,
+        "min_ms": 7.7,
+        "max_ms": 27
+      }
+    ],
+    "decode": [
+      {
+        "mode": "release",
+        "items": 1000,
+        "bytes": 90825,
+        "decoder": "json_only",
+        "status": "ok",
+        "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+        "samples": 50,
+        "p50_ms": 0.401,
+        "p95_ms": 1.301,
+        "mean_ms": 0.526,
+        "min_ms": 0.2,
+        "max_ms": 1.599
+      },
+      {
+        "mode": "release",
+        "items": 1000,
+        "bytes": 90825,
+        "decoder": "axiom_generated",
+        "status": "ok",
+        "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+        "samples": 50,
+        "p50_ms": 1.301,
+        "p95_ms": 3.301,
+        "mean_ms": 1.678,
+        "min_ms": 0.901,
+        "max_ms": 3.8
+      },
+      {
+        "mode": "release",
+        "items": 1000,
+        "bytes": 90825,
+        "decoder": "json_serializable",
+        "status": "ok",
+        "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+        "samples": 50,
+        "p50_ms": 1.5,
+        "p95_ms": 2.8,
+        "mean_ms": 1.81,
+        "min_ms": 1.099,
+        "max_ms": 4.2
+      },
+      {
+        "mode": "release",
+        "items": 1000,
+        "bytes": 90825,
+        "decoder": "manual_fromJson",
+        "status": "ok",
+        "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+        "samples": 50,
+        "p50_ms": 1,
+        "p95_ms": 2,
+        "mean_ms": 1.202,
+        "min_ms": 0.699,
+        "max_ms": 3.701
+      },
+      {
+        "mode": "release",
+        "items": 10000,
+        "bytes": 937929,
+        "decoder": "json_only",
+        "status": "ok",
+        "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+        "samples": 20,
+        "p50_ms": 4.5,
+        "p95_ms": 6.599,
+        "mean_ms": 4.67,
+        "min_ms": 3.701,
+        "max_ms": 6.699
+      },
+      {
+        "mode": "release",
+        "items": 10000,
+        "bytes": 937929,
+        "decoder": "axiom_generated",
+        "status": "ok",
+        "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+        "samples": 20,
+        "p50_ms": 11,
+        "p95_ms": 13,
+        "mean_ms": 11.495,
+        "min_ms": 10.3,
+        "max_ms": 13.7
+      },
+      {
+        "mode": "release",
+        "items": 10000,
+        "bytes": 937929,
+        "decoder": "json_serializable",
+        "status": "ok",
+        "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+        "samples": 20,
+        "p50_ms": 12.5,
+        "p95_ms": 13.799,
+        "mean_ms": 12.755,
+        "min_ms": 12.199,
+        "max_ms": 15.401
+      },
+      {
+        "mode": "release",
+        "items": 10000,
+        "bytes": 937929,
+        "decoder": "manual_fromJson",
+        "status": "ok",
+        "method": "utf8.decode + jsonDecode + fromJson on the main isolate; Axiom runtime-side validation not included",
+        "samples": 20,
+        "p50_ms": 9,
+        "p95_ms": 10.4,
+        "mean_ms": 9.38,
+        "min_ms": 8.3,
+        "max_ms": 11.799
+      }
+    ],
+    "ws": [
+      {
+        "mode": "release",
+        "client": "web_socket_channel",
+        "status": "ok",
+        "messages": 1000,
+        "round_trips_per_s": 4440.517,
+        "mean_rtt_ms": 0.225
+      },
+      {
+        "mode": "release",
+        "client": "axiom",
+        "status": "blocked",
+        "note": "openChannel not implemented on this branch: UnimplementedError: openChannel"
+      }
+    ],
+    "errors": [],
+    "mode": "release"
+  },
+  "reproducibility": {
+    "rows": [
+      {
+        "metric": "cold axiom",
+        "run1_ms": 309.6,
+        "run2_ms": 573.9,
+        "diff_pct": 85
+      },
+      {
+        "metric": "cold dio",
+        "run1_ms": 256.9,
+        "run2_ms": 457,
+        "diff_pct": 78
+      },
+      {
+        "metric": "cold http",
+        "run1_ms": 240.8,
+        "run2_ms": 411.3,
+        "diff_pct": 71
+      },
+      {
+        "metric": "latency small_get_item axiom",
+        "run1_ms": 16,
+        "run2_ms": 16,
+        "diff_pct": 0
+      },
+      {
+        "metric": "latency small_get_item dio",
+        "run1_ms": 2.5,
+        "run2_ms": 2.899,
+        "diff_pct": 16
+      },
+      {
+        "metric": "latency small_get_item http",
+        "run1_ms": 2.401,
+        "run2_ms": 2.599,
+        "diff_pct": 8
+      },
+      {
+        "metric": "latency small_create_item axiom",
+        "run1_ms": 16,
+        "run2_ms": 16,
+        "diff_pct": 0
+      },
+      {
+        "metric": "latency small_create_item dio",
+        "run1_ms": 3.1,
+        "run2_ms": 2.7,
+        "diff_pct": -13
+      },
+      {
+        "metric": "latency small_create_item http",
+        "run1_ms": 3.099,
+        "run2_ms": 2.399,
+        "diff_pct": -23
+      },
+      {
+        "metric": "latency large_list_1000 axiom",
+        "run1_ms": 16.199,
+        "run2_ms": 16.099,
+        "diff_pct": -1
+      },
+      {
+        "metric": "latency large_list_1000 dio",
+        "run1_ms": 7.401,
+        "run2_ms": 4.5,
+        "diff_pct": -39
+      },
+      {
+        "metric": "latency large_list_1000 http",
+        "run1_ms": 5.7,
+        "run2_ms": 3.699,
+        "diff_pct": -35
+      },
+      {
+        "metric": "latency large_list_10000 axiom",
+        "run1_ms": 71,
+        "run2_ms": 28.899,
+        "diff_pct": -59
+      },
+      {
+        "metric": "latency large_list_10000 dio",
+        "run1_ms": 34.099,
+        "run2_ms": 20.599,
+        "diff_pct": -40
+      },
+      {
+        "metric": "latency large_list_10000 http",
+        "run1_ms": 17.3,
+        "run2_ms": 13,
+        "diff_pct": -25
+      },
+      {
+        "metric": "cache repeat_list_1000 axiom",
+        "run1_ms": 15.399,
+        "run2_ms": 15.801,
+        "diff_pct": 3
+      },
+      {
+        "metric": "cache repeat_list_1000 dio_cache_interceptor",
+        "run1_ms": 27.901,
+        "run2_ms": 23.8,
+        "diff_pct": -15
+      },
+      {
+        "metric": "decode 1000 json_only",
+        "run1_ms": 2.101,
+        "run2_ms": 0.401,
+        "diff_pct": -81
+      },
+      {
+        "metric": "decode 1000 axiom_generated",
+        "run1_ms": 2.399,
+        "run2_ms": 1.301,
+        "diff_pct": -46
+      },
+      {
+        "metric": "decode 1000 json_serializable",
+        "run1_ms": 2.7,
+        "run2_ms": 1.5,
+        "diff_pct": -44
+      },
+      {
+        "metric": "decode 1000 manual_fromJson",
+        "run1_ms": 1.9,
+        "run2_ms": 1,
+        "diff_pct": -47
+      },
+      {
+        "metric": "decode 10000 json_only",
+        "run1_ms": 7.599,
+        "run2_ms": 4.5,
+        "diff_pct": -41
+      },
+      {
+        "metric": "decode 10000 axiom_generated",
+        "run1_ms": 53.1,
+        "run2_ms": 11,
+        "diff_pct": -79
+      },
+      {
+        "metric": "decode 10000 json_serializable",
+        "run1_ms": 23.599,
+        "run2_ms": 12.5,
+        "diff_pct": -47
+      },
+      {
+        "metric": "decode 10000 manual_fromJson",
+        "run1_ms": 11.299,
+        "run2_ms": 9,
+        "diff_pct": -20
+      }
+    ],
+    "within_10pct": 5,
+    "total": 25
+  },
+  "tooling": {
+    "machine": {
+      "cpu_count": 4,
+      "os": "Linux-4.19.0-gvisor-x86_64-with-glibc2.36",
+      "python": "3.11.2"
+    },
+    "tools": {
+      "axiom": "axiom 0.156.0",
+      "dart": "Dart SDK version: 3.8.0 (stable) (Wed May 14 09:07:14 2025 -0700) on \"linux_x64\"",
+      "flutter": "Flutter 3.32.0 \u2022 channel stable \u2022 https://github.com/flutter/flutter.git"
+    },
+    "method": "Client generation time: `axiom pull` end to end and the Axiom generator alone vs\n`dart run build_runner build` for the retrofit/json_serializable client. 5 runs each, cold and warm.\n\n  python3 tool/bench_tooling.py [--runs 5] [--out results/tooling.json]\n\ncold  = tool caches removed first: the generator's compiled snapshot\n        (app/.dart_tool/pub/bin/axiom_flutter_generator) for Axiom, `build_runner clean`\n        (compiled build script + asset graph) for build_runner. pub's package cache stays warm.\nwarm  = caches present. Axiom always regenerates every file (no incremental mode). For\n        build_runner a comment in api.dart and models.dart is changed before every warm run so\n        it has to regenerate both .g.dart files (an unchanged warm run is a no-op and is\n        reported separately as warm_noop).\nDiscarded caches are moved to build/trash (never deleted).",
+    "results": {
+      "axiom_pull": {
+        "cold": {
+          "runs_s": [
+            2.424,
+            2.391,
+            2.396,
+            3.368,
+            3.253
+          ],
+          "median_s": 2.424,
+          "min_s": 2.391,
+          "max_s": 3.368
+        },
+        "warm": {
+          "runs_s": [
+            3.0,
+            2.978,
+            3.074,
+            2.332,
+            2.123
+          ],
+          "median_s": 2.978,
+          "min_s": 2.123,
+          "max_s": 3.074
+        }
+      },
+      "axiom_generator": {
+        "cold": {
+          "runs_s": [
+            1.497,
+            1.422,
+            1.415,
+            1.418,
+            1.457
+          ],
+          "median_s": 1.422,
+          "min_s": 1.415,
+          "max_s": 1.497
+        },
+        "warm": {
+          "runs_s": [
+            1.23,
+            1.244,
+            1.231,
+            1.278,
+            1.173
+          ],
+          "median_s": 1.231,
+          "min_s": 1.173,
+          "max_s": 1.278
+        }
+      },
+      "build_runner": {
+        "cold": {
+          "runs_s": [
+            24.934,
+            25.207,
+            25.39,
+            26.29,
+            26.06
+          ],
+          "median_s": 25.39,
+          "min_s": 24.934,
+          "max_s": 26.29
+        },
+        "warm": {
+          "runs_s": [
+            3.765,
+            3.464,
+            2.538,
+            2.605,
+            2.528
+          ],
+          "median_s": 2.605,
+          "min_s": 2.528,
+          "max_s": 3.765
+        },
+        "warm_noop": {
+          "runs_s": [
+            2.344,
+            2.462,
+            2.302,
+            2.374,
+            2.517
+          ],
+          "median_s": 2.374,
+          "min_s": 2.302,
+          "max_s": 2.517
+        }
+      }
+    }
+  },
+  "loc": {
+    "method": "Lines of code per client approach. Counts non-blank lines that are not only a comment\n(`//`, `///`, `#`). Prints JSON; `--out FILE` writes it.\n\nHand-written files per approach are listed in FILES below; generated files are counted\nseparately and never added to the hand-written total. For Acore the contract also carries the\nserver implementation (`managed { ... }` bodies); those lines are reported separately\n(`acore_managed_bodies`) so a reader can compare declarations only. The contract also declares a\nWebSocket endpoint the other clients do not have: `hand_written_unary_only` subtracts it.",
+    "approaches": {
+      "axiom": {
+        "hand_written": {
+          "files": {
+            "api/acore/main.acore": 55,
+            "app/AxiomDeps.toml": 4,
+            "app/lib/bench_axiom_setup.dart": 11
+          },
+          "total": 70
+        },
+        "generated": {
+          "files": {
+            "app/lib/axiom_generated/axiom_sdk.dart": 243,
+            "app/lib/axiom_generated/models.dart": 311
+          },
+          "total": 554
+        },
+        "acore_managed_bodies": 4,
+        "acore_websocket_lines": 15,
+        "hand_written_unary_only": 55
+      },
+      "dio_retrofit": {
+        "hand_written": {
+          "files": {
+            "api/dio_client/lib/src/api.dart": 16,
+            "api/dio_client/lib/src/models.dart": 38,
+            "api/dio_client/lib/bench_dio_client.dart": 3
+          },
+          "total": 57
+        },
+        "generated": {
+          "files": {
+            "api/dio_client/lib/src/api.g.dart": 134,
+            "api/dio_client/lib/src/models.g.dart": 37
+          },
+          "total": 171
+        }
+      },
+      "http_manual": {
+        "hand_written": {
+          "files": {
+            "api/http_client/lib/bench_http_client.dart": 65
+          },
+          "total": 65
+        },
+        "generated": {
+          "files": {},
+          "total": 0
+        }
+      }
+    }
+  },
+  "size": {
+    "method": "App size with and without the Axiom SDK.\n\n  python3 tool/bench_size.py [--out results/size.json] [--skip-apk] [--skip-web]\n\nbaseline = baseline_app/lib/main.dart (dio + http, one call each, no axiom_flutter dependency)\naxiom    = app/lib/size_main.dart (the same screen plus one Axiom call; app depends on axiom_flutter)\nBuilds: `flutter build apk --release --split-per-abi` and `flutter build web --release`.\nWeb sizes: main.dart.js, every file under build/web, the Axiom wasm/js assets, and gzip -9\nsizes of the largest files (what a server with gzip would transfer).",
+    "apk": {
+      "baseline": {
+        "arm64-v8a": 6859851,
+        "armeabi-v7a": 6295778,
+        "x86_64": 6988748
+      },
+      "axiom": {
+        "arm64-v8a": 7861366,
+        "armeabi-v7a": 7301619,
+        "x86_64": 7993601
+      }
+    },
+    "web": {
+      "baseline": {
+        "total_bytes": 23827408,
+        "main_dart_js": 1741584,
+        "main_dart_js_gzip": 512450
+      },
+      "axiom": {
+        "total_bytes": 26350475,
+        "main_dart_js": 1767411,
+        "main_dart_js_gzip": 520380,
+        "axiom_asset:axiom_runtime.js": 37935,
+        "axiom_asset:axiom_runtime.js:gzip": 6931,
+        "axiom_asset:axiom_runtime_bg.wasm": 2427799,
+        "axiom_asset:axiom_runtime_bg.wasm:gzip": 938661,
+        "contract_asset": 7389
+      }
+    },
+    "apk_delta": {
+      "arm64-v8a": 1001515,
+      "armeabi-v7a": 1005841,
+      "x86_64": 1004853
+    },
+    "web_delta": {
+      "total_bytes": 2523067,
+      "main_dart_js": 25827,
+      "main_dart_js_gzip": 7930
+    },
+    "flutter": "Flutter 3.32.0 \u2022 channel stable \u2022 https://github.com/flutter/flutter.git",
+    "apk_note": "No Android runtime .so: axiom_flutter on this branch has no android/ plugin, so the APK cannot make Axiom calls yet. The ~1 MB delta is almost all the web wasm runtime (axiom_runtime_bg.wasm, 942 KB compressed in the APK) that the package declares as a Flutter asset and therefore ships on every platform; app Dart code (libapp.so) differs by the rest. The real Android delta will be the .so per ABI minus the wasm if the asset is made web-only."
+  }
+}
