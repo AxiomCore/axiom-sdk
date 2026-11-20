@@ -291,9 +291,16 @@ AxiomInitResult? _initResult;
 SendPort? _dataPort;
 _AxiomFreeResponseBuffer? _freeResponseFfiBackground;
 
-/// Requests dispatched but not yet completed, as seen by the event isolate
-/// ('start' messages from the main isolate, Complete events here).
-int _pumpInFlight = 0;
+/// Request ids dispatched but not yet completed, as seen by the event
+/// isolate (`['start', id]` from the main isolate, Complete events here).
+/// A set, not a counter: a Complete for an unknown or stale id (an earlier
+/// generation, a request dropped by a reset) must not stop the pump while
+/// other requests are still in flight.
+final Set<int> _pumpInFlight = <int>{};
+
+/// Completes pumped before their `start` message arrived (another request
+/// kept the pump running). Bounded: stale ids of old generations age out.
+final LinkedHashSet<int> _completedBeforeStart = LinkedHashSet<int>();
 
 /// Opens the runtime library. `AXIOM_RUNTIME_LIB` (only when set) points at
 /// an explicit library path, used by host tests on Linux/macOS.
@@ -310,8 +317,13 @@ void _axiomCallbackHandler(Pointer<AxiomResponseBuffer> responsePtr) {
   if (responsePtr == nullptr) return;
   try {
     final response = responsePtr.ref;
-    if (response.eventType == EventType.complete && _pumpInFlight > 0) {
-      _pumpInFlight--;
+    if (response.eventType == EventType.complete) {
+      if (!_pumpInFlight.remove(response.requestId)) {
+        _completedBeforeStart.add(response.requestId);
+        if (_completedBeforeStart.length > 256) {
+          _completedBeforeStart.remove(_completedBeforeStart.first);
+        }
+      }
     }
     // Native ownership ends in this callback. Send owned Dart bytes, never addresses.
     final data = response.data.ptr == nullptr || response.data.len == 0
@@ -347,10 +359,12 @@ Future<void> _runRustEventLoop(List<Object> args) async {
   var running = true;
   Completer<void>? wake;
   control.listen((msg) {
-    if (msg == 'start') {
-      _pumpInFlight++;
+    if (msg is List && msg.length == 2 && msg[0] == 'start') {
+      final id = msg[1] as int;
+      if (!_completedBeforeStart.remove(id)) _pumpInFlight.add(id);
     } else if (msg == 'reset') {
-      _pumpInFlight = 0;
+      // axiom_reset_session dropped every request without a Complete.
+      _pumpInFlight.clear();
     } else if (msg == 'shutdown') {
       running = false;
       control.close();
@@ -381,7 +395,7 @@ Future<void> _runRustEventLoop(List<Object> args) async {
   // the runtime session lock that axiom_call also takes, so polling while
   // idle delays every new call. Pump only while requests are in flight.
   while (running) {
-    if (_pumpInFlight > 0) {
+    if (_pumpInFlight.isNotEmpty) {
       processResponses();
       // Yield so control messages ('start', 'shutdown') are delivered.
       await Future<void>.delayed(Duration.zero);
@@ -510,8 +524,13 @@ class AxiomRuntimeIo implements AxiomRuntime {
   static final bool _publishedAbiOnly =
       Platform.environment['AXIOM_RUNTIME_ABI'] == 'published';
 
+  /// Host tests only: symbols to treat as missing. Set before the first
+  /// `AxiomRuntime()` (lookups happen once, in the constructor).
+  static Set<String> debugHiddenSymbols = {};
+
   static bool _has(String symbol) {
     if (_publishedAbiOnly && _optionalSymbols.contains(symbol)) return false;
+    if (debugHiddenSymbols.contains(symbol)) return false;
     try {
       return _lib.providesSymbol(symbol);
     } catch (_) {
@@ -1483,7 +1502,7 @@ class AxiomRuntimeIo implements AxiomRuntime {
         );
       });
 
-      if (callStatus == 0) _eventControl?.send('start');
+      if (callStatus == 0) _eventControl?.send(['start', requestId]);
       if (callStatus != 0) {
         final err = AxiomError(
           stage: ErrorStage.requestBuild,
@@ -1850,9 +1869,14 @@ class AxiomRuntimeIo implements AxiomRuntime {
   Future<void> resetSession() async {
     // axiom_reset_session aborts in-flight tasks and drains queued events
     // without delivering a Cancelled/Complete pair, so close streams here.
-    _resetSessionFfi?.call();
-    // Reset drains queued events without Complete: stop the pump.
-    _eventControl?.send('reset');
+    final reset = _resetSessionFfi;
+    if (reset != null) {
+      reset();
+      // Reset drains queued events without Complete: forget those ids.
+      _eventControl?.send('reset');
+    }
+    // Without axiom_reset_session the old requests keep running natively:
+    // keep pumping until their Completes arrive (ids stay tracked).
     _closeAllCalls('Request cancelled by resetSession');
     // Let the Cancelled events reach query listeners before disposing.
     await Future<void>.delayed(Duration.zero);
