@@ -23,7 +23,10 @@ from pathlib import Path
 p = Path("pubspec.yaml"); s = p.read_text()
 s = s.replace("dependency_overrides:\n",
               "dependency_overrides:\n  axiom_flutter_extensions:\n    path: ../axiom_flutter_extensions\n", 1)
-s = s.replace("  axiom_flutter: ^0.150.0\n", "  axiom_flutter: ^0.150.0\n  axiom_flutter_extensions: ^0.150.1\n", 1)
+import re
+s, n = re.subn(r"(?m)^(  axiom_flutter: \^[0-9.]+\n)", r"\1  axiom_flutter_extensions: ^0.150.1\n", s, count=1)
+if n != 1 or "  axiom_flutter_extensions:\n    path:" not in s:
+    raise SystemExit("build-variant.sh: could not add axiom_flutter_extensions to pubspec.yaml")
 p.write_text(s)
 PY
     flutter build apk "$@"

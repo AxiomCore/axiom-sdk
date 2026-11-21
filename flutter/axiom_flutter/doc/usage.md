@@ -126,7 +126,7 @@ options in 0.156.0 are `--contract`, `--contract-config`, `--framework`,
 Two CLI 0.156.0 details:
 
 - The pull records the contract in the app's `AxiomDeps.toml` as an
-  **absolute** path (`source = "/home/you/talks/talks-api/backend.axiom"`).
+  **absolute** path (`source = "/path/to/talks/talks-api/backend.axiom"`).
   Before committing, change it to `source = "../talks-api/backend.axiom"`; every
   pull writes the absolute path again.
 - Always pass the contract path. `axiom pull` without a source resolves the
